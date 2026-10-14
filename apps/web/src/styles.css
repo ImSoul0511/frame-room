@@ -1,0 +1,8 @@
+@import '@astryxdesign/core/reset.css';
+@import '@astryxdesign/core/astryx.css';
+@import '@astryxdesign/theme-neutral/theme.css';
+
+:root { font-family: var(--font-family-body), system-ui, sans-serif; }
+body { margin: 0; min-width: 320px; }
+main { max-width: 760px; margin: 18vh auto; padding: 2rem; }
+.eyebrow { letter-spacing: .12em; text-transform: uppercase; }

@@ -1,0 +1,55 @@
+%% FrameRoom ERD MVP — aligned to review decisions on 2026-10-14
+%% Standalone Mermaid source; full table details are in ERD_v0.md.
+%% Portfolios are owned independently by either a photographer or a studio.
+%% Professional roles (retoucher, art_director) are profile metadata, not authorization roles.
+erDiagram
+  profiles ||--o{ user_roles : stores_admin_role
+  profiles ||--o| photographers : has_profile
+  profiles ||--o{ studio_members : member_of
+  studios ||--o{ studio_members : has_members
+  studios ||--o{ studio_invitations : invites
+  photographers ||--o{ studio_invitations : invited_photographer
+
+  photographers |o--o{ portfolios : owns
+  studios |o--o{ portfolios : owns
+  portfolios ||--o{ portfolio_images : contains
+  portfolio_images ||--o{ image_tags : tagged
+  tags ||--o{ image_tags : tag
+
+  photographers |o--o{ services : owns
+  studios |o--o{ services : owns
+  services ||--o{ service_add_ons : has
+
+  studios ||--o{ resources : has
+  resources |o--o{ schedule_entries : reserves
+  photographers |o--o{ schedule_entries : busy
+
+  profiles ||--o{ bookings : customer
+  photographers |o--o{ bookings : provider
+  studios |o--o{ bookings : provider
+  photographers |o--o{ bookings : assigned
+  services |o--o{ bookings : service_snapshot_source
+  bookings ||--o{ booking_add_ons : snapshots
+  bookings ||--o{ brief_versions : versions
+  bookings ||--o{ booking_status_events : history
+  bookings ||--o{ schedule_entries : reserves
+
+  bookings ||--o| shoot_rooms : opens
+  shoot_rooms ||--o{ messages : has
+  messages ||--o{ message_attachments : attaches
+  shoot_rooms ||--o{ decisions : has
+  shoot_rooms ||--o{ milestones : has
+
+  bookings ||--o| galleries : has
+  galleries ||--o{ gallery_images : contains
+  gallery_images ||--o{ image_notes : notes
+  bookings ||--o| deliveries : has
+  deliveries ||--o{ delivery_items : contains
+  gallery_images |o--o{ delivery_items : preview_source
+
+  bookings ||--o| reviews : receives
+  profiles ||--o{ reviews : writes
+  photographers |o--o{ reviews : about
+  studios |o--o{ reviews : about
+  profiles |o--o{ messages : sender
+  profiles ||--o{ reports : submits
