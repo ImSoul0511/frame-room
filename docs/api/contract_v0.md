@@ -1,6 +1,6 @@
 # FrameRoom: API Contract MVP (bản nháp v0)
 
-**Vị trí trong repo:** `docs/api/CONTRACT_v0.md` (khi chốt v1 có thể tách theo nhóm: một file quy ước chung, mỗi nhóm một file)
+**Vị trí trong repo:** `docs/api/contract_v0.md` (khi chốt v1 có thể tách theo nhóm: một file quy ước chung, mỗi nhóm một file)
 **Nguồn sự thật cuối cùng:** Zod schema trong `packages/shared`. Khi code lệch tài liệu, sửa một trong hai ngay trong PR đó.
 
 > Mục có dấu **[?]** là điểm còn bỏ ngỏ, tổng hợp ở mục 20.
@@ -47,10 +47,10 @@ Contract gồm các endpoint **nghiệp vụ** của toàn bộ MVP (Must và Sh
 | Base URL | `/v1` |
 | Định dạng | JSON, `Content-Type: application/json` |
 | Xác thực | Header `Authorization: Bearer <access_token của Supabase>` |
-| ID | UUID (chuỗi) |
+| ID | UUID (chuỗi); ID nghiệp vụ mới do server sinh dùng UUIDv7. ID user (`auth.users.id`, `Profile.id`, FK tới user) giữ version do Supabase Auth quản lý. Không đổi PK/FK hiện có |
 | Ngày giờ | ISO 8601, UTC, ví dụ `2026-10-15T09:30:00Z`. Khoảng thời gian là nửa mở `[start, end)` |
 | Tên trường | `camelCase` trong JSON (cột DB là `snake_case`, BE tự chuyển) |
-| Giá trị enum | `snake_case` chuỗi |
+| Giá trị enum | Chuỗi thuộc tập ENUM ở mục 3.1, không nhận chuỗi bất kỳ; `snake_case`, riêng MIME theo chuẩn và `SearchParsedKey` theo khoá JSON |
 | Tiền tệ | số nguyên VND, ví dụ `1500000`. MVP không có thanh toán; mọi con số tiền chỉ để tham khảo/thoả thuận |
 | Chuỗi rỗng | Không dùng; trường không có giá trị thì `null` |
 | Sắp xếp | Mặc định mới nhất trước. Endpoint nào cho đổi thì ghi rõ tham số `sort` (ví dụ `sort=-createdAt`) |
@@ -83,7 +83,7 @@ Danh sách theo con trỏ (chỉ dùng cho tin nhắn Shoot Room, vì dữ liệ
 }
 ```
 
-Tham số: `?limit=30&before=<messageId>` (mặc định `limit=30`, tối đa 100).
+Tham số: `?limit=30&before=<messageId>` (mặc định `limit=30`, tối đa 100). Tin mới dùng UUIDv7; thứ tự và điều kiện cursor vẫn theo `(created_at, id)` giảm dần, lấy cặp giá trị của tin mốc trong cùng phòng. UUIDv7 không thay timestamp nghiệp vụ.
 
 ### 2.3 Lỗi
 
@@ -152,11 +152,17 @@ Ví dụ xung đột lịch:
 | Người tham gia booking | Khách của booking hoặc bên cung cấp của booking |
 | `system_admin` | Có role `system_admin` |
 
-Role trong `Profile.roles` được BE tính: `user` luôn có; `photographer` nếu tài khoản có hồ sơ photographer; `studio_manager` nếu tài khoản đang là manager của ít nhất một studio chưa soft-delete theo `studio_members`; `system_admin` là role lưu riêng và được cấp thủ công trong DB. Vai trò chuyên môn như `retoucher` và `art_director` chỉ là metadata hiển thị trên hồ sơ, không phải quyền hệ thống.
+Role trong `Profile.roles` được BE tính: `client` luôn có; `photographer` nếu tài khoản có hồ sơ photographer; `studio_manager` nếu tài khoản đang là manager của ít nhất một studio chưa soft-delete theo `studio_members`; `system_admin` là role lưu riêng và được cấp thủ công trong DB. Vai trò chuyên môn như `retoucher` và `art_director` chỉ là metadata hiển thị trên hồ sơ, không phải quyền hệ thống.
+
+Chỉ tự đăng ký theo `registrationRole: RegistrationRole` (`client` hoặc `photographer`); không có tài khoản studio riêng. FE vẫn gọi Supabase Auth để tạo tài khoản. `registrationRole` là lựa chọn onboarding, không tự cấp quyền từ metadata: sau khi có profile và username hợp lệ, luồng photographer phải gọi `POST /v1/photographers/me` trước khi tạo studio. Client có thể thực hiện cùng bước này để trở thành photographer. Không có API đăng ký/cấp role `system_admin`; admin được provision thủ công phía hệ thống. `studio_manager` chỉ phát sinh từ tư cách manager trong studio và manager luôn phải là photographer.
+
+Khi đăng ký, FE gửi `userName` (bắt buộc, cùng ràng buộc `Profile.userName`), `displayName` và `registrationRole` trong metadata Supabase Auth. Bước khởi tạo profile phía server phải validate lại các giá trị này; không sao chép `roles` hoặc quyền admin từ metadata. Lựa chọn `photographer` chưa cấp quyền cho đến khi hồ sơ photographer được tạo thành công.
 
 ### 2.6 Upload file và Storage
 
 FE upload file trực tiếp lên Storage rồi gọi API ghi nhận. Request gửi `storagePath` hoặc trường đường dẫn có tên cụ thể; response trả URL. BE kiểm tra bucket/đường dẫn, file tồn tại và người dùng có quyền sử dụng file. Không nhận URL tuỳ ý từ FE làm nguồn sự thật của file.
+
+UUID do FE sinh cho tên file mới dùng UUIDv7; thành phần `{userId}` giữ ID Supabase Auth.
 
 Mọi ảnh do FE tạo thumbnail đều được upload theo cặp: `{uuid}.webp` (ảnh chính, cạnh dài tối đa 1280 px) và `{uuid}_thumb.webp` (thumbnail, cạnh dài khoảng 320 px). Request API chỉ gửi đường dẫn ảnh chính; BE suy ra đường dẫn thumbnail và kiểm tra cả hai file tồn tại. Quy tắc này áp dụng cho ảnh portfolio, gallery preview và ảnh đính kèm trong Shoot Room; không áp dụng cho file bàn giao. Nếu một lần upload cặp ảnh thất bại một phần, FE phải hoàn tất upload còn thiếu hoặc dọn file đã upload dở trước khi gửi request ghi nhận.
 
@@ -171,7 +177,7 @@ Mọi ảnh do FE tạo thumbnail đều được upload theo cặp: `{uuid}.web
 | `room-files` | Ảnh/tệp gửi trong Shoot Room | `{roomId}/{uuid}.{ext}`; ảnh có thêm `{uuid}_thumb.webp` | Riêng tư, signed URL hết hạn |
 | `search-uploads` | Ảnh tham chiếu cho AI Search | `{userId}/{uuid}.webp` | Riêng tư, xoá sau 24 giờ **[?]** |
 
-Giới hạn ảnh portfolio và preview: WebP, cạnh dài tối đa 1280 px, tối đa 2 MB cho mỗi ảnh chính; thumbnail khoảng 320 px. Giới hạn file bàn giao và tệp Shoot Room vẫn cần chốt (mục 20). RLS Storage giới hạn quyền ghi theo người dùng và tài nguyên. URL của bucket riêng tư là signed URL có thời hạn; FE không lưu URL hết hạn lâu dài mà gọi lại API để lấy URL mới.
+Giới hạn ảnh portfolio và preview: WebP, cạnh dài tối đa 1280 px, tối đa 2 MB cho mỗi ảnh chính; thumbnail khoảng 320 px. BE xác minh kích thước thật trong Storage so với metadata request; DB kiểm tra từng chiều đã ghi nhận là số dương và không quá 1280 px. Giới hạn file bàn giao và tệp Shoot Room vẫn cần chốt (mục 20). RLS Storage giới hạn quyền ghi theo người dùng và tài nguyên. URL của bucket riêng tư là signed URL có thời hạn; FE không lưu URL hết hạn lâu dài mà gọi lại API để lấy URL mới.
 
 ### 2.7 Thời gian thực (Supabase Realtime)
 
@@ -192,7 +198,15 @@ Payload là đúng đối tượng như API trả về (cùng schema). Khi mất
 
 | Enum | Giá trị |
 |---|---|
-| `Role` | `user`, `photographer`, `studio_manager`, `system_admin` |
+| `Role` | `client`, `photographer`, `studio_manager`, `system_admin` (`studio_manager` là quyền suy ra, không phải loại tài khoản đăng ký) |
+| `RegistrationRole` | `client`, `photographer` |
+| `TagKind` | `tone`, `setting`, `mood` (nhóm ban đầu; bổ sung qua thay đổi enum) |
+| `TagSource` | `manual`, `ai` |
+| `ShootRoomStatus` | `open`, `closed` |
+| `BookingSide` | `customer`, `provider` |
+| `SearchParsedKey` | `genres`, `styles`, `city`, `district`, `priceMax` |
+| `TimelineItemType` | `shoot`, `milestone` |
+| `DeliveryMimeType` | `image/jpeg`, `image/png`, `image/webp` |
 | `Genre` | `portrait`, `fashion`, `wedding`, `family`, `product`, `food`, `event`, `cosplay` |
 | `PortfolioStatus` | `draft`, `published`, `hidden` (`hidden` chỉ do admin đặt, chủ sở hữu không tự đặt được) |
 | `Provenance` | `captured` (ảnh chụp thực tế), `manipulated` (chỉnh sửa/ghép nặng), `ai_generated` (tạo sinh) |
@@ -224,6 +238,7 @@ Payload là đúng đối tượng như API trả về (cùng schema). Khi mất
 |---|---|---|
 | id | uuid | Trùng `auth.users.id` |
 | email | string | Chỉ đọc |
+| userName | string | Duy nhất toàn hệ thống; 3–30 ký tự, trim + lowercase, khớp `^[a-z0-9][a-z0-9_]{2,29}$`; URL `/u/{userName}` |
 | displayName | string | 1–60 ký tự |
 | avatarUrl | string \| null | |
 | roles | Role[] | BE tính từ hồ sơ photographer và `studio_members`; chỉ `system_admin` được lưu riêng |
@@ -235,6 +250,7 @@ Payload là đúng đối tượng như API trả về (cùng schema). Khi mất
 | Trường | Kiểu |
 |---|---|
 | id | uuid |
+| userName | string |
 | displayName | string |
 | avatarUrl | string \| null |
 
@@ -244,6 +260,7 @@ Payload là đúng đối tượng như API trả về (cùng schema). Khi mất
 |---|---|---|
 | id | uuid | Id hồ sơ photographer |
 | userId | uuid | |
+| userName | string | Lấy từ profile user, không lưu trùng |
 | displayName | string | |
 | avatarUrl | string \| null | |
 
@@ -270,6 +287,7 @@ Payload là đúng đối tượng như API trả về (cùng schema). Khi mất
 |---|---|---|
 | id | uuid | |
 | userId | uuid | Chủ hồ sơ |
+| userName | string | Lấy từ profile user; liên kết `/u/{userName}`, chỉ sửa qua `PATCH /me` |
 | displayName | string | 1–60 ký tự |
 | avatarUrl | string \| null | |
 | bio | string \| null | Tối đa 1000 ký tự |
@@ -337,27 +355,37 @@ Payload là đúng đối tượng như API trả về (cùng schema). Khi mất
   "data": {
     "id": "7c1e2b0e-3f5a-4a52-9a3b-0c4f2a7f9d11",
     "email": "an@example.com",
+    "userName": "nguyen_an",
     "displayName": "Nguyễn An",
     "avatarUrl": null,
-    "roles": ["user", "photographer"],
-    "photographerId": "b2f8a4d1-91c3-4f7e-8d2e-5a6c0e9b7f30",
+    "roles": ["client", "photographer"],
+    "photographerId": "019e2310-0000-7000-8000-000000000004",
     "createdAt": "2026-10-14T03:12:00Z"
   }
 }
 ```
 
-**Lỗi:** 401.
-**Ghi chú:** Lần gọi đầu sau khi đăng ký, nếu chưa có dòng profile thì BE tạo profile; `user` là role mặc định được suy ra. Quyết định tạo profile bằng trigger DB hay tại lần gọi `/me` đầu tiên vẫn còn mở (mục 20).
+**Lỗi:** 400, 401, 409 (`user_name_taken` nếu khởi tạo profile tại đây).
+**Ghi chú:** Nếu chọn khởi tạo profile tại lần gọi `/me` đầu tiên, BE lấy username từ metadata đăng ký và validate trước khi tạo; `client` là role mặc định được suy ra. Profile phải có `userName` hợp lệ và duy nhất trước khi hoàn tất onboarding, không dùng email làm username công khai. Ghi và kiểm tra UQ nguyên tử: 409 `user_name_taken` nếu trùng, 400 nếu sai định dạng. Trigger DB hay bước khởi tạo profile phía BE vẫn cần chốt ở mục 20, gồm cách nhận username và báo lỗi khởi tạo; `/me` không được tự tạo profile thiếu username.
+
+### GET /v1/users/by-username/:userName
+
+**Mục đích:** Phân giải URL profile `/u/{userName}`.
+**Quyền:** Công khai.
+**Response 200:** `{ "data": UserSummary & { "photographerId": uuid | null } }`; không lộ email hoặc roles. Hồ sơ photographer bị ẩn thì `photographerId = null`.
+**Lỗi:** 400 (sai định dạng), 404 (không tồn tại).
+**Ghi chú:** Chuẩn hoá trim + lowercase khi tra cứu. Đổi username làm URL cũ trả 404; MVP không lưu alias/redirect.
 
 ### PATCH /v1/me
 
-**Mục đích:** Cập nhật tên hiển thị và ảnh đại diện.
+**Mục đích:** Cập nhật username, tên hiển thị và ảnh đại diện.
 **Màn hình dùng:** Cài đặt tài khoản.
 **Quyền:** Đăng nhập, chỉ sửa chính mình.
 **Request body:**
 
 | Trường | Kiểu | Bắt buộc | Ghi chú |
 |---|---|---|---|
+| userName | string | không | Cùng ràng buộc với `Profile.userName`; không nhận null |
 | displayName | string | không | 1–60 ký tự |
 | avatarStoragePath | string \| null | không | Đường dẫn file đã upload trong bucket `avatars`; `null` để gỡ avatar nếu cho phép |
 
@@ -366,7 +394,7 @@ Payload là đúng đối tượng như API trả về (cùng schema). Khi mất
 ```
 
 **Response 200:** `{ "data": Profile }`
-**Lỗi:** 400, 401.
+**Lỗi:** 400, 401, 409 (`details[].reason = user_name_taken`, username trùng sau chuẩn hoá).
 
 ### GET /v1/me/studios
 
@@ -402,8 +430,9 @@ Payload là đúng đối tượng như API trả về (cùng schema). Khi mất
 {
   "data": [
     {
-      "id": "b2f8a4d1-91c3-4f7e-8d2e-5a6c0e9b7f30",
+      "id": "019e2310-0000-7000-8000-000000000004",
       "userId": "7c1e2b0e-3f5a-4a52-9a3b-0c4f2a7f9d11",
+      "userName": "nguyen_an",
       "displayName": "An Studio",
       "avatarUrl": null,
       "bio": "Chuyên portrait tone lạnh.",
@@ -515,26 +544,26 @@ Payload là đúng đối tượng như API trả về (cùng schema). Khi mất
 ```json
 {
   "data": {
-    "id": "e41d7c3a-6b2f-4c9a-b7a1-2f3d4e5a6b70",
+    "id": "019e2310-0000-7000-8000-000000000007",
     "ownerType": "photographer",
-    "photographerId": "b2f8a4d1-91c3-4f7e-8d2e-5a6c0e9b7f30",
+    "photographerId": "019e2310-0000-7000-8000-000000000004",
     "studioId": null,
     "title": "Chân dung mùa đông",
     "genre": "portrait",
     "description": "Concept tone lạnh, ánh sáng cửa sổ.",
     "status": "published",
-    "coverImageId": "a91b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
+    "coverImageId": "019e2310-0000-7000-8000-000000000003",
     "coverImageUrl": "https://.../img1.webp",
     "imageCount": 2,
     "publishedAt": "2026-10-14T04:05:00Z",
     "images": [
       {
-        "id": "a91b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
-        "portfolioId": "e41d7c3a-6b2f-4c9a-b7a1-2f3d4e5a6b70",
+        "id": "019e2310-0000-7000-8000-000000000003",
+        "portfolioId": "019e2310-0000-7000-8000-000000000007",
         "url": "https://.../img1.webp",
         "thumbnailUrl": "https://.../img1_thumb.webp",
-        "width": 1280,
-        "height": 1920,
+        "width": 853,
+        "height": 1280,
         "caption": "Cửa sổ buổi sáng",
         "provenance": "captured",
         "tags": [],
@@ -625,9 +654,9 @@ RLS của Storage chỉ cho phép ghi vào thư mục có tên trùng `userId` c
 
 ```json
 {
-  "storagePath": "7c1e2b0e-.../e41d7c3a-.../1f2e3d4c.webp",
-  "width": 1280,
-  "height": 1920,
+  "storagePath": "7c1e2b0e-3f5a-4a52-9a3b-0c4f2a7f9d11/019e2310-0000-7000-8000-000000000007/019e2310-0000-7000-8000-000000000008.webp",
+  "width": 853,
+  "height": 1280,
   "caption": "Cửa sổ buổi sáng",
   "provenance": "captured"
 }
@@ -635,7 +664,7 @@ RLS của Storage chỉ cho phép ghi vào thư mục có tên trùng `userId` c
 
 **Response 201:** `{ "data": PortfolioImage }`
 **Lỗi:** 400, 401, 403, 404, 422 (file chưa tồn tại trong Storage, hoặc vượt giới hạn số ảnh **[?]**).
-**Ghi chú:** BE kiểm tra `storagePath` thuộc thư mục của người dùng đang thao tác và nằm trong đúng portfolio; đồng thời kiểm tra file thumbnail tương ứng. `sortOrder` mặc định xếp cuối.
+**Ghi chú:** BE kiểm tra `storagePath` thuộc thư mục của người dùng đang thao tác và nằm trong đúng portfolio; xác minh metadata ảnh thật trong Storage, kiểm tra file thumbnail, dung lượng và kích thước. `width`/`height` phải khớp ảnh thật, mỗi chiều từ 1 đến 1280 px. `sortOrder` mặc định xếp cuối.
 
 ### PATCH /v1/portfolios/:id/images/:imageId
 
@@ -668,14 +697,14 @@ RLS của Storage chỉ cho phép ghi vào thư mục có tên trùng `userId` c
 {
   "data": [
     {
-      "portfolioId": "e41d7c3a-6b2f-4c9a-b7a1-2f3d4e5a6b70",
+      "portfolioId": "019e2310-0000-7000-8000-000000000007",
       "title": "Chân dung mùa đông",
       "genre": "portrait",
       "ownerType": "photographer",
       "coverImageUrl": "https://.../img1.webp",
       "owner": {
         "type": "photographer",
-        "id": "b2f8a4d1-91c3-4f7e-8d2e-5a6c0e9b7f30",
+        "id": "019e2310-0000-7000-8000-000000000004",
         "displayName": "An Nguyễn Photography",
         "avatarUrl": null
       },
@@ -698,14 +727,14 @@ RLS của Storage chỉ cho phép ghi vào thư mục có tên trùng `userId` c
 | id | uuid | |
 | slug | string | Ví dụ `tone-lanh` |
 | name | string | Tên hiển thị |
-| kind | string | Nhóm tag theo taxonomy (ví dụ tone, bối cảnh, cảm xúc) **[?]** |
+| kind | TagKind | Nhóm tag: tone, bối cảnh, cảm xúc; danh sách tag chi tiết chờ taxonomy |
 
 ### GET /v1/tags
 
 **Mục đích:** Danh sách tag chuẩn để lọc và gợi ý.
 **Màn hình dùng:** Bộ lọc Explore/Search, chọn tag khi chỉnh sửa ảnh.
 **Quyền:** Công khai.
-**Query:** `kind`, `q` (khớp tên), `page`, `pageSize` (tối đa 100 ở endpoint này).
+**Query:** `kind: TagKind`, `q` (khớp tên), `page`, `pageSize` (tối đa 100 ở endpoint này).
 **Response 200:** `{ "data": Tag[], "meta": {...} }`
 **Lỗi:** 400.
 
@@ -739,9 +768,10 @@ RLS của Storage chỉ cho phép ghi vào thư mục có tên trùng `userId` c
 | id | uuid | Id dòng thành viên |
 | studioId | uuid | |
 | userId | uuid | |
+| userName | string | Lấy từ profile user, không lưu trùng |
 | displayName | string | |
 | avatarUrl | string \| null | |
-| photographerId | uuid \| null | `null` nếu thành viên chưa có hồ sơ photographer; BE suy ra từ hồ sơ photographer của `userId` |
+| photographerId | uuid | Luôn có, kể cả manager; BE suy ra từ hồ sơ photographer của `userId` |
 | role | StudioMemberRole | |
 | joinedAt | datetime | |
 
@@ -760,12 +790,12 @@ RLS của Storage chỉ cho phép ghi vào thư mục có tên trùng `userId` c
 |---|---|---|---|---|
 | `GET /v1/studios` | Danh sách studio · Explore, trang studio | Công khai | Query: `genre`, `city`, `district`, `q`, `page`, `pageSize` | 200 `Studio[]` + meta · 400 |
 | `GET /v1/studios/:id` | Chi tiết studio · Hồ sơ studio | Công khai | | 200 `Studio` · 404 |
-| `POST /v1/studios` | Tạo studio, người tạo thành manager đầu tiên · Tạo studio | Đăng nhập | `name`, `genres` (bắt buộc); `description`, `city`, `district`, `address`, `avatarStoragePath`, `coverStoragePath` | 201 `Studio` · 400, 401 |
+| `POST /v1/studios` | Tạo studio, người tạo thành manager đầu tiên · Tạo studio | `photographer` | `name`, `genres` (bắt buộc); `description`, `city`, `district`, `address`, `avatarStoragePath`, `coverStoragePath` | 201 `Studio` · 400, 401, 403 (chưa có hồ sơ photographer) |
 | `PATCH /v1/studios/:id` | Sửa hồ sơ studio · Quản lý studio | Manager studio | Các trường như POST, đều tuỳ chọn; không nhận `priceFrom` hoặc URL | 200 `Studio` · 400, 401, 403, 404 |
 | `DELETE /v1/studios/:id` | Xoá studio (xoá mềm) · Quản lý studio | Manager studio | | 204 · 401, 403, 404, 422 (còn booking chưa kết thúc) |
 | `GET /v1/studios/:id/members` | Đội ngũ studio · Hồ sơ studio | Công khai | | 200 `StudioMember[]` (không phân trang) · 404 |
-| `PATCH /v1/studios/:id/members/:memberId` | Đổi vai trò thành viên · Quản lý đội ngũ | Manager studio | `role` | 200 `StudioMember` · 400, 401, 403, 404, 422 (không để studio hết manager; không đổi sang `photographer` khi người đó chưa có hồ sơ photographer) |
-| `DELETE /v1/studios/:id/members/:memberId` | Xoá cứng quan hệ thành viên, hoặc tự rời studio · Quản lý đội ngũ | Manager studio; hoặc chính thành viên đó | | 204 · 401, 403, 404, 422 (manager cuối cùng không thể rời) |
+| `PATCH /v1/studios/:id/members/:memberId` | Đổi vai trò thành viên · Quản lý đội ngũ | Manager studio | `role` | 200 `StudioMember` · 400, 401, 403, 404, 422 (không để studio hết manager) |
+| `DELETE /v1/studios/:id/members/:memberId` | Xoá cứng quan hệ thành viên, hoặc tự rời studio · Quản lý đội ngũ | Manager studio; hoặc chính thành viên đó | | 204 · 401, 403, 404, 422 (manager cuối cùng không thể rời; hoặc còn booking được giao chưa kết thúc, `active_booking_assignment`) |
 | `GET /v1/studios/:id/invitations` | Lời mời đã gửi · Quản lý đội ngũ | Manager studio | Query: `status`, `page`, `pageSize` | 200 `StudioInvitation[]` + meta · 401, 403, 404 |
 | `POST /v1/studios/:id/invitations` | Mời photographer vào studio · Quản lý đội ngũ | Manager studio | `photographerId` (bắt buộc), `role` (tuỳ chọn) | 201 `StudioInvitation` · 400, 401, 403, 404, 409 (đã là thành viên hoặc đã có lời mời chờ) |
 | `DELETE /v1/studios/:id/invitations/:invitationId` | Thu hồi lời mời (không xoá bản ghi; đặt `revoked`) · Quản lý đội ngũ | Manager studio | | 204 · 401, 403, 404, 422 (đã được phản hồi) |
@@ -774,9 +804,11 @@ RLS của Storage chỉ cho phép ghi vào thư mục có tên trùng `userId` c
 | `POST /v1/invitations/:id/decline` | Từ chối lời mời · Thông báo lời mời | `photographer`, đúng người được mời | | 204 · 401, 403, 404, 422 |
 
 **Ghi chú:**
-- Một photographer có thể thuộc **nhiều studio**; một studio có thể có nhiều manager.
-- Studio là bên cung cấp độc lập: ngoài quản lý thành viên/mời photographer, studio có hồ sơ, dịch vụ, portfolio công khai và booking của riêng mình. Manager không bắt buộc phải có hồ sơ photographer.
-- Khi tạo studio, BE tạo dòng `studio_members` cho người tạo với `role = manager`; `studio_manager` trong `/me.roles` được suy ra từ quan hệ này với studio chưa soft-delete, không lưu trùng role.
+- Một photographer có thể **tạo nhiều studio** và **thuộc nhiều studio**, làm manager ở studio này và photographer ở studio khác; một studio có thể có nhiều manager. Không đặt unique riêng trên người tạo hoặc user thành viên.
+- Studio là bên cung cấp độc lập: ngoài quản lý thành viên/mời photographer, studio có hồ sơ, dịch vụ, portfolio công khai và booking của riêng mình. Mọi manager và thành viên bắt buộc có hồ sơ photographer; studio không có thông tin đăng nhập riêng.
+- Khi tạo studio, BE lấy người tạo từ token, kiểm tra hồ sơ photographer, tạo studio (`created_by` bất biến) và dòng `studio_members` đầu tiên với `role = manager` trong một transaction; `studio_manager` trong `/me.roles` được suy ra từ quan hệ này với studio chưa soft-delete, không lưu trùng role.
+- Photographer đang được giao booking `pending`, `confirmed`, `in_progress`, `proofing` hoặc `delivered` không được rời/bị loại khỏi studio (422 `active_booking_assignment`); cần chuyển giao ở trạng thái cho phép hoặc kết thúc booking trước. Kiểm tra và khoá studio chung với thao tác assignment để tránh race.
+- Người sáng lập đã rời studio không còn quyền quản lý; quyền theo membership hiện tại. Không để studio đang hoạt động hết manager, kể cả hai manager rời đồng thời (khoá dòng studio và kiểm tra ở commit).
 - `priceFrom` do BE/DB tính từ các dịch vụ đang hoạt động; không nhận trong request.
 - Mời bằng `photographerId` (người được mời phải có hồ sơ photographer). Mời bằng email **[?]** để sau.
 - Ai phân công photographer cho booking của studio: xem mục 12 và mục 20, #8.
@@ -828,7 +860,7 @@ RLS của Storage chỉ cho phép ghi vào thư mục có tên trùng `userId` c
 | `PATCH /v1/services/:id/add-ons/:addOnId` | Sửa add-on | Chủ dịch vụ | Như POST, tuỳ chọn | 200 `AddOn` · 400, 401, 403, 404 |
 | `DELETE /v1/services/:id/add-ons/:addOnId` | Xoá add-on (mềm) | Chủ dịch vụ | | 204 · 401, 403, 404 |
 
-**Ghi chú:** Booking lưu **bản chụp (snapshot)** tên và giá dịch vụ/add-on lúc đặt, nên sửa hoặc xoá dịch vụ sau đó không đổi booking đã tạo.
+**Ghi chú:** Booking lưu **bản chụp (snapshot)** tên, giá, thời lượng, số ảnh và số ảnh chỉnh sửa của dịch vụ cùng tên/giá add-on lúc đặt. Sửa hoặc xoá dịch vụ sau đó không đổi snapshot hoặc tổng giá booking.
 
 ---
 
@@ -873,11 +905,13 @@ Mục đích: tránh trùng lịch khi studio xác nhận booking. Chốt ở m�
 | `POST /v1/photographers/me/schedule/blocks` | Photographer độc lập tự khoá lịch **[?]** | `photographer` | `start`, `end`, `title` | 201 `ScheduleEntry` · 400, 401, 403, 409 (`CONFLICT`, `details[].reason = slot_overlap`) |
 | `DELETE /v1/photographers/me/schedule/blocks/:entryId` | Xoá cứng bản ghi block, mở lại lịch | `photographer` | | 204 · 401, 403, 404 |
 
-**Quy tắc chống trùng:** hai `ScheduleEntry` trùng nếu cùng `resourceId` hoặc cùng `photographerId` và khoảng thời gian giao nhau. Khi xác nhận booking (mục 12.4) BE kiểm tra; trùng thì trả 409 `CONFLICT` với `details[].reason = "slot_overlap"` và `details[].message` là câu giải thích cho người dùng.
+**Quy tắc chống trùng:** hai `ScheduleEntry` trùng nếu cùng `resourceId` hoặc cùng `photographerId` và khoảng thời gian giao nhau. Xác nhận, đổi photographer khi đã giữ lịch và đổi lịch đều phải kiểm tra; trùng thì trả 409 `CONFLICT` với `details[].reason = "slot_overlap"` và `details[].message` là câu giải thích cho người dùng.
 
 ---
 
 ## 12. Booking và Shoot Brief
+
+Lịch giữ phải khớp `Booking.scheduledStart/End` và assignee/provider hiện tại; mỗi dòng giữ một photographer hoặc một tài nguyên. Huỷ booking giải phóng các dòng giữ lịch, nhưng giữ thời gian booking và snapshot tài nguyên. Xung đột phải rollback cả booking, lịch giữ, snapshot và event trong transaction.
 
 ### 12.1 Đối tượng
 
@@ -890,18 +924,42 @@ Mục đích: tránh trùng lịch khi studio xác nhận booking. Chốt ở m�
 | providerType | ProviderType | Bên cung cấp là photographer hay studio |
 | photographer | PhotographerSummary \| null | Có khi `providerType = photographer` |
 | studio | StudioSummary \| null | Có khi `providerType = studio` |
-| assignedPhotographer | PhotographerSummary \| null | Booking của studio: photographer được phân công (**[?]** ai phân công: mục 20, #8) |
-| service | object | Snapshot: `{ id, name, price, durationMinutes }` |
+| assignedPhotographer | PhotographerSummary \| null | Manager phân công cho booking studio; bắt buộc từ `confirmed` đến `completed`. Booking cá nhân luôn null; booking huỷ giữ người được giao trước đó nếu có |
+| service | object | Snapshot: `{ id, name, price, durationMinutes, photoCount, retouchedCount }`; `id` có thể null khi service gốc bị xoá cứng; hai trường số ảnh là integer ≥ 0 hoặc null nếu gói không quy định |
 | addOns | object[] | Snapshot: `[{ id, name, price }]` |
-| totalPrice | integer | `service.price` + tổng add-on, BE tính. Giá tham khảo, không thanh toán trong hệ thống |
+| totalPrice | integer | `service.price` + tổng add-on snapshot, BE tính lúc tạo và giữ cố định trong MVP; `brief.budget` không thay giá. Không thanh toán trong hệ thống |
 | status | BookingStatus | |
-| scheduledStart, scheduledEnd | datetime \| null | Có từ khi `confirmed` |
-| resourceIds | uuid[] | Phòng/thiết bị đã giữ (booking của studio) |
+| scheduledStart, scheduledEnd | datetime \| null | Cùng null hoặc cùng có giá trị và end > start; bắt buộc từ `confirmed` đến `completed`, giữ lại sau huỷ nếu đã chốt |
+| resourceIds | uuid[] | Suy ra từ snapshot tài nguyên chốt gần nhất; vẫn trả sau huỷ, không có nghĩa là lịch còn được giữ |
+| resources | BookingResourceSnapshot[] | Snapshot tên/loại tài nguyên; booking cá nhân hoặc chưa chọn tài nguyên trả `[]` |
 | currentBriefVersion | integer | Số phiên bản brief mới nhất |
-| agreedBriefVersion | integer \| null | Phiên bản cả hai bên đã chấp thuận; `null` nếu chưa |
+| agreedBriefVersion | integer \| null | Bản cả hai bên đã chấp thuận đang có hiệu lực; giữ bản cũ khi đang thương lượng bản mới; null nếu chưa có bản thống nhất |
 | shootRoomId | uuid \| null | Có từ khi `confirmed` |
 | statusReason | string \| null | Lý do từ chối/huỷ |
 | createdAt, updatedAt | datetime | |
+
+**BookingResourceSnapshot**
+
+| Trường | Kiểu | Ghi chú |
+|---|---|---|
+| resourceId | uuid | ID tài nguyên gốc, được giữ bằng FK RESTRICT |
+| name | string | Tên snapshot khi xác nhận/đổi lịch |
+| type | ResourceType | Loại snapshot khi xác nhận/đổi lịch |
+
+`resources` và `resourceIds` có cùng tập ID, lấy từ `booking_resources`. Đổi lịch hợp lệ cập nhật snapshot cấu hình chốt gần nhất; huỷ/kết thúc không xoá snapshot, đổi tên/xoá mềm resource không sửa snapshot. Không lưu log mọi lần đổi tài nguyên trong MVP.
+
+**BookingAssignmentEvent** (chỉ đọc)
+
+| Trường | Kiểu | Ghi chú |
+|---|---|---|
+| id | uuid | UUIDv7 |
+| bookingId | uuid | Booking studio |
+| fromPhotographer | PhotographerSummary \| null | null khi phân công lần đầu |
+| toPhotographer | PhotographerSummary | Người mới |
+| actor | UserSummary | Manager thực hiện |
+| createdAt | datetime | |
+
+Ghi lần phân công đầu và các lần thay người, kể cả khi phân công qua bước xác nhận booking; cùng transaction với booking và lịch. Gửi lại cùng assignee là no-op, không tạo event mới.
 
 **BriefVersion** (bất biến; sửa brief nghĩa là tạo phiên bản mới)
 
@@ -944,7 +1002,7 @@ Mục đích: tránh trùng lịch khi studio xác nhận booking. Chốt ở m�
 | reason | string \| null | Lý do nếu có |
 | createdAt | datetime | Thời điểm sự kiện |
 
-Mỗi lần booking chuyển trạng thái hợp lệ, BE phải cập nhật `Booking.status` và ghi `BookingStatusEvent` trong cùng transaction. Sự kiện có thể được dùng để sinh tin nhắn `system` trong Shoot Room; việc tạo tin hệ thống không được làm thay đổi lịch sử sự kiện.
+Mỗi lần booking chuyển trạng thái hợp lệ, BE khoá booking, kiểm tra lại trạng thái, cập nhật `Booking.status`, ghi `BookingStatusEvent` và thực hiện tác dụng phụ (lịch, snapshot, Shoot Room, gallery/delivery liên quan) trong cùng transaction. Xác nhận cũng ghi assignment event nếu phát sinh phân công mới; lỗi bất kỳ phải rollback toàn bộ. Sự kiện có thể được dùng để sinh tin nhắn `system` trong Shoot Room; việc tạo tin hệ thống không được làm thay đổi lịch sử sự kiện.
 
 ### 12.2 Endpoint
 
@@ -955,14 +1013,22 @@ Mỗi lần booking chuyển trạng thái hợp lệ, BE phải cập nhật `B
 | `GET /v1/bookings/:id` | Chi tiết booking · Chi tiết booking | Người tham gia booking; manager của studio nếu là booking studio | | 200 `Booking` · 401, 404 |
 | `GET /v1/bookings/:id/events` | Lịch sử chuyển trạng thái booking | Người tham gia booking | | 200 `BookingStatusEvent[]` theo thời gian tăng dần · 401, 404 |
 | `POST /v1/bookings/:id/transitions` | Chuyển trạng thái (bảng 12.4) · Các nút hành động trong chi tiết booking | Tuỳ bước chuyển | `{ "to": BookingStatus, ... }` | 200 `Booking` · 400, 401, 403, 404, 409 (`CONFLICT`, `details[].reason = slot_overlap`), 422 |
-| `PATCH /v1/bookings/:id/assignment` | Phân công photographer cho booking của studio · Quản lý booking studio | Manager studio của booking | `assignedPhotographerId` (phải là thành viên studio) | 200 `Booking` · 400, 401, 403, 404, 422 (booking không phải của studio, hoặc đã `proofing` trở đi) |
+| `PATCH /v1/bookings/:id/assignment` | Phân công/thay photographer cho booking studio | Manager studio của booking | `assignedPhotographerId` bắt buộc, không null, phải là thành viên hiện tại | 200 `Booking` · 400, 401, 403, 404, 409 (`slot_overlap`), 422 (không phải studio, không thuộc studio, hoặc trạng thái ngoài `pending`, `confirmed`, `in_progress`) |
+| `GET /v1/bookings/:id/assignment-events` | Lịch sử phân công | Người tham gia booking hiện tại | | 200 `BookingAssignmentEvent[]`, thứ tự `(createdAt, id)` tăng dần · 401, 404 |
+| `PATCH /v1/bookings/:id/schedule` | Đổi giờ/tài nguyên đã chốt | Photographer chủ hồ sơ của booking cá nhân; manager studio của booking studio | `scheduledStart`, `scheduledEnd` bắt buộc, end > start; `resourceIds` tuỳ chọn (bỏ qua = giữ tập hiện tại, `[]` = bỏ hết; booking cá nhân không được giữ tài nguyên) | 200 `Booking` · 400, 401, 403, 404, 409 (`slot_overlap`), 422 (không ở `confirmed`, tài nguyên không hoạt động/không thuộc studio, hoặc booking cá nhân gửi tài nguyên) |
 | `GET /v1/bookings/:id/brief` | Toàn bộ các phiên bản brief · Shoot Brief | Người tham gia booking | | 200 `{ "data": { "versions": BriefVersion[], "currentVersion": integer, "agreedVersion": integer \| null } }`; BE cấp `referenceUrls` signed cho ảnh tham chiếu · 401, 404 |
 | `POST /v1/bookings/:id/brief/versions` | Đề xuất phiên bản brief mới; người gửi tự động được tính là đã chấp thuận, bên kia chưa · Sửa Shoot Brief | Người tham gia booking | `BriefContent` | 201 `BriefVersion` · 400, 401, 403, 404, 422 (trạng thái không cho sửa) |
 | `POST /v1/bookings/:id/brief/versions/:version/approve` | Chấp thuận một phiên bản brief. Khi cả hai bên đã chấp thuận, `agreedBriefVersion` được cập nhật · Shoot Brief | Người tham gia booking (bên chưa chấp thuận) | | 200 `BriefVersion` · 401, 403, 404, 409 (đã chấp thuận), 422 (không phải phiên bản mới nhất) |
 
 `GET /v1/bookings?as=provider` trả: booking mà mình là photographer chủ hồ sơ; booking của studio mà mình được phân công; và, khi truyền `studioId`, toàn bộ booking của studio đó nếu mình là manager (403 nếu không phải manager). Thành viên studio khác không thấy booking không liên quan đến mình.
 
-Brief chỉ được tạo phiên bản mới khi booking ở `pending`, `confirmed` hoặc `in_progress`; ngoài ra trả 422.
+Phân công chỉ do manager thực hiện; tại `pending` chưa giữ lịch. Tại `confirmed`/`in_progress`, thay người phải chuyển dòng lịch photographer cũ sang người mới, giữ nguyên giờ và tài nguyên, ghi assignment event cùng transaction; xung đột trả 409 và giữ nguyên mọi dữ liệu cũ. Booking cá nhân không dùng assignment. Quyền booking/Shoot Room theo người được giao hiện tại: người cũ mất quyền từ assignment, người mới xem toàn bộ lịch sử; quyền độc lập của customer/manager vẫn giữ.
+
+Đổi lịch chỉ ở `confirmed`: khoá booking, kiểm tra lại trạng thái, giờ và các tài nguyên cùng studio đang hoạt động; cập nhật booking, toàn bộ dòng lịch photographer/tài nguyên và snapshot tài nguyên trong cùng transaction. Giữ nguyên người được giao. `resourceIds` không được trùng. Không đổi `preferredStart/End` trong các brief bất biến; thời gian thực tế lấy từ booking. Không có API đổi lịch từ `in_progress` trở đi trong MVP.
+
+Brief chỉ được tạo/duyệt khi booking ở `pending`, `confirmed` hoặc `in_progress`; ngoài ra trả 422. Bản đã thống nhất tiếp tục có hiệu lực khi có đề xuất mới; chỉ chuyển `agreedBriefVersion` sau khi bản mới nhất được hai bên duyệt. Tạo/duyệt brief phải khoá booking và kiểm tra lại phiên bản/trạng thái để tránh race, mỗi lần duyệt chỉ ghi nhận bên người gọi. Sửa giờ mong muốn trong brief không tự đổi lịch giữ.
+
+Snapshot dịch vụ/add-on và `totalPrice` được chốt cùng transaction tạo booking/brief v1; không cập nhật theo service hoặc budget về sau. FK khách/provider/assignee dùng `ON DELETE RESTRICT`: không xoá cứng tài khoản/hồ sơ đang được booking tham chiếu, kể cả booking đã kết thúc. Không cascade xoá booking khi xoá Auth user.
 
 Ảnh tham chiếu phải được upload trước khi tạo booking vào bucket riêng tư `brief-references` theo `{userId}/{uuid}.webp`; request `brief.references` gửi các `storagePath`, không gửi URL. BE kiểm tra đường dẫn thuộc người gửi và file tồn tại. Khi đọc brief, chỉ người tham gia booking được nhận signed URL.
 
@@ -971,9 +1037,9 @@ Brief chỉ được tạo phiên bản mới khi booking ở `pending`, `confir
 ```json
 {
   "providerType": "photographer",
-  "photographerId": "b2f8a4d1-91c3-4f7e-8d2e-5a6c0e9b7f30",
+  "photographerId": "019e2310-0000-7000-8000-000000000004",
   "studioId": null,
-  "serviceId": "c5d6e7f8-1a2b-4c3d-8e9f-0a1b2c3d4e5f",
+  "serviceId": "019e2310-0000-7000-8000-000000000005",
   "addOnIds": [],
   "brief": {
     "genre": "portrait",
@@ -992,7 +1058,7 @@ Brief chỉ được tạo phiên bản mới khi booking ở `pending`, `confir
 }
 ```
 
-Quy tắc: `providerType = photographer` thì bắt buộc `photographerId`; `= studio` thì bắt buộc `studioId` (và `photographerId` phải là `null`).
+Quy tắc: `providerType = photographer` thì bắt buộc `photographerId`, `studioId = null`, `assignedPhotographerId = null` và danh sách tài nguyên lúc xác nhận phải rỗng; `providerType = studio` thì bắt buộc `studioId`, `photographerId = null`; tài nguyên nếu chọn phải thuộc studio đó. Booking cá nhân gửi tài nguyên trả 422 `personal_booking_resources`.
 
 ### 12.3 Ví dụ `POST /v1/bookings/:id/transitions`
 
@@ -1001,7 +1067,7 @@ Quy tắc: `providerType = photographer` thì bắt buộc `photographerId`; `= 
   "to": "confirmed",
   "scheduledStart": "2026-11-02T02:00:00Z",
   "scheduledEnd": "2026-11-02T04:00:00Z",
-  "resourceIds": ["d1e2f3a4-5b6c-4d7e-8f9a-0b1c2d3e4f5a"],
+  "resourceIds": [],
   "assignedPhotographerId": null
 }
 ```
@@ -1012,13 +1078,13 @@ Chuyển không có trong bảng trả 422 `UNPROCESSABLE`.
 
 | Từ | Đến | Ai chuyển | Body cần | Điều kiện và tác dụng phụ |
 |---|---|---|---|---|
-| `pending` | `confirmed` | Bên cung cấp | `scheduledStart`, `scheduledEnd`; `resourceIds` (tuỳ chọn); `assignedPhotographerId` (booking studio, nếu chưa phân công) | Không trùng lịch (409). Booking studio phải có photographer được phân công. BE tạo `ScheduleEntry` và Shoot Room, đặt `shootRoomId` |
+| `pending` | `confirmed` | Photographer chủ hồ sơ hoặc manager studio | `scheduledStart`, `scheduledEnd`; `resourceIds` (studio: tuỳ chọn; photographer cá nhân: phải rỗng); `assignedPhotographerId` (booking studio, nếu chưa phân công) | Không trùng lịch (409). Booking studio phải có photographer là thành viên hiện tại; chỉ manager được phân công. Tài nguyên chỉ được giữ cho booking studio và phải thuộc studio đó. BE tạo lịch giữ, snapshot tài nguyên, Shoot Room và event liên quan nguyên tử |
 | `pending` | `rejected` | Bên cung cấp | `reason` | |
 | `pending` | `cancelled` | Khách | `reason` (tuỳ chọn) | |
-| `confirmed` | `cancelled` | Khách hoặc bên cung cấp | `reason` | Giải phóng lịch, đóng Shoot Room. Quy định huỷ **[?]** |
+| `confirmed` | `cancelled` | Khách hoặc bên cung cấp | `reason` | Giải phóng lịch, đóng Shoot Room; giữ thời gian, assignee và snapshot tài nguyên. Quy định huỷ **[?]** |
 | `confirmed` | `in_progress` | Bên cung cấp | | Phải có `agreedBriefVersion` (422 nếu chưa) |
 | `in_progress` | `proofing` | Bên cung cấp | | Có gallery `draft` với ít nhất 1 ảnh; gallery chuyển `open_for_selection` (mục 14) |
-| `in_progress` | `cancelled` | Bên cung cấp | `reason` | |
+| `in_progress` | `cancelled` | Bên cung cấp | `reason` | Giải phóng lịch, đóng Shoot Room; giữ thời gian, assignee và snapshot tài nguyên |
 | `proofing` | `delivered` | Bên cung cấp | | Gallery phải `selection_submitted`; delivery có ít nhất 1 file. Gallery chuyển `finalized`, delivery chuyển `delivered` |
 | `delivered` | `completed` | Khách | | Mở quyền viết review. Tự động hoàn tất sau một thời gian nếu khách không xác nhận **[?]** |
 
@@ -1030,6 +1096,8 @@ Từ `proofing` trở đi không có đường huỷ trong MVP (cố ý: ảnh �
 
 ## 13. Shoot Room
 
+Khi đổi photographer, quyền truy cập phòng theo assignment cũ bị thu hồi; người mới được xem lịch sử phòng, customer/manager giữ quyền độc lập. BE, RLS Storage và Realtime phải kiểm tra quyền hiện tại, không giữ quyền bằng subscription cũ; dữ liệu đã tải trước đó không thể thu hồi.
+
 Shoot Room được BE tạo tự động khi booking sang `confirmed`; `Booking.shootRoomId` cho biết id. **Người tham gia phòng:** khách và bên cung cấp của booking (photographer chủ hồ sơ hoặc được phân công, manager của studio). Thành viên studio khác không vào được **[?]** (mục 20, #11).
 
 **ShootRoom**
@@ -1038,8 +1106,8 @@ Shoot Room được BE tạo tự động khi booking sang `confirmed`; `Booking
 |---|---|---|
 | id | uuid | |
 | bookingId | uuid | |
-| status | `open` \| `closed` | `closed` là chỉ đọc |
-| participants | object[] | `[{ "user": UserSummary, "side": "customer" \| "provider" }]` |
+| status | ShootRoomStatus | `closed` là chỉ đọc |
+| participants | object[] | `[{ "user": UserSummary, "side": BookingSide }]` |
 | createdAt | datetime | |
 
 **Message**
@@ -1098,9 +1166,9 @@ Shoot Room được BE tạo tự động khi booking sang `confirmed`; `Booking
 ```json
 {
   "data": {
-    "id": "f0a1b2c3-d4e5-4f60-8a7b-9c8d7e6f5a4b",
-    "roomId": "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
-    "sender": { "id": "7c1e2b0e-3f5a-4a52-9a3b-0c4f2a7f9d11", "displayName": "Nguyễn An", "avatarUrl": null },
+    "id": "019e2310-0000-7000-8000-000000000008",
+    "roomId": "019e2310-0000-7000-8000-000000000002",
+    "sender": { "id": "7c1e2b0e-3f5a-4a52-9a3b-0c4f2a7f9d11", "userName": "nguyen_an", "displayName": "Nguyễn An", "avatarUrl": null },
     "type": "text",
     "body": "Mình muốn đổi giờ chụp sang 9h sáng được không?",
     "attachments": [],
@@ -1160,7 +1228,7 @@ Mọi thao tác ghi trên phòng `closed` trả 422. Với tin nhắn bị admin
 | `GET /v1/bookings/:id/gallery` | Xem gallery · Chọn ảnh | Người tham gia booking | | 200 `Gallery` · 401, 404 (khách chưa thấy được khi gallery còn `draft`) |
 | `PATCH /v1/galleries/:id` | Đổi giới hạn chọn | Bên cung cấp | `selectionLimit` | 200 `Gallery` · 400, 401, 403, 404, 422 |
 | `GET /v1/galleries/:id/images` | Danh sách ảnh preview · Chọn ảnh | Người tham gia booking | Query: `page`, `pageSize` (tối đa 100 ở endpoint này) | 200 `GalleryImage[]` + meta · 401, 404 |
-| `POST /v1/galleries/:id/images` | Ghi nhận preview đã upload (bucket `gallery-previews`) | Bên cung cấp | `storagePath` ảnh chính, `width`, `height`; BE suy ra `storagePath` thumbnail và kiểm tra cả hai file | 201 `GalleryImage` · 400, 401, 403, 404, 422 |
+| `POST /v1/galleries/:id/images` | Ghi nhận preview đã upload (bucket `gallery-previews`) | Bên cung cấp | `storagePath` ảnh chính, `width`, `height`; BE suy ra `storagePath` thumbnail, kiểm tra hai file và xác minh metadata thật khớp request, mỗi chiều từ 1 đến 1280 px | 201 `GalleryImage` · 400, 401, 403, 404, 422 |
 | `DELETE /v1/galleries/:id/images/:imageId` | Xoá cứng preview, bản ghi ảnh và cả file chính/thumbnail | Bên cung cấp | | 204 · 401, 403, 404, 422 (chỉ khi `draft`) |
 | `PUT /v1/galleries/:id/selection` | Lưu lựa chọn hiện tại (thay toàn bộ danh sách) · Chọn ảnh | Khách của booking | `{ "imageIds": uuid[] }` | 200 `{ "data": { "selectedCount": integer } }` · 400, 401, 403, 404, 422 (vượt `selectionLimit`, hoặc gallery không ở `open_for_selection`) |
 | `POST /v1/galleries/:id/selection/submit` | Gửi lựa chọn, khoá lại · Chọn ảnh | Khách của booking | | 200 `Gallery` (`selection_submitted`) · 401, 403, 404, 422 |
@@ -1193,7 +1261,7 @@ Mọi thao tác ghi trên phòng `closed` trả 422. Với tin nhắn bị admin
 |---|---|---|
 | id | uuid | |
 | fileName | string | |
-| mimeType | string | Ảnh `image/jpeg`, `image/png`, `image/webp` |
+| mimeType | DeliveryMimeType | Ảnh JPEG, PNG hoặc WebP |
 | sizeBytes | integer | |
 | galleryImageId | uuid \| null | Ảnh preview tương ứng, nếu có |
 | createdAt | datetime | |
@@ -1217,7 +1285,7 @@ Mọi thao tác ghi trên phòng `closed` trả 422. Với tin nhắn bị admin
 | Trường | Kiểu | Ghi chú |
 |---|---|---|
 | id | uuid | |
-| bookingId | uuid | Mỗi booking một review |
+| bookingId | uuid | Mỗi booking tối đa một review trong toàn bộ vòng đời, kể cả review đã xoá mềm; không tạo review thay thế sau khi xoá |
 | reviewer | UserSummary | |
 | targetType | ProviderType | Review dành cho photographer hay studio |
 | photographerId | uuid \| null | |
@@ -1228,7 +1296,7 @@ Mọi thao tác ghi trên phòng `closed` trả 422. Với tin nhắn bị admin
 
 | Endpoint | Mục đích · màn hình | Quyền | Request | Response · Lỗi |
 |---|---|---|---|---|
-| `POST /v1/bookings/:id/reviews` | Viết review cho bên cung cấp của booking · Review | Khách của booking | `rating` (bắt buộc), `comment` | 201 `Review` · 400, 401, 403, 404, 409 (đã review), 422 (booking chưa `completed`) |
+| `POST /v1/bookings/:id/reviews` | Viết review cho bên cung cấp của booking · Review | Khách của booking | `rating` (bắt buộc), `comment` | 201 `Review` · 400, 401, 403, 404, 409 (đã từng review, kể cả review đã xoá mềm), 422 (booking chưa `completed`) |
 | `GET /v1/photographers/:id/reviews` | Review của photographer · Hồ sơ photographer | Công khai | Query: `page`, `pageSize` | 200 `Review[]` + meta · 404 |
 | `GET /v1/studios/:id/reviews` | Review của studio · Hồ sơ studio | Công khai | Query: `page`, `pageSize` | 200 `Review[]` + meta · 404 |
 | `PATCH /v1/reviews/:id` | Sửa review của mình **[?]** | Tác giả | `rating`, `comment` | 200 `Review` · 400, 401, 403, 404 |
@@ -1282,7 +1350,7 @@ Mục này chốt **hình dạng request/response** để FE dựng giao diện 
 | query | string \| null | Một trong `query` hoặc `imageStoragePath` | Tối đa 300 ký tự, tiếng Việt hoặc tiếng Anh |
 | imageStoragePath | string \| null | | Ảnh tham chiếu đã upload vào bucket `search-uploads` |
 | filters | object | không | `genre`, `city`, `district`, `priceMax` (integer; so với `priceFrom` của bên cung cấp, tính từ dịch vụ đang hoạt động). Giá trị trong `filters` ghi đè giá trị đã phân tích cùng khoá |
-| ignoreParsed | string[] | không | Các khoá của `parsedQuery` mà người dùng đã bỏ chip (`genres`, `styles`, `city`, `district`, `priceMax`); BE không áp dụng các điều kiện này |
+| ignoreParsed | SearchParsedKey[] | không | Các khoá của `parsedQuery` mà người dùng đã bỏ chip (`genres`, `styles`, `city`, `district`, `priceMax`); BE không áp dụng các điều kiện này |
 | page, pageSize | integer | không | Xem 2.2 |
 
 ```json
@@ -1304,13 +1372,13 @@ Mục này chốt **hình dạng request/response** để FE dựng giao diện 
     {
       "provider": {
         "type": "photographer",
-        "id": "b2f8a4d1-91c3-4f7e-8d2e-5a6c0e9b7f30",
+        "id": "019e2310-0000-7000-8000-000000000004",
         "displayName": "An Studio",
         "avatarUrl": null
       },
       "score": 0.87,
       "matchedImages": [
-        { "imageId": "a91b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d", "portfolioId": "e41d7c3a-6b2f-4c9a-b7a1-2f3d4e5a6b70", "thumbnailUrl": "https://.../img1_thumb.webp" }
+        { "imageId": "019e2310-0000-7000-8000-000000000003", "portfolioId": "019e2310-0000-7000-8000-000000000007", "thumbnailUrl": "https://.../img1_thumb.webp" }
       ],
       "reasons": ["Thể loại: portrait", "Phong cách: tone lạnh", "Khu vực: Thủ Đức"]
     }
@@ -1328,6 +1396,8 @@ Mục này chốt **hình dạng request/response** để FE dựng giao diện 
 
 **Lỗi:** 400, 401 (tìm bằng ảnh khi chưa đăng nhập), 422 (ảnh không tồn tại trong Storage), 429, 503 (AI service không sẵn sàng).
 **Ghi chú:**
+- `filters.genre` có kiểu `Genre`; `parsedQuery.genres` là `Genre[]`, `styles` là `string[]`, `city`/`district` là `string | null`, `priceMax` là `integer | null`. `query`, `styles`, `reasons` là nội dung ngôn ngữ tự nhiên; không ép enum khi taxonomy phong cách chưa chốt. `provider.type` dùng `ProviderType`.
+- BE và AI service phải validate trường phân loại bằng enum đồng bộ (Zod/Pydantic); đầu ra LLM sai enum không được ghi DB hoặc trả như kết quả hợp lệ. Không tự thêm enum từ chuỗi AI trả về.
 - `parsedQuery` là cách hệ thống hiểu truy vấn, để FE hiển thị thành các chip có thể bỏ bớt (bỏ chip thì gửi khoá tương ứng trong `ignoreParsed`; muốn đổi giá trị thì ghi đè qua `filters`).
 - `reasons` là chuỗi hiển thị cho người dùng, giải thích vì sao khớp.
 - Kết quả trả về bên cung cấp (`provider`, photographer hoặc studio) kèm ảnh khớp; ảnh của portfolio studio thuộc về studio. Tìm trực tiếp theo ảnh (không gộp theo bên cung cấp) **[?]**.
@@ -1354,7 +1424,7 @@ Mục này chốt **hình dạng request/response** để FE dựng giao diện 
     "bookingsByStatus": { "pending": 2, "confirmed": 3, "completed": 8, "cancelled": 1 },
     "estimatedRevenue": 24500000,
     "ratingAvg": 4.7,
-    "topServices": [{ "serviceId": "c5d6e7f8-1a2b-4c3d-8e9f-0a1b2c3d4e5f", "name": "Chân dung 2 giờ", "bookingCount": 5 }],
+    "topServices": [{ "serviceId": "019e2310-0000-7000-8000-000000000005", "name": "Chân dung 2 giờ", "bookingCount": 5 }],
     "bookingsPerDay": [{ "date": "2026-10-03", "count": 2 }]
   }
 }
@@ -1369,7 +1439,7 @@ Mục này chốt **hình dạng request/response** để FE dựng giao diện 
 **Màn hình dùng:** Timeline/deadline.
 **Quyền:** Đăng nhập.
 **Query:** `from`, `to` (bắt buộc, tối đa 62 ngày).
-**Response 200:** `{ "data": [{ "type": "shoot" | "milestone", "bookingId": uuid, "shootRoomId": uuid | null, "title": string, "at": datetime, "status": BookingStatus | MilestoneStatus }] }`
+**Response 200:** `{ "data": [{ "type": TimelineItemType, "bookingId": uuid, "shootRoomId": uuid | null, "title": string, "at": datetime, "status": BookingStatus | MilestoneStatus }] }`
 **Lỗi:** 400, 401.
 
 ---
@@ -1380,16 +1450,16 @@ Các điểm đã thống nhất trong buổi rà soát hiện tại được gh
 
 | # | Câu hỏi | Người chốt |
 |---|---|---|
-| 1 | Profile được tạo bằng trigger DB khi đăng ký, hay BE tạo lần gọi `/me` đầu tiên? | Ly, Khải |
-| 2 | `styles` dùng chuỗi tự do hay bảng tag chuẩn ngay từ đầu? Nếu dùng bảng tag, ai gán tag ảnh và `Tag.kind` có những nhóm nào? | Bạn, Quỳnh Anh |
+| 1 | Khởi tạo profile bằng trigger DB hay BE; nhận username bắt buộc, xử lý trùng và lỗi khởi tạo như thế nào? | Ly, Khải |
+| 2 | `styles` dùng chuỗi tự do hay bảng tag chuẩn ngay từ đầu? Nếu dùng bảng tag, ai gán tag ảnh và các nhóm `TagKind` ban đầu cần bổ sung nhóm nào? | Bạn, Quỳnh Anh |
 | 3 | Giới hạn số ảnh mỗi portfolio và dung lượng tổng mỗi tài khoản. | Cả nhóm |
 | 4 | Có giữ trường credit ekip dạng chữ tự do trong portfolio không? | Bạn |
 | 5 | Chỉ số uy tín ngoài `ratingAvg`/`reviewCount` (số booking, tỷ lệ đúng hạn) có cần ngay trong MVP không? | Bạn |
 | 6 | Có bắt buộc FE hiển thị nhãn cho ảnh `ai_generated` không? | Bạn, Khoa |
-| 7 | Cursor tin nhắn tiếp tục dựa trên `(created_at, id)` hay đổi sang UUID v7? | Khải |
-| 8 | Ai phân công photographer cho booking của studio: manager chủ động hay photographer nhận việc? | Cả nhóm, Ly |
+| 7 | Đã chốt: tin mới dùng UUIDv7; cursor vẫn theo `(created_at, id)` (mục 2.2). | — |
+| 8 | Đã chốt: manager phân công; chặn rời studio khi còn booking được giao chưa kết thúc, lưu assignment events (mục 9, 12). | — |
 | 9 | Chính sách huỷ booking (hạn chót, phí), thời gian tự động hoàn tất khi khách không xác nhận, và cách xử lý khi khách không phản hồi ở `proofing` (hiện không có đường huỷ từ `proofing`). | Bạn, Khải |
-| 10 | Mô hình chấp thuận phiên bản brief có phù hợp? Có cho phép sửa brief sau `proofing` không? | Bạn, Khoa |
+| 10 | Đã chốt: chỉ tạo/duyệt ở pending/confirmed/in_progress; bản agreed cũ có hiệu lực đến khi hai bên duyệt bản mới (mục 12). | — |
 | 11 | Quyền vào Shoot Room: chỉ khách + photographer/manager liên quan, hay mọi thành viên studio được xem? | Ly, Khải |
 | 12 | Giới hạn dung lượng mỗi file, mỗi booking và thời hạn lưu `expiresAt` cho deliveries/room files. | Cả nhóm |
 | 13 | Review có cho sửa, cho bên cung cấp phản hồi, hoặc đánh giá riêng photographer được phân công không? | Bạn |
@@ -1423,3 +1493,8 @@ Các điểm đã thống nhất trong buổi rà soát hiện tại được gh
 | v0.2 | 2026-10-12 | Mở rộng cho toàn bộ MVP: studio, dịch vụ, lịch/tài nguyên, booking và brief, Shoot Room, proofing, bàn giao, review, báo cáo/admin, AI Search, dashboard, timeline; bổ sung quy ước Storage, Realtime, ký hiệu quyền, mã lỗi 503; thêm `ratingAvg`/`reviewCount` và `PortfolioStatus.hidden` | [tên bạn] |
 | v0.3 | 2026-10-14 | Đồng bộ các quyết định review: chính sách xoá theo loại dữ liệu và giữ portfolio 30 ngày trước cleanup; mã lỗi có `details[].reason`; chuẩn hoá upload paths và thumbnail; role chuyên môn hiển thị; portfolio thuộc photographer hoặc studio; `revisionRounds`, private brief references, booking events, `publishedAt`, xử lý nội dung ẩn và `priceFrom` suy ra từ services | Review thiết kế |
 | v0.4 | 2026-10-14 | Rà soát chéo: thêm `ProviderSummary`; AI Search trả `provider` (photographer hoặc studio) và thêm `ignoreParsed`; `isHidden` cho photographer/studio; làm rõ `GET /bookings?as=provider` và việc không huỷ được từ `proofing`; sửa tham chiếu mục 20; sửa lỗi định dạng | Review thiết kế |
+| v0.5 | 2026-10-20 | Chỉ đăng ký client/photographer; photographer tạo và tham gia nhiều studio; userName duy nhất và route profile; UUIDv7 cho ID ứng dụng; enum hoá trường phân loại và kiểm tra đầu ra AI. | Review thiết kế |
+
+| v0.6 | 2026-10-20 | Siết assignment/thời gian và membership; đổi lịch/phân công nguyên tử, 409 khi trùng; brief agreed giữ hiệu lực; snapshot số ảnh và tài nguyên; assignment events và quyền phòng; FK RESTRICT giữ lịch sử booking. | Review thiết kế |
+
+| v0.7 | 2026-10-20 | Chỉ cho booking studio giữ tài nguyên; một review duy nhất suốt vòng đời booking; bổ sung userName vào ví dụ UserSummary; sửa kích thước ảnh mẫu và ghi rõ kiểm tra giới hạn ảnh. | Review contract/ERD |

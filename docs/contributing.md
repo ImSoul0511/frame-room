@@ -225,7 +225,7 @@ Nhận xét cụ thể, lịch sự, tập trung vào code. Dùng tiền tố `n
 ### 5.2 Đặt tên
 
 - Bảng và cột: `snake_case`; bảng **số nhiều** (`bookings`, `studio_members`).
-- Khoá chính: `id uuid default gen_random_uuid()`.
+- Khoá chính nghiệp vụ mới: `id uuid`, sinh UUIDv7 phía server bằng hàm do migration cung cấp; không dùng `gen_random_uuid()`. `profiles.id` và FK user giữ nguyên ID do Supabase Auth cấp; không đổi PK/FK hiện có. PK ghép/PK dùng FK là ngoại lệ ghi rõ trong ERD.
 - Khoá ngoại: `<bảng_số_ít>_id` (`studio_id`, `photographer_id`); khi cần nêu vai trò của quan hệ thì đặt theo vai trò (`customer_id`, `assigned_photographer_id`, `created_by`).
 - Mọi bảng có `created_at`, `updated_at` (`timestamptz`, mặc định `now()`); dùng `timestamptz` cho mọi thời gian. Ngoại lệ: bảng bất biến hoặc chỉ ghi thêm (ví dụ `booking_status_events`, `user_roles`) không cần `updated_at`, và có thể dùng một cột thời điểm tương đương (ví dụ `granted_at`); ngoại lệ phải ghi rõ trong ERD.
 - Boolean: `is_…`, `has_…`. Index: `idx_<bảng>_<cột>`. Ràng buộc: `chk_…`, `uq_…`, `fk_…`.

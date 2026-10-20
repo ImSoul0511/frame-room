@@ -14,12 +14,12 @@ FrameRoom kết nối khách hàng với photographer/studio thông qua portfoli
 
 | Role | Mô tả |
 |---|---|
-| `user` | Khách hàng: tìm kiếm, đặt lịch, chọn ảnh, review |
+| `client` | Khách hàng: tìm kiếm, đặt lịch, chọn ảnh, review |
 | `photographer` | Cung cấp dịch vụ nhiếp ảnh độc lập; đăng portfolio và nhận booking; có thể thuộc nhiều studio |
-| `studio_manager` | Vận hành studio như một bên cung cấp độc lập: quản lý hồ sơ, portfolio, dịch vụ, booking, lịch/tài nguyên, đội ngũ và báo cáo kinh doanh; có thể mời photographer đã có tài khoản tham gia studio. Không bắt buộc phải có hồ sơ photographer |
+| `studio_manager` | Vận hành studio như một bên cung cấp độc lập: quản lý hồ sơ, portfolio, dịch vụ, booking, lịch/tài nguyên, đội ngũ và báo cáo kinh doanh; có thể mời photographer đã có tài khoản tham gia studio. Bắt buộc có hồ sơ photographer; quyền này suy ra từ membership, không đăng ký riêng |
 | `system_admin` | Xử lý báo cáo nội dung, kiểm tra dữ liệu tín nhiệm |
 
-> Một tài khoản có thể đồng thời là `photographer` và `studio_manager`. Studio có thể sở hữu portfolio, cung cấp dịch vụ và nhận booking dưới danh nghĩa studio. Quyền quản lý từng studio xác định qua bảng `studio_members`. Role "ekip" đã bỏ khỏi MVP.
+> Chỉ tự đăng ký `client` hoặc `photographer`; `system_admin` được cấp thủ công, không đăng ký công khai. Muốn lập studio phải tạo hồ sơ photographer trước; không có tài khoản studio riêng. Một photographer có thể lập nhiều studio và tham gia nhiều studio; `studio_manager` là quyền suy ra khi làm manager. Studio có thể sở hữu portfolio, cung cấp dịch vụ và nhận booking dưới danh nghĩa studio. Quyền quản lý từng studio xác định qua bảng `studio_members`. Role "ekip" đã bỏ khỏi MVP.
 
 ### Vai trò chuyên môn trên hồ sơ
 

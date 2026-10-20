@@ -1,11 +1,13 @@
-%% FrameRoom ERD MVP — aligned to review decisions on 2026-10-14
-%% Standalone Mermaid source; full table details are in ERD_v0.md.
-%% Portfolios are owned independently by either a photographer or a studio.
-%% Professional roles (retoucher, art_director) are profile metadata, not authorization roles.
+%% FrameRoom ERD MVP — aligned to review decisions on 2026-10-20
+%% Full table details are in erd_v0.md. New application IDs use UUIDv7; Auth IDs are preserved.
+%% Only client/photographer registration; studios are created and staffed by photographers.
+%% One photographer can create and join many studios; managers derive authority from membership.
+%% Booking assignment events and resource snapshots preserve history; schedule changes are atomic.
 erDiagram
   profiles ||--o{ user_roles : stores_admin_role
   profiles ||--o| photographers : has_profile
-  profiles ||--o{ studio_members : member_of
+  photographers ||--o{ studio_members : member_of
+  photographers ||--o{ studios : creates
   studios ||--o{ studio_members : has_members
   studios ||--o{ studio_invitations : invites
   photographers ||--o{ studio_invitations : invited_photographer
@@ -32,6 +34,12 @@ erDiagram
   bookings ||--o{ booking_add_ons : snapshots
   bookings ||--o{ brief_versions : versions
   bookings ||--o{ booking_status_events : history
+  bookings ||--o{ booking_assignment_events : assignment_history
+  photographers |o--o{ booking_assignment_events : previous_assignee
+  photographers ||--o{ booking_assignment_events : new_assignee
+  profiles ||--o{ booking_assignment_events : assigns
+  bookings ||--o{ booking_resources : resource_snapshots
+  resources ||--o{ booking_resources : snapshot_source
   bookings ||--o{ schedule_entries : reserves
 
   bookings ||--o| shoot_rooms : opens
@@ -53,3 +61,63 @@ erDiagram
   studios |o--o{ reviews : about
   profiles |o--o{ messages : sender
   profiles ||--o{ reports : submits
+
+  profiles {
+    uuid id PK,FK "Supabase Auth ID, preserved"
+    text user_name UK "NN; lowercase; 3-30 characters"
+  }
+  photographers {
+    uuid id PK "UUIDv7"
+    uuid user_id FK,UK "profiles.id; NN"
+  }
+  studios {
+    uuid id PK "UUIDv7"
+    uuid created_by FK "photographers.user_id; NN; not unique"
+  }
+  studio_members {
+    uuid id PK "UUIDv7"
+    uuid studio_id FK "NN; unique together with user_id"
+    uuid user_id FK "photographers.user_id; NN"
+    studio_member_role role "manager or photographer"
+  }
+  bookings {
+    uuid id PK "UUIDv7"
+    uuid customer_id FK "NN; ON DELETE RESTRICT"
+    provider_type provider_type "NN; XOR provider FKs"
+    uuid photographer_id FK "RESTRICT; personal provider"
+    uuid studio_id FK "RESTRICT; studio provider"
+    uuid assigned_photographer_id FK "RESTRICT; required for confirmed studio booking"
+    integer service_photo_count "Snapshot; nullable; nonnegative"
+    integer service_retouched_count "Snapshot; nullable; nonnegative"
+    integer total_price "NN; service snapshot plus add-ons"
+    booking_status status "NN"
+    timestamptz scheduled_start "Both null or valid interval"
+    timestamptz scheduled_end "Both null or valid interval"
+    integer agreed_brief_version FK "Same booking; both sides approved"
+  }
+  booking_resources {
+    uuid booking_id PK,FK "RESTRICT; composite PK"
+    uuid resource_id PK,FK "RESTRICT; composite PK"
+    text resource_name "NN; snapshot"
+    resource_type resource_type "NN; snapshot"
+  }
+  booking_assignment_events {
+    uuid id PK "UUIDv7; append-only"
+    uuid booking_id FK "NN; RESTRICT"
+    uuid from_photographer_id FK "Nullable; RESTRICT"
+    uuid to_photographer_id FK "NN; RESTRICT"
+    uuid actor_id FK "NN; manager; RESTRICT"
+    timestamptz created_at "NN; no updated_at"
+  }
+
+  portfolio_images {
+    integer width "NN; 1-1280"
+    integer height "NN; 1-1280"
+  }
+  gallery_images {
+    integer width "NN; 1-1280"
+    integer height "NN; 1-1280"
+  }
+  reviews {
+    uuid booking_id FK,UK "NN; unconditional unique including soft-deleted rows"
+  }
