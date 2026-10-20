@@ -8,15 +8,23 @@ Tài liệu này áp dụng cho mọi thành viên. Quy tắc nào cần thay đ
 
 ## 1. Git workflow
 
+### 1.0 Bắt đầu mỗi phiên làm việc
+
+- Đứng ở thư mục gốc repo, chạy `git status --short --branch` để xác nhận nhánh hiện tại và xem các thay đổi/commit có sẵn. Không xoá, reset, checkout đè hoặc sửa lại thay đổi chưa được giao xử lý.
+- Chạy `git fetch origin --prune` trước khi bắt đầu để cập nhật tham chiếu từ remote. Nếu fetch thất bại, ghi rõ điều đó và không giả định `origin/*` đang mới nhất.
+- Làm việc trên nhánh task phù hợp theo mục 1.1. Không commit trực tiếp trên `main` hoặc `dev`; nếu môi trường đã cấp sẵn task branch/worktree thì tiếp tục trên đó.
+- Chỉ rebase task branch lên nhánh gốc phù hợp khi working tree sạch và việc rebase không làm mất thay đổi đang có. Không tự ý `reset --hard`, force-push hoặc stash thay đổi của người khác.
+- Không push trực tiếp lên `main` hoặc `dev`. Thay đổi phải đi qua PR và quy trình review ở mục 1.3; hotfix cũng dùng PR vào các nhánh đích theo quy định.
+
 ### 1.1 Nhánh
 
 | Nhánh | Mục đích | Quy tắc |
 |---|---|---|
-| `main` | Bản ổn định, dùng để demo/nộp | Bảo vệ; chỉ merge từ `dev` bằng PR vào cuối sprint |
+| `main` | Bản ổn định, dùng để demo/nộp | Bảo vệ; cấm push trực tiếp; chỉ merge từ `dev` bằng PR vào cuối sprint (hotfix theo PR) |
 | `dev` | Tích hợp, deploy staging | Bảo vệ; không push trực tiếp |
 | `feature/FR-<số>-<mô-tả-ngắn>` | Tính năng | Tạo từ `dev` |
 | `fix/FR-<số>-<mô-tả-ngắn>` | Sửa lỗi | Tạo từ `dev` |
-| `hotfix/FR-<số>-<mô-tả-ngắn>` | Sửa lỗi gấp trên `main` | Merge vào cả `main` và `dev` |
+| `hotfix/FR-<số>-<mô-tả-ngắn>` | Sửa lỗi gấp trên `main` | Dùng PR vào `main`, sau đó đưa thay đổi vào `dev` bằng PR; không push/merge trực tiếp |
 | `chore/FR-<số>-<mô-tả-ngắn>` | Hạ tầng, tài liệu, refactor | Tạo từ `dev` |
 
 Ví dụ: `feature/FR-24-portfolio-upload`, `fix/FR-57-booking-status`.
@@ -83,7 +91,7 @@ Final version
 
 ### 1.3 Pull request
 
-- PR vào `dev`, tiêu đề theo định dạng commit: `feat(api): add portfolio create endpoint [FR-24]`.
+- PR thông thường vào `dev`; hotfix dùng PR vào `main` rồi PR/đồng bộ vào `dev`. Tiêu đề theo định dạng commit: `feat(api): add portfolio create endpoint [FR-24]`.
 - Dùng mẫu PR (`.github/pull_request_template.md`), gồm: mô tả, issue liên quan, ảnh chụp (nếu có UI), cách kiểm thử, checklist.
 - Kích thước PR: **tối đa khoảng 400 dòng thay đổi** (không tính file sinh tự động). PR lớn hơn thì tách.
 - Tối thiểu **1 reviewer** (ưu tiên người hỗ trợ của vai trò đó); migration DB cần **Ly hoặc Khải** duyệt.
