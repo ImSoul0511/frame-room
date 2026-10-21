@@ -2,6 +2,8 @@
 
 ## Outcome
 
+Delivered as [draft PR #2](https://github.com/ImSoul0511/frame-room/pull/2), targeting main. Implementation commit: 35783e5. Reviewer approval is pending; no merge or dev synchronization has been performed.
+
 Implemented a runnable pnpm foundation with compiled shared ESM, a testable Fastify API, validated settings/CORS/redacted logging, Astryx routing and live API status, local quality hooks/checks, and pinned local Supabase commands.
 
 Agent guidance lives entirely under agents/. Product/architecture/ADR/backlog/task artifacts are linked. Existing documentation outside report/ is English; reports and the untracked source PDF are preserved. Business contract identifiers and open questions remain intact; AI is deferred and the GitHub workflow is disabled in the proposed branch.

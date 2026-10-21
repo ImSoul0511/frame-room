@@ -4,6 +4,8 @@ Date: 2026-10-21 (project timezone Asia/Bangkok).
 Environment: Windows PowerShell, Node 22.19.0, Corepack 0.34.0, pnpm 9.15.0, headless Microsoft Edge.
 Revision: SETUP-001 implementation on chore/SETUP-001-workspace-foundation.
 
+Draft PR: [#2](https://github.com/ImSoul0511/frame-room/pull/2). Implementation commit: 35783e5. Both pre-commit lint-staged and commit-msg validation passed during the actual implementation commit. Only the task branch was pushed.
+
 ## Automated evidence
 
 | Check                              | Status  | Evidence                                                                                                                                             |

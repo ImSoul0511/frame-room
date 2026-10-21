@@ -6,6 +6,8 @@ Jira: Not linked; local task authorized by the user
 Branch: chore/SETUP-001-workspace-foundation
 Base: main, one-time approved exception
 
+Draft PR: [#2](https://github.com/ImSoul0511/frame-room/pull/2), targeting main. Reviewer approval and post-merge dev synchronization are pending.
+
 ## Goal and scope
 
 Reproducible web/API, agents/ guidance, lean English artifacts. Preserve report/ and source PDF. Keep current roles/studio decisions. Defer business features, AI implementation, Tauri, hosting, and CI/CD.
