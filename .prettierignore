@@ -1,0 +1,12 @@
+node_modules/
+dist/
+build/
+coverage/
+.artifacts/
+report/
+pnpm-lock.yaml
+*.pdf
+supabase/.temp/
+supabase/.branches/
+.env*
+packages/shared/src/db.types.ts

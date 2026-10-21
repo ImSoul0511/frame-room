@@ -1,1 +1,12 @@
-{ "extends": "../../tsconfig.json", "compilerOptions": { "outDir": "dist", "rootDir": "src", "noEmit": false }, "include": ["src"] }
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "outDir": "dist",
+    "rootDir": "src",
+    "noEmit": false
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts"]
+}
