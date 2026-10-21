@@ -12,6 +12,8 @@ This is an internal educational project for Introduction to Software Engineering
 - [Architecture](docs/architecture/overview.md) and [ADRs](docs/adr/README.md)
 - [Contribution rules](docs/contributing.md)
 - [Backlog](plans/backlog.md)
+- [Auth feature packet](docs/features/auth/packet.md) and [proposed initialization ADR](docs/adr/0003-auth-profile-initialization.md)
+- [Skill/artifact milestone](plans/tasks/AGENT-001.md)
 - [Foundation task](plans/tasks/SETUP-001.md) and [verification](plans/tasks/SETUP-001-verification.md)
 - [API draft](docs/api/contract_v0.md), [ERD draft](docs/db/erd_v0.md), and [Mermaid source](docs/db/erd_v0.mmd)
 - [Local database workflow](docs/db/local-development.md)

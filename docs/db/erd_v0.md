@@ -553,6 +553,8 @@ Realtime channels shoot_room:{roomId} and booking:{bookingId} use the same RLS h
 
 Preserve question numbering for cross-references. Current unresolved items and previously resolved decisions follow.
 
+Question #1 is compared in [Proposed ADR 0003](../adr/0003-auth-profile-initialization.md) and the [auth packet](../features/auth/packet.md). It remains unresolved; no business schema or migration is approved by that comparison.
+
 | #   | Decision                                                                                                               | Owners                   |
 | --- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------ |
 | 1   | Trigger versus backend profile initialization, username validation/duplicates/errors                                   | Ly, Khai                 |
