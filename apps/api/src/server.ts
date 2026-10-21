@@ -1,10 +1,16 @@
-import 'dotenv/config';
-import cors from '@fastify/cors';
-import Fastify from 'fastify';
-import { healthResponseSchema } from '@frameroom/shared';
+import { buildApp } from './app.js';
+import { loadEnv } from './config/env.js';
 
-const app = Fastify({ logger: true });
-await app.register(cors, { origin: true });
-app.get('/health', async () => healthResponseSchema.parse({ ok: true, service: 'api' }));
-const port = Number(process.env.PORT ?? 4000);
-await app.listen({ host: '0.0.0.0', port });
+const env = loadEnv();
+const app = buildApp(env);
+try {
+  await app.listen({ host: env.HOST, port: env.PORT });
+} catch (error) {
+  app.log.error(error, 'API startup failed');
+  process.exitCode = 1;
+}
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+  process.once(signal, () => {
+    void app.close();
+  });
+}

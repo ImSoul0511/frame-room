@@ -1,0 +1,4 @@
+interface:
+  display_name: 'FrameRoom Contract Change'
+  short_description: 'Trace FrameRoom behavior changes across contracts'
+  default_prompt: 'Use $frameroom-contract-change to review the proposed behavior and its contract impacts.'
