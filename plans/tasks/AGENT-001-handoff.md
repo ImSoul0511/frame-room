@@ -10,7 +10,7 @@ From the repository root, run `corepack pnpm docs:check` and `corepack pnpm form
 
 ## Review and next work
 
-This branch depends on the unmerged foundation [PR #2](https://github.com/ImSoul0511/frame-room/pull/2); retain a stacked draft review until that foundation is integrated. Retarget/rebase onto dev afterward; obtain reviewer approval before merging. No direct main/dev push or automated deployment is part of this task.
+Draft [PR #3](https://github.com/ImSoul0511/frame-room/pull/3) depends on the unmerged foundation [PR #2](https://github.com/ImSoul0511/frame-room/pull/2); retain a stacked draft review until that foundation is integrated. Retarget/rebase onto dev afterward; obtain reviewer approval before merging. No direct main/dev push or automated deployment is part of this task.
 
 Khai/Ly should decide G1 initialization, errors/retries and recovery; Khoa reviews compatibility and screens. G2 settles email/password/callback verification, G3 confirms copy/navigation/logout scope, and G4 reviews SQL/RLS execution. Record acceptance in the ADR and reconcile API/ERD before AUTH-001 adds schemas, migrations, endpoints, or screens. Product follow-ups retain the backlog order; password reset, Google OAuth and studio creation are outside this first auth slice.
 

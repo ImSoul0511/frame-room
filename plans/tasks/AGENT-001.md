@@ -6,6 +6,8 @@ Jira: Not linked; local task authorized by the user
 Branch: chore/AGENT-001-auth-skill-packet
 Base: chore/SETUP-001-workspace-foundation at d87e6c9; foundation PR [#2](https://github.com/ImSoul0511/frame-room/pull/2) is unmerged
 
+Draft review: [PR #3](https://github.com/ImSoul0511/frame-room/pull/3), stacked on #2. Content commit: 7437b82. Reviewer approval and later retargeting onto dev remain pending.
+
 ## Goal and scope
 
 Make focused project skills reusable and demonstrate them through a reviewable email/password onboarding design. Deliver instructions, specifications, and evidence only. Application code, shared schemas, database/configuration, dependencies, report/, and the untracked source PDF are unchanged. AI, Tauri, hosting, and CI/CD remain deferred.
