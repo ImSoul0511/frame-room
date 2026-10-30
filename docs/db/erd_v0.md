@@ -1,5 +1,10 @@
 # FrameRoom: MVP ERD (draft v0, review before implementation)
 
+The [MVP database/access document](mvp.md) and ordered migrations describe MVP-001.
+This historical ERD preserves draft questions, not a claim that its complete column
+inventory is implemented unchanged. AI project/job/artifact/usage/action tables are
+defined by migrations and reflected in generated database types.
+
 **Location:** docs/db/erd_v0.md
 **Inputs:** [API contract](../api/contract_v0.md), historical week-one entity list, [contribution rules](../contributing.md#4-database).
 **Status:** Reviewed design decisions as of 2026-10-20, not frozen. Section 6 retains open questions. Foundation translates this design; no business tables/migrations are implemented.

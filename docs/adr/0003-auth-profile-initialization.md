@@ -1,5 +1,9 @@
 # ADR 0003: Profile initialization and onboarding recovery
 
+Implementation update: the user selected option B under
+[ADR 0004](0004-ai-focused-mvp.md). The original proposal and named review gates
+below are retained as history; no team approval is implied.
+
 Status: **Proposed**. Date: 2026-10-21. Prepared under [AGENT-001](../../plans/tasks/AGENT-001.md) for AUTH-001 review.
 Decision owners: Khai and Ly; Khoa reviews API compatibility and screen recovery.
 Related: contract/ERD question #1 and [auth packet gates G1/G2](../features/auth/packet.md#8-review-gates-and-follow-ups).

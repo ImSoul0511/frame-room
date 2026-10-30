@@ -8,6 +8,11 @@
     "pnpm": "9.15.0"
   },
   "scripts": {
+    "dev:worker": "corepack pnpm --filter @frameroom/shared build && corepack pnpm --filter api worker",
+    "demo:configure": "node scripts/local-env.mjs",
+    "demo:seed": "corepack pnpm --filter api exec tsx src/demo-seed.ts",
+    "test:e2e": "playwright test",
+    "test:db": "corepack pnpm --filter api exec tsx src/verify-database.ts",
     "dev": "node scripts/dev.mjs",
     "dev:web": "corepack pnpm --filter @frameroom/shared build && corepack pnpm --filter web dev",
     "dev:api": "corepack pnpm --filter @frameroom/shared build && corepack pnpm --filter api dev",
@@ -26,12 +31,15 @@
     "db:status": "supabase status",
     "db:reset": "supabase db reset --local",
     "db:types": "node scripts/db-types.mjs",
-    "docs:check": "node scripts/check-docs.mjs"
+    "docs:check": "node scripts/check-docs.mjs",
+    "ai:index": "corepack pnpm --filter @frameroom/shared build && corepack pnpm --filter api exec tsx src/index-portfolios.ts",
+    "ai:evaluate": "corepack pnpm --filter @frameroom/shared build && corepack pnpm --filter api exec tsx src/evaluate-search.ts"
   },
   "devDependencies": {
     "@commitlint/cli": "19.8.1",
     "@commitlint/config-conventional": "19.8.1",
     "@eslint/js": "10.0.1",
+    "@playwright/test": "1.64.1",
     "@types/node": "^22.10.2",
     "eslint": "10.13.0",
     "eslint-plugin-react-hooks": "7.1.1",
