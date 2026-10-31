@@ -1,6 +1,12 @@
 # FrameRoom prioritized backlog
 
-Baseline: 2026-10-21. This backlog supersedes historical AI/CI/staging scheduling. Start tasks from agents/templates/task.md and optionally link a real Jira issue.
+Current implementation: [MVP-001](tasks/MVP-001.md), authorized 2026-10-30. The
+AI-focused bilingual plan supersedes the foundation's AI deferral. Verification and
+remaining real-model/dataset work are tracked in its linked evidence; team review
+is required before merge. No protected branches have been merged by the assistant.
+
+The table below preserves the 2026-10-21 sequencing baseline. It is historical
+planning, not a statement that implemented MVP-001 features remain deferred.
 
 | Order | Task                                               | Outcome / exit criteria                                                                            | Dependencies                                           |
 | ----- | -------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |

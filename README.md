@@ -2,7 +2,7 @@
 
 FrameRoom connects clients with photographers and studios through portfolios and one workflow: discover -> agree on a Shoot Brief -> book -> collaborate -> select photos -> receive delivery -> review.
 
-This is an internal educational project for Introduction to Software Engineering at VNU-HCM University of Science. The current implementation is a runnable foundation, not a completed product.
+This is an internal educational project for Introduction to Software Engineering at VNU-HCM University of Science. The MVP implements a bilingual, AI-assisted photography workflow. See the [implementation contract](docs/api/mvp.md) and [verification record](plans/tasks/MVP-001-verification.md) for tested behavior and remaining real-AI evaluation requirements.
 
 ## Start here
 
@@ -18,20 +18,21 @@ This is an internal educational project for Introduction to Software Engineering
 - [API draft](docs/api/contract_v0.md), [ERD draft](docs/db/erd_v0.md), and [Mermaid source](docs/db/erd_v0.mmd)
 - [Local database workflow](docs/db/local-development.md)
 
-All documentation outside `report/` is English. Reports retain their existing language. Product UI strings remain Vietnamese in a dedicated strings module.
+All documentation outside `report/` is English. Reports retain their existing language. The product supports English (default) and Vietnamese, with a persistent language selector and complete translation dictionaries.
 
 ## Stack and boundaries
 
-| Layer     | Choice                                                                     |
-| --------- | -------------------------------------------------------------------------- |
-| Web       | React 19, TypeScript, Vite SPA, Astryx, React Router, TanStack Query       |
-| API       | Node.js 22, TypeScript, Fastify, Zod                                       |
-| Shared    | Compiled ESM package, Zod schemas and inferred types                       |
-| Database  | Local Supabase PostgreSQL, Auth, Storage, Realtime; SQL migrations and RLS |
-| Workspace | pnpm 9.15.0                                                                |
-| Deferred  | AI implementation/model selection, pgvector, Tauri, hosting, CI/CD         |
+| Layer     | Choice                                                                                    |
+| --------- | ----------------------------------------------------------------------------------------- |
+| Web       | React 19, TypeScript, Vite SPA, Astryx, React Router, TanStack Query                      |
+| API       | Node.js 22, TypeScript, Fastify, Zod                                                      |
+| Shared    | Compiled ESM package, Zod schemas and inferred types                                      |
+| Database  | Local Supabase PostgreSQL, Auth, Storage, Realtime; SQL migrations and RLS                |
+| Workspace | pnpm 9.15.0                                                                               |
+| AI        | AI SDK 7, AI Gateway, hosted Gemini models, pgvector(768), pgmq, TypeScript worker, Sharp |
+| Deferred  | Tauri, hosting, CI/CD, payments, RAW workflows, custom training                           |
 
-Web/API currently communicate through GET /health. Business endpoints in the contract are planned, not implemented. No business migrations or RLS policies exist yet. The optional Python/FastAPI scaffold remains outside pnpm.
+Business routes cover accounts, discovery, portfolios, projects, studios/resources, booking, briefs, rooms, proofing, delivery, reviews, moderation and confirmed AI actions. Ordered migrations implement schema, RLS, Storage, Realtime and queues. The optional Python scaffold remains unused.
 
 ## Install and run
 
@@ -44,6 +45,31 @@ corepack pnpm install --frozen-lockfile
 corepack pnpm dev
 ```
 
+For the full local MVP, start Docker Desktop's Linux engine, then run:
+
+```sh
+corepack pnpm db:start
+corepack pnpm demo:configure
+corepack pnpm demo:seed
+corepack pnpm dev
+```
+
+In another terminal, run `corepack pnpm dev:worker` for queued AI work and temporary
+reference cleanup. `demo:configure` captures local settings into ignored `.env`
+without printing credentials. Seeding creates synthetic accounts and downloads 12
+licensed Unsplash source images plus studio copies; it makes no paid AI calls.
+
+Local demo accounts: `client@frameroom.test`, `photographer@frameroom.test`,
+`manager@frameroom.test`, `food@frameroom.test`, and `admin@frameroom.test`.
+Their synthetic local-only password is `FrameRoom-Demo-2026!`. Do not reuse these
+accounts or credentials in a hosted environment. Photo references are not work by
+the fictional providers; sources and license notes are recorded per image.
+
+English is the default even in a Vietnamese browser. Select English or Vietnamese
+in the header or Account settings; the preference persists on this browser. Forms
+retain their input when switching. Dates, VND formatting, Astryx control text and AI
+output follow the selected language. Existing user-authored content is preserved.
+
 Corepack reads the pinned version from package.json. Commands also work as pnpm after `corepack enable` if your Node installation permits PATH shims. No global pnpm installation is required.
 
 The dev command builds shared, then runs its compiler watcher, the API watcher, and Vite in the current terminal. Shared changes rebuild and restart the API; Vite updates the web. Stop with Ctrl+C. It never installs Python, starts Docker, or resets a database.
@@ -55,22 +81,28 @@ The dev command builds shared, then runs its compiler watcher, the API watcher, 
 | Supabase API, when started    | http://127.0.0.1:54321       |
 | Supabase Studio, when started | http://127.0.0.1:54323       |
 
-The web reports loading, connected, or unavailable API states and supports retry. This is API liveness, not database readiness. Requests time out after five seconds and refresh every thirty seconds. Windows users may run `scripts\start-dev.bat` as a wrapper for the same development command.
+The `/health` web page reports API liveness with retry. It does not prove database
+readiness. Windows users may use `scripts\start-dev.bat` for the development command.
 
 ## Environment
 
-Defaults work without an environment file. To customize, run `Copy-Item .env.example .env` in PowerShell or `cp .env.example .env` in a POSIX shell.
+Web/API startup and health work without an environment file. Business features need
+local Supabase settings from `demo:configure`. `.env.example` lists optional overrides.
 
-| Variable                    | Default / purpose                                               |
-| --------------------------- | --------------------------------------------------------------- |
-| HOST                        | API bind address: 127.0.0.1                                     |
-| PORT                        | 4000; integer 1-65535                                           |
-| WEB_ORIGIN                  | Exact origin http://localhost:5173, without path/trailing slash |
-| LOG_LEVEL                   | info                                                            |
-| VITE_API_URL                | http://localhost:4000                                           |
-| VITE_SUPABASE_*             | Reserved for future Auth integration                            |
-| SUPABASE_*                  | Reserved server settings                                        |
-| AI_SERVICE_URL, LLM_API_KEY | Deferred; not required                                          |
+| Variable                 | Default / purpose                                               |
+| ------------------------ | --------------------------------------------------------------- |
+| HOST                     | API bind address: 127.0.0.1                                     |
+| PORT                     | 4000; integer 1-65535                                           |
+| WEB_ORIGIN               | Exact origin http://localhost:5173, without path/trailing slash |
+| LOG_LEVEL                | info                                                            |
+| VITE_API_URL             | http://localhost:4000                                           |
+| VITE_SUPABASE_*          | Browser Auth connection and public anonymous key                |
+| DATABASE_URL, SUPABASE_* | Server DB/Auth/Storage connections; never browser-visible       |
+| AI_GATEWAY_API_KEY       | Optional server-only key; absent means real AI is unavailable   |
+| AI_TEXT_MODEL            | google/gemini-3.8-flash                                         |
+| AI_EMBEDDING_MODEL       | google/gemini-embedding-2, 768 dimensions                       |
+| AI_IMAGE_MODEL           | google/gemini-3.1-flash-image                                   |
+| AI_MONTHLY_BUDGET_USD    | 30 maximum, shared API/worker spend reservation limit           |
 
 Process variables override the API's root .env. Vite loads root environment files with its normal mode precedence; restart it after changes. Only VITE_ variables are browser-visible: never use that prefix for secrets or service-role credentials. Match API URL/port and browser URL/WEB_ORIGIN. Vite uses a strict port rather than silently changing origins.
 
@@ -97,6 +129,20 @@ Use `corepack pnpm` in place of pnpm when its shim is unavailable.
 | pnpm --filter web astryx component Button | Inspect installed Astryx APIs                                     |
 
 There are no active GitHub Actions workflows or deployments. The disabled workflow is historical reference. Run local checks and include evidence in reviewed PRs.
+
+Additional commands: `pnpm test:db` verifies real local permissions, transactions,
+concurrent confirmation, job recovery and budget rejection; `pnpm test:e2e` runs
+Playwright browser journeys. Install Chromium with `pnpm exec playwright install
+chromium` first. Both need the configured/seeded local database.
+
+Before enabling paid AI, configure a Gateway key with a $30 monthly cap and no
+automatic refill, then add it to ignored `.env` and restart API/worker. The app
+reserves spend transactionally, limits generated/edited output to 100 per month,
+and never silently substitutes mock responses. Unknown provider outcomes retain
+their reservation and are not automatically repeated. Run `pnpm ai:index` to queue
+portfolio indexing. `pnpm ai:evaluate` measures the 30 bilingual labeled queries
+after at least 100 permitted images are indexed. The small initial seed is not a
+completed benchmark dataset; model quality is not claimed without that run.
 
 ## Repository
 

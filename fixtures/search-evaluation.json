@@ -1,0 +1,152 @@
+[
+  {
+    "query": "Natural-light portraits in a soft, outdoor setting",
+    "language": "en",
+    "expectedUserName": "demo_linh"
+  },
+  {
+    "query": "A portrait session with gentle light and a clean background",
+    "language": "en",
+    "expectedUserName": "demo_linh"
+  },
+  {
+    "query": "Cinematic portraits in Ho Chi Minh City",
+    "language": "en",
+    "expectedUserName": "demo_linh"
+  },
+  {
+    "query": "Ch?n dung ?nh s?ng t? nhi?n ngo?i tr?i",
+    "language": "vi",
+    "expectedUserName": "demo_linh"
+  },
+  {
+    "query": "?nh ch?n dung d?u nh? v?i ph?ng n?n ??n gi?n",
+    "language": "vi",
+    "expectedUserName": "demo_linh"
+  },
+  {
+    "query": "Editorial fashion photography",
+    "language": "en",
+    "expectedUserName": "demo_minh"
+  },
+  {
+    "query": "Fashion portraits with carefully styled outfits",
+    "language": "en",
+    "expectedUserName": "demo_minh"
+  },
+  {
+    "query": "Creative fashion photographs with expressive composition",
+    "language": "en",
+    "expectedUserName": "demo_minh"
+  },
+  {
+    "query": "B? ?nh th?i trang phong c?ch t?p ch?",
+    "language": "vi",
+    "expectedUserName": "demo_minh"
+  },
+  {
+    "query": "Ch?p th?i trang v?i trang ph?c n?i b?t",
+    "language": "vi",
+    "expectedUserName": "demo_minh"
+  },
+  {
+    "query": "Bright food photography with fresh ingredients",
+    "language": "en",
+    "expectedUserName": "demo_mai"
+  },
+  {
+    "query": "Warm restaurant food images",
+    "language": "en",
+    "expectedUserName": "demo_mai"
+  },
+  {
+    "query": "Colorful overhead photographs of meals",
+    "language": "en",
+    "expectedUserName": "demo_mai"
+  },
+  {
+    "query": "?nh ?? ?n t??i s?ng nhi?u m?u s?c",
+    "language": "vi",
+    "expectedUserName": "demo_mai"
+  },
+  {
+    "query": "Ch?p m?n ?n trong ?nh s?ng ?m",
+    "language": "vi",
+    "expectedUserName": "demo_mai"
+  },
+  {
+    "query": "Wedding photography for a celebration",
+    "language": "en",
+    "expectedUserName": "demo_an"
+  },
+  {
+    "query": "Natural wedding-day moments",
+    "language": "en",
+    "expectedUserName": "demo_an"
+  },
+  {
+    "query": "Wedding photographs with a romantic atmosphere",
+    "language": "en",
+    "expectedUserName": "demo_an"
+  },
+  {
+    "query": "Ch?p ?nh c??i v?i c?m x?c t? nhi?n",
+    "language": "vi",
+    "expectedUserName": "demo_an"
+  },
+  {
+    "query": "B? ?nh ng?y c??i l?ng m?n",
+    "language": "vi",
+    "expectedUserName": "demo_an"
+  },
+  {
+    "query": "Minimal product photography",
+    "language": "en",
+    "expectedUserName": "demo_bao"
+  },
+  {
+    "query": "Close-up product photographs showing texture",
+    "language": "en",
+    "expectedUserName": "demo_bao"
+  },
+  {
+    "query": "Clean advertising pictures of a small product",
+    "language": "en",
+    "expectedUserName": "demo_bao"
+  },
+  {
+    "query": "Ch?p s?n ph?m t?i gi?n",
+    "language": "vi",
+    "expectedUserName": "demo_bao"
+  },
+  {
+    "query": "?nh qu?ng c?o s?n ph?m v?i chi ti?t r? r?ng",
+    "language": "vi",
+    "expectedUserName": "demo_bao"
+  },
+  {
+    "query": "Outdoor family photography",
+    "language": "en",
+    "expectedUserName": "demo_ha"
+  },
+  {
+    "query": "Relaxed family moments together",
+    "language": "en",
+    "expectedUserName": "demo_ha"
+  },
+  {
+    "query": "A family photo session in natural light",
+    "language": "en",
+    "expectedUserName": "demo_ha"
+  },
+  {
+    "query": "B? ?nh gia ??nh ngo?i tr?i t? nhi?n",
+    "language": "vi",
+    "expectedUserName": "demo_ha"
+  },
+  {
+    "query": "Ch?p kho?nh kh?c gia ??nh b?n nhau",
+    "language": "vi",
+    "expectedUserName": "demo_ha"
+  }
+]

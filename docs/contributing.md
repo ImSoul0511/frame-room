@@ -1,6 +1,6 @@
 # FrameRoom contribution rules
 
-Rules apply to humans and agents. Current user instructions take precedence; update affected documentation with the change. **All documentation outside report/ must be English.** Reports retain their existing language. Code, identifiers, technical comments, and commits are English. Vietnamese UI strings belong in a dedicated module.
+Rules apply to humans and agents. Current user instructions take precedence; update affected documentation with the change. **All documentation outside report/ must be English.** Reports retain their existing language. Code, identifiers, technical comments, and commits are English. Product strings belong in matching English and Vietnamese dictionaries; English is the default. Components subscribe through useStrings(), and requests carry the selected language to AI services.
 
 ## 1. Git workflow
 
@@ -114,7 +114,11 @@ See [local workflow](db/local-development.md). Foundation implements no business
 
 ## 5. Optional AI and security
 
-AI implementation is deferred. Python scaffold is outside pnpm and not started/installed by default. Future AI work uses Python 3.11+, FastAPI/Pydantic, type hints, Ruff, mypy, pytest, and pinned dependencies. Document reproduction/evaluation; keep model weights and large datasets out of Git.
+MVP-001 implements AI in TypeScript using AI SDK/Gateway and a persistent worker.
+The Python scaffold remains outside pnpm and is not required. Keep model IDs server
+configurable, validate generated output, enforce shared spend limits, and preserve
+uncertain paid-call state. English is default; AI output follows selected language.
+Document real evaluation evidence; keep model weights and large datasets out of Git.
 
 Use only permitted educational media and fake accounts; record source, collected_at, license_note without personal contacts. Public portfolio URLs remain readable despite API hiding. Private media needs authorized signed URLs.
 
