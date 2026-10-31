@@ -28,7 +28,7 @@ This draft describes planned MVP business endpoints. Foundation implements only 
 | Review                                     | 16      | Must                                             |
 | Content reporting and administration       | 17      | Should                                           |
 | AI Search                                  | 18      | Deferred design; implementation is a later phase |
-| Dashboard studio, timeline                 | 19      | Should (khung)                                   |
+| Dashboard studio, timeline                 | 19      | Should (outline)                                 |
 
 **Separate flows and exclusions:**
 
@@ -1468,6 +1468,8 @@ Deferred design only: request/response sketches support future UI mocks. NLP/CV 
 ## 20. Open decisions
 
 Resolved decisions remain in their relevant sections. Preserve numbering below for cross-references; unresolved items need owner decisions.
+
+Question #1 is compared in [Proposed ADR 0003](../adr/0003-auth-profile-initialization.md) and the [auth packet](../features/auth/packet.md). It remains unresolved; neither document accepts a new endpoint or changes this draft's initialization behavior.
 
 | #   | Decision                                                                                                                  | Owners                   |
 | --- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------ |

@@ -1,0 +1,4 @@
+interface:
+  display_name: 'FrameRoom Astryx Screen'
+  short_description: 'Specify FrameRoom screens with installed Astryx APIs'
+  default_prompt: 'Use $frameroom-astryx-screen to plan the requested FrameRoom screen and verification criteria.'

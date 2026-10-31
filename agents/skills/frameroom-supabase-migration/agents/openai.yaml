@@ -1,0 +1,4 @@
+interface:
+  display_name: 'FrameRoom Supabase Migration'
+  short_description: 'Plan reviewed SQL changes and role access checks'
+  default_prompt: 'Use $frameroom-supabase-migration to plan the approved schema change and its local verification.'
