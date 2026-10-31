@@ -1,28 +1,28 @@
-# FrameRoom: ERD MVP (bản nháp v0, cần review trước khi dùng)
+# FrameRoom: MVP ERD (draft v0, review before implementation)
 
-**Vị trí trong repo:** `docs/db/erd_v0.md`
-**Đầu vào:** `contract_v0.md` (v0.7), `week1.md` mục 6, `contributing.md` mục 5.
-**Trạng thái:** đã cập nhật theo các quyết định review ngày 2026-10-20; vẫn là bản thiết kế, chưa freeze. Mục **[?]** ở mục 6 là câu hỏi còn mở.
-**Nguồn sự thật cuối cùng của schema:** SQL migration trong `supabase/migrations/`. File này chỉ là bản thiết kế.
-
----
-
-## 1. Nguyên tắc thiết kế
-
-- Quy ước theo `contributing.md` mục 5.2: bảng số nhiều `snake_case`, PK `id uuid` sinh UUIDv7 phía server (hàm sinh do migration cung cấp; không dùng `gen_random_uuid()`), mọi bảng có `created_at`/`updated_at` (`timestamptz`), FK dạng `<bảng_số_ít>_id`, trạng thái dùng enum Postgres.
-- Các bảng mặc định có PK `id`, trừ PK ghép/PK dùng FK được ghi rõ bên dưới. `profiles.id` sao chép nguyên `auth.users.id`; không sinh lại hoặc ép version ID do Supabase Auth quản lý. FK tới user giữ cùng ID đó. UUID cho tên file mới dùng v7. Không đổi giá trị PK/FK hiện có.
-- Enum DB đặt tên `snake_case` trùng với `Enum` trong contract mục 3.1 (ví dụ `booking_status`, `genre`). Giá trị giống hệt contract; ngoại lệ tên hiện có: `user_role` tương ứng `Role`. `RegistrationRole`, `BookingSide`, `SearchParsedKey`, `TimelineItemType` chỉ dùng ở API, không cần cột DB riêng.
-- Contract trả `...Url`; DB lưu `...path` (đường dẫn trong bucket) và BE sinh URL/signed URL. Các bucket public/private theo contract mục 2.6.
-- Ảnh có thumbnail dùng quy tắc tên `{uuid}_thumb.webp`; DB chỉ cần lưu path ảnh chính, BE suy ra path thumbnail.
-- Email lấy từ `auth.users`, không lặp trong `profiles`.
-- Các giá trị **suy ra được** (`roles` ngoại trừ `system_admin`, `portfolioCount`, `memberCount`, `imageCount`, `selectedCount`, `currentBriefVersion`, `shootRoomId`, `resourceIds` từ `booking_resources`, `participants`) **không lưu cột**, tính bằng query/view. Ngoại lệ: `rating_avg`, `review_count` và `price_from` lưu sẵn, cập nhật bằng trigger vì dùng để lọc/sắp xếp.
-- Xoá mềm theo nhóm: `portfolios`, `studios`, `services`, `service_add_ons`, `resources`, `reviews`; portfolio bị soft-delete giữ bản ghi và media 30 ngày rồi cleanup cứng bằng script. Xoá cứng ảnh bị xoá riêng lẻ và các dữ liệu con/tạm theo contract mục 2.4; booking không bị xoá, huỷ bằng trạng thái `cancelled`.
-- Chống trùng lịch bằng exclusion constraint (`tstzrange` + `btree_gist`), khoảng nửa mở `[start, end)` khớp contract 2.1.
-- Bảng RLS bật mặc định từ chối; chính sách chi tiết ở ma trận RLS riêng (`docs/db/`), file này chỉ liệt kê hàm hỗ trợ (mục 4).
+**Location:** docs/db/erd_v0.md
+**Inputs:** [API contract](../api/contract_v0.md), historical week-one entity list, [contribution rules](../contributing.md#4-database).
+**Status:** Reviewed design decisions as of 2026-10-20, not frozen. Section 6 retains open questions. Foundation translates this design; no business tables/migrations are implemented.
+**Schema source of truth:** SQL migrations in supabase/migrations/. This file is a design only.
 
 ---
 
-## 2. Sơ đồ quan hệ (tổng quan)
+## 1. Design principles
+
+- Plural snake_case tables, server-generated UUIDv7 business IDs from a migration-provided function (not gen_random_uuid()), timestamptz created_at/updated_at, <singular_table>_id FKs, PostgreSQL status enums.
+- Default id PK except documented composite/FK PKs. Copy profiles.id from auth.users.id unchanged; preserve user FKs and existing PK/FK values. New file-name UUIDs use v7.
+- Database enums use snake_case equivalents of contract 3.1 with identical values, e.g. booking_status/genre; existing user_role maps to Role. RegistrationRole, BookingSide, SearchParsedKey, TimelineItemType are API-only.
+- API returns URLs; database stores bucket paths and backend generates public/signed URLs under contract 2.6.
+- Thumbnail names use {uuid}_thumb.webp; store main path and derive thumbnail.
+- Email comes from auth.users, not duplicated in profiles.
+- Derive rather than store roles except system_admin, portfolioCount, memberCount, imageCount, selectedCount, currentBriefVersion, shootRoomId, resourceIds from booking_resources, participants. Cached rating_avg/review_count/price_from are trigger-maintained for filtering/sorting.
+- Soft-delete portfolios/studios/services/service_add_ons/resources/reviews. Retain deleted portfolio/media 30 days before cleanup. Individually deleted images and child/temporary data follow contract 2.4 hard-deletion rules. Never delete bookings; cancel by state.
+- Prevent schedule overlap with tstzrange + btree_gist exclusions and half-open [start,end) intervals.
+- Enable deny-by-default RLS. This design lists helpers (4); feature tasks must add their role/action matrix and policies. No implemented matrix is claimed.
+
+---
+
+## 2. Relationship overview
 
 ```mermaid
 erDiagram
@@ -147,442 +147,445 @@ erDiagram
 
 ---
 
-## 3. Chi tiết bảng
+## 3. Table details
 
-Ký hiệu: `PK`, `FK`, `UQ`, `NN` = not null. Cột `created_at`/`updated_at` có ở mọi bảng, không liệt kê lại (trừ bảng chỉ có `created_at`).
+Notation: PK, FK, UQ, NN (not null). Tables have created_at/updated_at unless explicitly documented with only created_at or granted_at.
 
-### 3.1 Tài khoản
+### 3.1 Accounts
 
-**`profiles`** (id trùng `auth.users.id`)
+**profiles** (same id as auth.users.id)
 
-| Cột | Kiểu | Ghi chú |
-|---|---|---|
-| id | uuid PK, FK `auth.users` on delete cascade | |
-| user_name | text UQ NN | 3–30 ký tự; CHECK `^[a-z0-9][a-z0-9_]{2,29}$`; trim + lowercase trước ghi; URL `/u/{userName}` |
-| display_name | text NN | check 1–60 ký tự |
-| avatar_path | text | bucket `avatars` |
+| Column       | Type                                       | Notes                                                                                          |
+| ------------ | ------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| id           | uuid PK, FK `auth.users` on delete cascade |                                                                                                |
+| user_name    | text UQ NN                                 | 3–30 characters; CHECK `^[a-z0-9][a-z0-9_]{2,29}$`; trim/lowercase before write; /u/{userName} |
+| display_name | text NN                                    | check 1–60 characters                                                                          |
+| avatar_path  | text                                       | bucket `avatars`                                                                               |
 
 **`user_roles`**: PK `(user_id, role)`
 
-| Cột | Kiểu | Ghi chú |
-|---|---|---|
-| user_id | uuid FK `profiles` | |
-| role | enum `user_role` | Dữ liệu lưu chỉ có `system_admin` (CHECK `role = 'system_admin'`) |
-| granted_at | timestamptz | |
+| Column     | Type               | Notes                                              |
+| ---------- | ------------------ | -------------------------------------------------- |
+| user_id    | uuid FK `profiles` |                                                    |
+| role       | enum user_role     | Store system_admin only; CHECK role='system_admin' |
+| granted_at | timestamptz        |                                                    |
 
-Quy tắc đã chốt: chỉ tự đăng ký `client` hoặc `photographer` (enum API `RegistrationRole`, không lưu cột role đăng ký). `client` là quyền cơ bản luôn có trên tài khoản; chỉ `system_admin` được lưu trong `user_roles` và cấp thủ công. `photographer` được suy ra từ việc tồn tại hồ sơ trong `photographers`; `studio_manager` được suy ra khi người dùng có ít nhất một dòng `studio_members` với `role = manager` thuộc studio chưa soft-delete. Không có tài khoản studio riêng. `studio_manager` không được chọn khi đăng ký; `system_admin` không được cấp từ request/metadata client. Photographer phải hoàn tất tạo hồ sơ trước khi tạo studio. Rời studio cuối cùng chỉ làm mất role `studio_manager`, không ảnh hưởng role `photographer`.
+Public registration allows client/photographer (RegistrationRole, not a stored registration-role column). All profiles have client capability. Store only manually provisioned system_admin in user_roles. Derive photographer from photographers and studio_manager from manager membership in non-deleted studios. No separate studio account, manager signup, or client metadata admin grant. Photographer profile precedes studio creation. Losing the last manager membership removes studio_manager without removing photographer.
 
-`user_name` duy nhất toàn hệ thống sau chuẩn hoá, khác `display_name`; API dùng `userName`. Sai định dạng trả 400, vi phạm UQ trả 409 `user_name_taken`. Profile phải có username hợp lệ trước khi hoàn tất onboarding; ghi và kiểm tra UQ nguyên tử. Đổi username làm URL cũ trả 404; MVP không lưu alias/redirect.
+Normalized user_name is globally unique, distinct from display_name; API uses userName. Invalid format: 400; unique violation: 409 user_name_taken. Require a valid username before onboarding completes, enforce atomically. Renaming invalidates old URLs; no aliases/redirects.
 
-### 3.2 Photographer và studio
+### 3.2 Photographers and studios
 
 **`photographers`**
 
-| Cột | Kiểu | Ghi chú |
-|---|---|---|
-| user_id | uuid UQ NN FK `profiles` | Chủ hồ sơ |
-| display_name | text NN | 1–60 |
-| bio | text | ≤ 1000 |
-| genres | `genre[]` NN | check 1–5 phần tử |
-| styles | text[] | check ≤ 10 phần tử, mỗi tag ≤ 30 ký tự (**[?]** #2) |
-| professional_roles | `professional_role[]` NN default `{}` | Vai trò chuyên môn hiển thị, ví dụ `retoucher`, `art_director`; không cấp quyền/workflow |
-| city, district | text | |
-| price_from | integer | Giá thấp nhất service đang hoạt động; trigger cập nhật, `null` nếu không có |
-| avatar_path, cover_image_path | text | `avatars` và bucket bổ sung đề xuất `profile-covers` |
-| rating_avg | numeric(2,1) | null nếu chưa có review; trigger cập nhật |
-| review_count | integer NN default 0 | trigger cập nhật |
-| is_hidden | boolean NN default false | Admin ẩn hồ sơ khi xử lý báo cáo; ẩn khỏi danh sách, Explore, tìm kiếm công khai và không nhận booking mới |
+| Column                        | Type                              | Notes                                                                  |
+| ----------------------------- | --------------------------------- | ---------------------------------------------------------------------- |
+| user_id                       | uuid UQ NN FK profiles            | Profile owner                                                          |
+| display_name                  | text NN                           | 1–60                                                                   |
+| bio                           | text                              | ≤ 1000                                                                 |
+| genres                        | genre[] NN                        | 1–5 items                                                              |
+| styles                        | text[]                            | <=10 items, each <=30 characters; taxonomy **[?]** #2                  |
+| professional_roles            | professional_role[] NN default {} | Display specialties retoucher/art_director; no authorization/workflow  |
+| city, district                | text                              |                                                                        |
+| price_from                    | integer                           | Trigger-maintained minimum active-service price; null if none          |
+| avatar_path, cover_image_path | text                              | avatars and proposed profile-covers buckets                            |
+| rating_avg                    | numeric(2,1)                      | Null without reviews; trigger-maintained                               |
+| review_count                  | integer NN default 0              | Trigger-maintained                                                     |
+| is_hidden                     | boolean NN default false          | Admin moderation; exclude public lists/Explore/search and new bookings |
 
 Index: `(city, district)`, GIN `genres`, GIN `styles`.
 
 **`studios`**
 
-| Cột | Kiểu | Ghi chú |
-|---|---|---|
-| name | text NN | 1–80 |
-| description | text | ≤ 2000 |
-| avatar_path, cover_image_path | text | Buckets `avatars` và `profile-covers` |
-| genres | `genre[]` NN | 1–5 |
-| city, district, address | text | address ≤ 200 |
-| price_from | integer | Giá thấp nhất service đang hoạt động; trigger cập nhật, `null` nếu không có |
-| rating_avg, review_count | như photographers | |
-| is_hidden | boolean NN default false | Admin ẩn hồ sơ khi xử lý báo cáo; ẩn khỏi danh sách, Explore, tìm kiếm công khai và không nhận booking mới |
-| created_by | uuid NN FK `photographers(user_id)` ON DELETE RESTRICT | User của photographer sáng lập; bất biến, không UQ; quyền hiện tại theo membership |
-| deleted_at | timestamptz | Xoá mềm |
+| Column                        | Type                                                 | Notes                                                                    |
+| ----------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------ |
+| name                          | text NN                                              | 1–80                                                                     |
+| description                   | text                                                 | ≤ 2000                                                                   |
+| avatar_path, cover_image_path | text                                                 | avatars/profile-covers buckets                                           |
+| genres                        | `genre[]` NN                                         | 1–5                                                                      |
+| city, district, address       | text                                                 | address ≤ 200                                                            |
+| price_from                    | integer                                              | Trigger-maintained minimum active-service price; null if none            |
+| rating_avg, review_count      | same as photographers                                |                                                                          |
+| is_hidden                     | boolean NN default false                             | Admin moderation; exclude public lists/Explore/search and new bookings   |
+| created_by                    | uuid NN FK photographers(user_id) ON DELETE RESTRICT | Immutable founder user, not unique; current authority follows membership |
+| deleted_at                    | timestamptz                                          | Soft delete                                                              |
 
 **`studio_members`**
 
-| Cột | Kiểu | Ghi chú |
-|---|---|---|
-| studio_id | uuid NN FK `studios` | |
-| user_id | uuid NN FK `photographers(user_id)` ON DELETE RESTRICT | Mọi thành viên, kể cả manager, phải có hồ sơ photographer |
-| role | enum `studio_member_role` | `manager`, `photographer`; vai trò chuyên môn không nằm ở đây |
-| joined_at | timestamptz | |
+| Column    | Type                                                 | Notes                                                      |
+| --------- | ---------------------------------------------------- | ---------------------------------------------------------- |
+| studio_id | uuid NN FK `studios`                                 |                                                            |
+| user_id   | uuid NN FK photographers(user_id) ON DELETE RESTRICT | All members including managers need a photographer profile |
+| role      | enum studio_member_role                              | manager/photographer; not display specialties              |
+| joined_at | timestamptz                                          |                                                            |
 
-`UQ (studio_id, user_id)`; không unique riêng `user_id` hoặc `studios.created_by`: một photographer có thể lập nhiều studio và tham gia nhiều studio, với vai trò khác nhau ở mỗi studio. Không lưu thêm `photographer_id`; suy ra qua `photographers.user_id` (UQ). FK bắt buộc hồ sơ photographer cho cả manager và photographer, đồng thời ngăn xoá hồ sơ khi còn được tham chiếu.
+UQ(studio_id,user_id), not user_id or studios.created_by individually. A photographer can create/join multiple studios with different roles. Derive photographer_id through unique photographers.user_id instead of duplicating. FKs require profiles and prevent deleting referenced photographers.
 
-Tạo studio và dòng thành viên đầu tiên (`user_id = created_by`, `role = manager`) trong cùng transaction, lấy user từ token. Constraint trigger deferred tới commit bảo đảm mọi studio chưa soft-delete có ít nhất một manager; khoá dòng studio khi thay đổi thành viên để tránh hai manager cùng rời gây mất manager cuối cùng (422). Xoá cứng dòng thành viên khi rời studio. `created_by` chỉ truy vết, không cấp quyền nếu người sáng lập đã rời studio. `studio_manager` suy ra từ membership hiện tại; `retoucher`/`art_director` chỉ nằm trong `photographers.professional_roles`.
+Create studio and first manager (user_id=created_by) atomically using token identity. A deferred constraint trigger requires at least one manager for every non-deleted studio; lock studio on membership changes to prevent concurrent last-manager departures (422). Hard-delete departed memberships. created_by is audit-only after departure; authority derives from current membership. Display specialties remain in professional_roles.
 
 **`studio_invitations`**
 
-| Cột | Kiểu | Ghi chú |
-|---|---|---|
-| studio_id | uuid NN FK | |
-| photographer_id | uuid NN FK `photographers` | Người được mời |
-| role | `studio_member_role` | default `photographer` |
-| status | enum `invitation_status` | `pending`, `accepted`, `declined`, `revoked` |
-| invited_by | uuid FK `profiles` | |
-| responded_at | timestamptz | |
+| Column          | Type                     | Notes                                        |
+| --------------- | ------------------------ | -------------------------------------------- |
+| studio_id       | uuid NN FK               |                                              |
+| photographer_id | uuid NN FK photographers | Invitee                                      |
+| role            | `studio_member_role`     | default `photographer`                       |
+| status          | enum `invitation_status` | `pending`, `accepted`, `declined`, `revoked` |
+| invited_by      | uuid FK `profiles`       |                                              |
+| responded_at    | timestamptz              |                                              |
 
 Partial unique: `(studio_id, photographer_id) WHERE status = 'pending'` (409 `already_exists`).
 
-### 3.3 Dịch vụ
+### 3.3 Services
 
 **`services`**
 
-| Cột | Kiểu | Ghi chú |
-|---|---|---|
-| owner_type | enum `provider_type` NN | |
-| photographer_id | uuid FK | |
-| studio_id | uuid FK | |
-| name | text NN | 1–100 |
-| description | text | ≤ 1000 |
-| genre | `genre` NN | |
-| duration_minutes | integer NN | > 0 |
-| price | integer NN | ≥ 0 (VND) |
-| photo_count, retouched_count | integer | |
-| is_active | boolean NN default true | |
-| deleted_at | timestamptz | |
+| Column                       | Type                    | Notes     |
+| ---------------------------- | ----------------------- | --------- |
+| owner_type                   | enum `provider_type` NN |           |
+| photographer_id              | uuid FK                 |           |
+| studio_id                    | uuid FK                 |           |
+| name                         | text NN                 | 1–100     |
+| description                  | text                    | ≤ 1000    |
+| genre                        | `genre` NN              |           |
+| duration_minutes             | integer NN              | > 0       |
+| price                        | integer NN              | ≥ 0 (VND) |
+| photo_count, retouched_count | integer                 |           |
+| is_active                    | boolean NN default true |           |
+| deleted_at                   | timestamptz             |           |
 
-Check XOR: `owner_type = 'photographer'` ⇒ `photographer_id` not null và `studio_id` null; ngược lại với `studio`.
+XOR: photographer owner requires photographer_id and null studio_id; studio owner requires studio_id and null photographer_id.
 
 **`service_add_ons`**: `service_id` FK NN, `name` NN (1–100), `description` (≤ 500), `price` ≥ 0, `is_active`, `deleted_at`.
 
-### 3.4 Portfolio và tag
+### 3.4 Portfolios and tags
 
 **`portfolios`**
 
-| Cột | Kiểu | Ghi chú |
-|---|---|---|
-| owner_type | enum `provider_type` NN | `photographer` hoặc `studio` |
-| photographer_id | uuid FK | Có khi `owner_type = photographer` |
-| studio_id | uuid FK | Có khi `owner_type = studio` |
-| title | text NN | 1–120 |
-| genre | `genre` NN | |
-| description | text | ≤ 2000 |
-| status | enum `portfolio_status` NN default `draft` | `hidden` chỉ admin đặt; khác `deleted_at` |
-| cover_image_id | uuid FK `portfolio_images` ON DELETE SET NULL | deferrable; null thì lấy ảnh `sort_order` nhỏ nhất; BE kiểm tra ảnh thuộc portfolio |
-| published_at | timestamptz | Đặt lúc publish; reset `null` khi về `draft`; cập nhật khi publish lại |
-| deleted_at | timestamptz | Soft-delete; cleanup portfolio, images và files sau 30 ngày |
+| Column          | Type                                        | Notes                                                                             |
+| --------------- | ------------------------------------------- | --------------------------------------------------------------------------------- |
+| owner_type      | enum provider_type NN                       | photographer or studio                                                            |
+| photographer_id | uuid FK                                     | Present when `owner_type = photographer`                                          |
+| studio_id       | uuid FK                                     | Present when `owner_type = studio`                                                |
+| title           | text NN                                     | 1–120                                                                             |
+| genre           | `genre` NN                                  |                                                                                   |
+| description     | text                                        | ≤ 2000                                                                            |
+| status          | enum portfolio_status NN default draft      | hidden is admin-only and distinct from deleted_at                                 |
+| cover_image_id  | uuid FK portfolio_images ON DELETE SET NULL | Deferrable; null falls back to lowest sort_order; backend verifies same portfolio |
+| published_at    | timestamptz                                 | Set on publish, clear on draft, refresh on republish                              |
+| deleted_at      | timestamptz                                 | Cleanup portfolio/images/files after 30 days                                      |
 
-Check XOR: `owner_type = photographer` ⇒ `photographer_id` not null, `studio_id` null; `owner_type = studio` ⇒ ngược lại. Photographer sở hữu portfolio qua hồ sơ photographer; studio sở hữu portfolio riêng qua `studio_id` và manager của studio quản lý nó.
+XOR owner FKs as services. Photographers own through photographer profiles; studios own via studio_id and current managers administer.
 
-Index: `(status, published_at desc)`, `(photographer_id)`, `(studio_id)`, với truy vấn công khai luôn loại `deleted_at IS NOT NULL`.
+Indexes: (status,published_at desc), photographer_id, studio_id. Public queries always exclude deleted_at IS NOT NULL.
 
 **`portfolio_images`**
 
-| Cột | Kiểu | Ghi chú |
-|---|---|---|
-| portfolio_id | uuid NN FK | |
-| storage_path | text NN | bucket `portfolio-images`; thumbnail path được suy ra bằng suffix `_thumb` |
-| width, height | integer NN | CHECK mỗi chiều `> 0` và `<= 1280`; khớp metadata ảnh BE xác minh trong Storage |
-| caption | text | ≤ 300 |
-| provenance | enum `provenance` NN default `captured` | |
-| sort_order | integer NN | từ 0 |
-| is_hidden | boolean NN default false | Admin ẩn (contract mục 17); vì bucket public, cờ này ẩn ảnh khỏi API nhưng không thu hồi URL Storage trực tiếp |
-| source, collected_at, license_note | text, timestamptz, text | Cho ảnh demo (README mục 7); null với ảnh do photographer đăng |
+| Column                             | Type                                    | Notes                                                                       |
+| ---------------------------------- | --------------------------------------- | --------------------------------------------------------------------------- |
+| portfolio_id                       | uuid NN FK                              |                                                                             |
+| storage_path                       | text NN                                 | portfolio-images main path; derive thumbnail with _thumb suffix             |
+| width, height                      | integer NN                              | Each >0 and <=1280; backend verifies actual Storage metadata                |
+| caption                            | text                                    | ≤ 300                                                                       |
+| provenance                         | enum `provenance` NN default `captured` |                                                                             |
+| sort_order                         | integer NN                              | Starts at 0                                                                 |
+| is_hidden                          | boolean NN default false                | Admin-hidden in API (contract 17); cannot revoke direct public Storage URLs |
+| source, collected_at, license_note | text, timestamptz, text                 | Demo provenance; null for photographer uploads                              |
 
-**`tags`**: `slug` UQ NN, `name` NN, `kind` enum `tag_kind` NN (`tone`, `setting`, `mood`). Nhóm ban đầu; danh sách tag chi tiết chờ taxonomy (câu hỏi #2). Thêm nhóm phải cập nhật enum DB và API cùng nhau.
+**tags**: slug UQ NN, name NN, kind tag_kind NN (tone/setting/mood). Detailed taxonomy awaits decision #2. Extend DB/API enum groups together.
 
-**`image_tags`**: PK `(portfolio_image_id, tag_id)`, `source` enum `tag_source` NN (`manual`, `ai`), `confidence` numeric(3,2) null. Trả lời một phần câu hỏi "ai gán tag" ở contract #2.
+**image_tags**: composite PK(portfolio_image_id,tag_id), source tag_source NN (manual/ai), nullable confidence numeric(3,2). Annotation ownership remains partially open in question #2.
 
-**`image_embeddings`** (**chưa tạo trong migration v0**, tách riêng theo README/week1): `portfolio_image_id` PK FK, `model` text, `embedding vector(<dim>)`, `created_at`. Chiều vector chờ chọn model; index HNSW khi triển khai AI Search.
+**image_embeddings** (deferred; no migration yet): portfolio_image_id PK FK, model text, embedding vector(<dim>), created_at. Dimensions await model choice; add HNSW with AI implementation.
 
-### 3.5 Lịch và tài nguyên
+### 3.5 Schedule and resources
 
 **`resources`**: `studio_id` FK NN, `type` enum `resource_type` NN, `name` NN (1–80), `description` (≤ 500), `is_active`, `deleted_at`.
 
 **`schedule_entries`**
 
-| Cột | Kiểu | Ghi chú |
-|---|---|---|
-| type | enum `schedule_entry_type` NN | `booking` hoặc `block` |
-| booking_id | uuid FK | Bắt buộc khi `type = booking` |
-| resource_id | uuid FK `resources` | |
-| photographer_id | uuid FK | |
-| studio_id | uuid FK | Studio tạo block / sở hữu mục |
-| during | tstzrange NN | `[start, end)` |
-| title | text | |
-| created_by | uuid FK `profiles` | |
+| Column          | Type                        | Notes                            |
+| --------------- | --------------------------- | -------------------------------- |
+| type            | enum schedule_entry_type NN | booking or block                 |
+| booking_id      | uuid FK                     | Required khi `type = booking`    |
+| resource_id     | uuid FK `resources`         |                                  |
+| photographer_id | uuid FK                     |                                  |
+| studio_id       | uuid FK                     | Owning studio / creator of block |
+| during          | tstzrange NN                | `[start, end)`                   |
+| title           | text                        |                                  |
+| created_by      | uuid FK `profiles`          |                                  |
 
-Cách dùng: một booking xác nhận tạo **một dòng cho mỗi tài nguyên** và **một dòng cho photographer** (cùng `booking_id`). `schedule_entries` dùng giữ lịch; `Booking.resourceIds` suy ra từ `booking_resources` (snapshot lịch chốt gần nhất). Huỷ booking thì xoá các dòng giữ lịch, giữ nguyên snapshot tài nguyên và thời gian trên booking để xem lại.
+Confirmation creates one reservation per resource plus one for the photographer, sharing booking_id. schedule_entries reserves time; Booking.resourceIds derives from latest booking_resources snapshots. Cancellation deletes reservations but retains snapshots and booking times.
 
-Ràng buộc:
-- Check XOR: mỗi dòng chỉ có một trong `resource_id`, `photographer_id`; `type = booking` khi và chỉ khi `booking_id` có giá trị.
-- `during` hữu hạn, không rỗng, có `lower < upper` và dùng `[start, end)`. Với dòng booking, `during = tstzrange(bookings.scheduled_start, bookings.scheduled_end, '[)')`; dòng giữ tài nguyên chỉ hợp lệ với booking `provider_type = studio` và tài nguyên thuộc studio đó; booking photographer cá nhân không có resource entry. Photographer phải khớp người được phân công (hoặc provider cá nhân). Deferred constraint trigger kiểm tra tính khớp ở commit, kể cả khi xoá/chèn dòng lịch: booking đã xác nhận chưa huỷ phải có đúng một dòng photographer và một dòng cho mỗi tài nguyên trong snapshot; booking bị huỷ không còn dòng giữ lịch.
-- Xác nhận, đổi người và đổi lịch phải khoá booking, kiểm tra lại trạng thái rồi cập nhật booking/lịch/snapshot/event liên quan trong cùng transaction. Vi phạm exclusion constraint rollback toàn bộ và trả 409 `slot_overlap`.
+Constraints:
+
+- XOR resource_id/photographer_id per row. type=booking iff booking_id is non-null.
+- during is finite, non-empty [start,end), lower<upper. Booking intervals equal tstzrange(bookings.scheduled_start,bookings.scheduled_end,'[)'). Resource reservations require a studio booking and same-studio resources; personal bookings have none. Photographer matches current assignee/personal provider. Deferred triggers validate at commit, including schedule inserts/deletes: confirmed non-cancelled bookings have one photographer row and one per snapshot resource; cancelled bookings have none.
+- Confirmation/reassignment/rescheduling lock and recheck booking, then update booking/schedule/snapshot/events atomically. Exclusion failures roll back everything and map to 409 slot_overlap.
 - `EXCLUDE USING gist (resource_id WITH =, during WITH &&) WHERE (resource_id IS NOT NULL)`
 - `EXCLUDE USING gist (photographer_id WITH =, during WITH &&) WHERE (photographer_id IS NOT NULL)`
-- Ràng buộc theo `photographer_id` chặn trùng lịch của một photographer **xuyên studio và cả khi làm độc lập**. Vi phạm ánh xạ sang 409 `slot_overlap`.
+- Photographer exclusions prevent conflicts across studios and independent work; map violations to 409 slot_overlap.
 
-### 3.6 Booking và Shoot Brief
+### 3.6 Booking and Shoot Brief
 
 **`bookings`**
 
-| Cột | Kiểu | Ghi chú |
-|---|---|---|
-| customer_id | uuid NN FK `profiles` ON DELETE RESTRICT | Giữ lịch sử booking khi xoá tài khoản |
-| provider_type | enum `provider_type` NN | |
-| photographer_id | uuid FK `photographers` ON DELETE RESTRICT | Khi `provider_type = photographer` |
-| studio_id | uuid FK `studios` ON DELETE RESTRICT | Khi `provider_type = studio` |
-| assigned_photographer_id | uuid FK `photographers` ON DELETE RESTRICT | Booking studio; bắt buộc từ `confirmed` trở đi; booking cá nhân luôn null |
-| service_id | uuid FK `services` | on delete set null; chỉ để tham chiếu |
-| service_name | text NN | Snapshot |
-| service_price | integer NN | Snapshot, ≥ 0 |
-| service_duration_minutes | integer NN | Snapshot, > 0 |
-| service_photo_count, service_retouched_count | integer | Snapshot số ảnh gói lúc đặt; null nếu service không quy định, còn lại ≥ 0 |
-| total_price | integer NN | BE tính `service_price + SUM(booking_add_ons.price)`, ≥ 0; cố định khi tạo trong MVP |
-| status | enum `booking_status` NN default `pending` | Chỉ đổi qua state machine ở service |
-| scheduled_start, scheduled_end | timestamptz | Có từ `confirmed` |
-| status_reason | text | |
-| agreed_brief_version | integer | Cặp `(id, agreed_brief_version)` FK sang `brief_versions(booking_id, version)` |
+| Column                                       | Type                                       | Notes                                                                                                    |
+| -------------------------------------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| customer_id                                  | uuid NN FK profiles ON DELETE RESTRICT     | Preserve booking history when deleting accounts                                                          |
+| provider_type                                | enum `provider_type` NN                    |                                                                                                          |
+| photographer_id                              | uuid FK `photographers` ON DELETE RESTRICT | Khi `provider_type = photographer`                                                                       |
+| studio_id                                    | uuid FK `studios` ON DELETE RESTRICT       | Khi `provider_type = studio`                                                                             |
+| assigned_photographer_id                     | uuid FK photographers ON DELETE RESTRICT   | Required for studio bookings in confirmed/in_progress/proofing/delivered/completed; personal always null |
+| service_id                                   | uuid FK services                           | ON DELETE SET NULL; source reference only                                                                |
+| service_name                                 | text NN                                    | Snapshot                                                                                                 |
+| service_price                                | integer NN                                 | Snapshot, ≥ 0                                                                                            |
+| service_duration_minutes                     | integer NN                                 | Snapshot, > 0                                                                                            |
+| service_photo_count, service_retouched_count | integer                                    | Booking-time package counts, null if unspecified, otherwise >=0                                          |
+| total_price                                  | integer NN                                 | service_price + SUM(booking_add_ons.price), >=0, fixed at creation                                       |
+| status                                       | enum booking_status NN default pending     | Service state machine only                                                                               |
+| scheduled_start, scheduled_end               | timestamptz                                | Available from `confirmed`                                                                               |
+| status_reason                                | text                                       |                                                                                                          |
+| agreed_brief_version                         | integer                                    | (id,agreed_brief_version) FK to brief_versions(booking_id,version)                                       |
 
 Check:
-- XOR bên cung cấp: `provider_type = photographer` ⇒ `photographer_id` not null, `studio_id` null; `studio` ⇒ ngược lại, `photographer_id` null.
-- Mọi trạng thái: `scheduled_start` và `scheduled_end` cùng null, hoặc cùng có giá trị và `scheduled_end > scheduled_start` (CHECK phải kiểm tra null tường minh).
-- `status IN ('confirmed','in_progress','proofing','delivered','completed')` ⇒ cả hai mốc thời gian không null. Cùng tập trạng thái này, `provider_type = studio` ⇒ `assigned_photographer_id IS NOT NULL`. Không so sánh theo thứ tự enum.
-- `provider_type = photographer` ⇒ `assigned_photographer_id IS NULL` và không có `booking_resources`/resource entry. Booking đã huỷ giữ người được phân công và thời gian trước đó nếu có.
-- `status IN ('in_progress','proofing','delivered','completed')` ⇒ `agreed_brief_version IS NOT NULL`; deferred constraint trigger kiểm tra phiên bản được trỏ tới có cả hai dấu chấp thuận.
-- Bảng không có `deleted_at`: booking không bị xoá, huỷ bằng `cancelled` (contract mục 2.4).
 
-Quy tắc BE: khách không tự đặt chính mình; `service` phải thuộc bên cung cấp; photographer được phân công phải là thành viên hiện tại của studio. Snapshot service/add-on và `total_price` được chốt nguyên tử khi tạo booking; sửa service hoặc `brief.budget` không thay giá booking.
+- Provider XOR: photographer requires photographer_id and null studio_id; studio requires studio_id and null photographer_id.
+- In all states both scheduled timestamps are null or both present with end>start; explicitly check null cases.
+- confirmed/in_progress/proofing/delivered/completed require both times; studio bookings in those states require assigned_photographer_id. Do not rely on enum ordering.
+- Personal providers require null assignee and no booking_resources/resource reservations. Cancelled bookings retain prior times/assignee if set.
+- in_progress/proofing/delivered/completed require agreed_brief_version; deferred trigger checks mutual approval.
+- No deleted_at: bookings are retained and cancelled by state (contract 2.4).
 
-Chặn rời/bị loại khỏi studio nếu photographer đang được giao booking chưa kết thúc (`pending`, `confirmed`, `in_progress`, `proofing`, `delivered`), trả 422 `active_booking_assignment`; cần chuyển giao ở trạng thái cho phép hoặc kết thúc booking trước. Kiểm tra này ở trigger và BE, phối hợp khoá dòng studio giữa thao tác phân công và xoá membership để tránh race. Không dùng FK tới dòng membership vì lịch sử booking phải tồn tại sau khi thành viên rời.
+Backend rejects self-booking and service/provider mismatch; assignee must be a current studio member. Snapshot service/add-ons and total_price atomically at creation; later service/brief.budget edits do not change price.
 
-FK khách/provider/assignee dùng RESTRICT, không cascade xoá booking. Vì `profiles.id` liên kết Auth bằng CASCADE, xoá Auth user có booking cũng bị chặn; MVP giữ tài khoản/hồ sơ được tham chiếu thay vì xoá cứng. Xoá mềm studio không xoá booking.
+Prevent member departure/removal with pending/confirmed/in_progress/proofing/delivered assignments: 422 active_booking_assignment. Reassign in an allowed state or finish first. Trigger/backend checks lock studio consistently with assignment. Do not FK bookings to membership rows because history must outlive membership.
 
-Xác nhận booking phải cập nhật trạng thái, giữ lịch, snapshot tài nguyên, ghi event và tạo Shoot Room trong cùng transaction. Các lần chuyển trạng thái khác cũng cập nhật toàn bộ tác dụng phụ (gallery/delivery/phòng/lịch) và event nguyên tử; khoá booking và kiểm tra lại trạng thái để chống hai request chuyển đồng thời.
+Customer/provider/assignee FKs restrict deletion. Since profiles cascades from Auth, deleting referenced Auth users is also blocked. Retain referenced accounts/profiles in MVP; studio soft deletion does not delete bookings.
 
-Phân công/thay người chỉ ở `pending`, `confirmed`, `in_progress`; trạng thái cuối và từ `proofing` trở đi bị từ chối. `pending` chưa giữ lịch; ở `confirmed`/`in_progress`, chuyển dòng lịch photographer sang người mới trong cùng transaction, giữ nguyên giờ/tài nguyên; xung đột rollback và trả 409.
+Confirmation atomically changes state, reserves time, snapshots resources, records events, and creates Shoot Room. Other transitions atomically update all room/gallery/delivery/schedule effects and events; lock/recheck booking against concurrent transitions.
 
-Đổi giờ/tài nguyên chỉ ở `confirmed`, do provider cá nhân hoặc manager studio; giữ nguyên assignee, cập nhật booking, toàn bộ lịch giữ và snapshot tài nguyên nguyên tử. Tài nguyên phải thuộc studio và đang hoạt động, danh sách không trùng. Không có luồng đổi lịch từ `in_progress` trở đi trong MVP.
+Assign/reassign only pending/confirmed/in_progress. Reject terminal and proofing-onward assignment changes. Pending has no reservations; confirmed/in_progress transfers photographer reservation with unchanged time/resources in one transaction; conflict rolls back and returns 409.
+
+Reschedule only confirmed, by personal provider or studio manager. Preserve assignee; update booking/all reservations/resource snapshots atomically. Resources must be active, same-studio, and unique. No rescheduling from in_progress onward.
 
 Index: `(customer_id, status)`, `(photographer_id, status)`, `(studio_id, status)`, `(assigned_photographer_id)`.
 
-**`booking_add_ons`** (snapshot): `booking_id` FK NN ON DELETE RESTRICT, `add_on_id` FK (set null), `name` NN, `price` NN (≥ 0). Snapshot bất biến sau khi tạo booking.
+**booking_add_ons** (immutable creation snapshot): booking_id FK NN RESTRICT, add_on_id FK SET NULL, name NN, price NN >=0.
 
-**`booking_resources`** (snapshot cấu hình tài nguyên chốt gần nhất): PK `(booking_id, resource_id)`, không có `id` riêng.
+**booking_resources** (latest committed configuration): composite PK(booking_id,resource_id), no separate id.
 
-| Cột | Kiểu | Ghi chú |
-|---|---|---|
-| booking_id | uuid NN FK `bookings` ON DELETE RESTRICT | |
-| resource_id | uuid NN FK `resources` ON DELETE RESTRICT | Tài nguyên cùng studio với booking |
-| resource_name | text NN | Snapshot tên lúc xác nhận/đổi lịch |
-| resource_type | enum `resource_type` NN | Snapshot loại tài nguyên |
+| Column        | Type                                     | Notes                             |
+| ------------- | ---------------------------------------- | --------------------------------- |
+| booking_id    | uuid NN FK `bookings` ON DELETE RESTRICT |                                   |
+| resource_id   | uuid NN FK resources ON DELETE RESTRICT  | Same studio as booking            |
+| resource_name | text NN                                  | Name at confirmation/rescheduling |
+| resource_type | enum resource_type NN                    | Type snapshot                     |
 
-Tạo snapshot khi xác nhận; khi đổi lịch được phép thì thay tập snapshot trong cùng transaction với giữ lịch, tái chụp từ tài nguyên hiện tại. Huỷ hoặc kết thúc booking không xoá snapshot; đổi tên/xoá mềm resource không sửa snapshot. Đây là cấu hình chốt gần nhất, không phải log mọi lần đổi tài nguyên. Chỉ cho ghi ở luồng xác nhận/đổi lịch; `resourceIds` suy ra từ bảng này, kể cả sau khi huỷ.
+Create on confirmation; replace from current resources during allowed rescheduling in the same reservation transaction. Retain after cancellation/completion; resource rename/soft deletion never rewrites it. It is the latest configuration, not a full change log. Write only through confirmation/rescheduling; derive resourceIds here even after cancellation.
 
-**`booking_assignment_events`** (append-only, chỉ `created_at`, không `updated_at`)
+**booking_assignment_events** (append-only, created_at only, no updated_at)
 
-| Cột | Kiểu | Ghi chú |
-|---|---|---|
-| booking_id | uuid NN FK `bookings` ON DELETE RESTRICT | Chỉ booking studio |
-| from_photographer_id | uuid FK `photographers` ON DELETE RESTRICT | null khi phân công lần đầu |
-| to_photographer_id | uuid NN FK `photographers` ON DELETE RESTRICT | Người mới; phải khác người cũ nếu người cũ không null |
-| actor_id | uuid NN FK `profiles` ON DELETE RESTRICT | Manager thực hiện |
-| created_at | timestamptz NN | Thời điểm phân công |
+| Column               | Type                                        | Notes                                       |
+| -------------------- | ------------------------------------------- | ------------------------------------------- |
+| booking_id           | uuid NN FK bookings ON DELETE RESTRICT      | Studio bookings only                        |
+| from_photographer_id | uuid FK photographers ON DELETE RESTRICT    | Null for first assignment                   |
+| to_photographer_id   | uuid NN FK photographers ON DELETE RESTRICT | Must differ from previous non-null assignee |
+| actor_id             | uuid NN FK profiles ON DELETE RESTRICT      | Acting manager                              |
+| created_at           | timestamptz NN                              | Assignment timestamp                        |
 
-Ghi cả lần phân công đầu tiên (qua assignment hoặc xác nhận) và các lần thay người, cùng transaction với booking/lịch. Gửi lại cùng assignee là no-op, không ghi thêm event. Index `(booking_id, created_at, id)`. Manager quản lý assignment; photographer được giao không tự giao lại booking. Sau đổi người, quyền booking/Shoot Room chuyển theo assignee hiện tại: người cũ mất quyền qua assignment, người mới xem lịch sử phòng; quyền độc lập của customer/manager vẫn giữ.
+Record initial assignment via assignment/confirmation and all replacements with booking/schedule transaction. Same assignee is no-op, no event. Index (booking_id,created_at,id). Only manager reassigns. Access follows current assignee: old assignment access revoked, new assignee sees history; independent customer/manager access remains.
 
-**`brief_versions`** (bất biến, trừ cột phê duyệt)
+**brief_versions** (immutable except approval fields)
 
-| Cột | Kiểu | Ghi chú |
-|---|---|---|
-| booking_id | uuid NN FK | |
-| version | integer NN | từ 1; `UQ (booking_id, version)` |
-| created_by | uuid NN FK `profiles` | |
-| genre | `genre` NN | |
-| concept | text NN | 1–2000 |
-| location_type | enum `location_type` NN | |
-| location_note | text | ≤ 300 |
-| preferred_start, preferred_end | timestamptz | |
-| people_count | integer | ≥ 1 |
-| reference_paths | text[] | Ánh xạ `content.references` của contract; tối đa 10 storage path trong bucket riêng tư `brief-references`, dạng `{user_id}/{uuid}.webp` |
-| revision_rounds | integer NN default 1 | Số vòng sửa thêm sau vòng đầu; check `>= 0` |
-| photo_count, retouched_count | integer | |
-| budget | integer | |
-| notes | text | ≤ 1000 |
-| customer_approved_at | timestamptz | |
-| provider_approved_at | timestamptz | |
-| provider_approved_by | uuid FK `profiles` | Photographer hoặc manager phía cung cấp |
+| Column                         | Type                    | Notes                                                                                    |
+| ------------------------------ | ----------------------- | ---------------------------------------------------------------------------------------- |
+| booking_id                     | uuid NN FK              |                                                                                          |
+| version                        | integer NN              | Starts at 1; UQ(booking_id,version)                                                      |
+| created_by                     | uuid NN FK `profiles`   |                                                                                          |
+| genre                          | `genre` NN              |                                                                                          |
+| concept                        | text NN                 | 1–2000                                                                                   |
+| location_type                  | enum `location_type` NN |                                                                                          |
+| location_note                  | text                    | ≤ 300                                                                                    |
+| preferred_start, preferred_end | timestamptz             |                                                                                          |
+| people_count                   | integer                 | ≥ 1                                                                                      |
+| reference_paths                | text[]                  | Maps content.references; at most 10 private brief-references paths {user_id}/{uuid}.webp |
+| revision_rounds                | integer NN default 1    | Additional rounds after first; >=0                                                       |
+| photo_count, retouched_count   | integer                 |                                                                                          |
+| budget                         | integer                 |                                                                                          |
+| notes                          | text                    | ≤ 1000                                                                                   |
+| customer_approved_at           | timestamptz             |                                                                                          |
+| provider_approved_at           | timestamptz             |                                                                                          |
+| provider_approved_by           | uuid FK profiles        | Provider photographer or manager                                                         |
 
-`currentBriefVersion` = `max(version)`. `agreedBriefVersion` lưu ở `bookings`; chỉ cập nhật khi bản mới nhất được cả hai bên chấp thuận. Tạo bản mới không xoá dấu duyệt của bản cũ và không reset `agreed_brief_version`: bản đã thống nhất tiếp tục có hiệu lực cho tới khi được thay thế. Nếu chưa có bản được thống nhất, giá trị vẫn null.
+currentBriefVersion=max(version). Store agreed_brief_version in bookings and update only when newest version is mutually approved. New proposals do not clear old approvals/agreement; retain effective agreement until replaced. Null if none agreed.
 
-Khoá booking khi cấp số version, tạo/duyệt phiên bản và cập nhật con trỏ agreed; kiểm tra lại trạng thái và bản mới nhất trong transaction. Duyệt chỉ ghi nhận phía người gọi, không tự duyệt cả hai bên. Bản mới có thời gian mong muốn khác không tự đổi lịch giữ; đổi lịch phải đi qua luồng riêng ở contract mục 12.2.
+Lock booking to allocate versions, create/approve, and update agreed pointer; recheck state/latest version transactionally. Record caller's side only, never both. New preferred times do not update reservations; use contract 12.2 rescheduling.
 
-**`booking_status_events`** (đã thống nhất cho MVP)
+**booking_status_events** (accepted for MVP, append-only; no updated_at)
 
-| Cột | Kiểu | Ghi chú |
-|---|---|---|
-| booking_id | uuid NN FK | |
-| from_status, to_status | `booking_status` NN | Chỉ ghi các lần chuyển trạng thái; không cần event riêng cho lần tạo booking ban đầu |
-| actor_id | uuid FK `profiles` | null nếu hệ thống (tự hoàn tất) |
-| reason | text | |
-| created_at | timestamptz | |
+| Column                 | Type              | Notes                                                |
+| ---------------------- | ----------------- | ---------------------------------------------------- |
+| booking_id             | uuid NN FK        |                                                      |
+| from_status, to_status | booking_status NN | Transitions only; no initial-creation event required |
+| actor_id               | uuid FK profiles  | Null for system action, e.g. auto-completion         |
+| reason                 | text              |                                                      |
+| created_at             | timestamptz       |                                                      |
 
-Dùng cho audit, tin nhắn hệ thống, timeline và các chỉ số đúng hạn về sau.
+Supports audit, system messages, timeline, and future on-time metrics.
 
 ### 3.7 Shoot Room
 
 **`shoot_rooms`**: `booking_id` UQ NN FK, `status` enum `shoot_room_status` (`open`, `closed`) NN default `open`, `closed_at`.
-Người tham gia **không lưu bảng**, suy ra từ booking qua `is_booking_participant()`. Khi đổi assignee, người cũ mất quyền từ assignment, người mới được xem toàn bộ lịch sử phòng; customer/manager vẫn giữ quyền độc lập. BE/RLS/Storage và subscription Realtime phải kiểm tra lại quyền hiện tại; dữ liệu đã tải về trước đó không thể thu hồi. Phạm vi thành viên studio khác vẫn là câu hỏi #11.
+Do not store participant memberships; derive from booking with is_booking_participant(). Reassignment revokes old assignment rights and gives history to new assignee; independent customer/manager rights remain. API/RLS/Storage/Realtime recheck current access. Previously downloaded data cannot be recalled. Other studio member scope remains question #11.
 
 **`messages`**
 
-| Cột | Kiểu | Ghi chú |
-|---|---|---|
-| shoot_room_id | uuid NN FK | |
-| sender_id | uuid FK `profiles` | null với tin hệ thống |
-| type | enum `message_type` NN | |
-| body | text | ≤ 2000 |
-| is_hidden | boolean NN default false | Admin ẩn |
+| Column        | Type                     | Notes                   |
+| ------------- | ------------------------ | ----------------------- |
+| shoot_room_id | uuid NN FK               |                         |
+| sender_id     | uuid FK profiles         | Null for system message |
+| type          | enum `message_type` NN   |                         |
+| body          | text                     | ≤ 2000                  |
+| is_hidden     | boolean NN default false | Admin moderation        |
 
-Index: `(shoot_room_id, created_at desc, id desc)`. Check: `body` hoặc có đính kèm. Phân trang con trỏ: contract dùng `before=<messageId>`; ID tin mới dùng UUIDv7; vẫn truy vấn theo `(created_at, id)` của tin mốc trong cùng phòng để giữ thứ tự nhất quán khi nhiều tin cùng mili giây. UUIDv7 không thay timestamp nghiệp vụ.
+Index (shoot_room_id,created_at desc,id desc). Require body or attachments. before=<messageId> anchors descending (created_at,id) within the same room. New IDs use UUIDv7 but cursor ordering still uses timestamps and id for same-millisecond consistency.
 
-**`message_attachments`**: `message_id` FK NN, `storage_path` NN (bucket riêng tư `room-files`), `width`, `height`; thumbnail chỉ cho ảnh và suy ra từ path ảnh chính. Trigger giới hạn ≤ 5 attachment mỗi tin.
+**message_attachments**: message_id FK NN, storage_path NN in private room-files, width, height. Derive image thumbnails from main path; non-image files have none. Trigger enforces <=5 attachments per message.
 
-**`decisions`**: `shoot_room_id` FK NN, `title` NN (1–120), `content` NN (1–1000), `status` enum `decision_status` default `proposed`, `proposed_by` FK NN, `responded_by` FK, `responded_at`. Check: `responded_by` khác bên đề xuất (BE kiểm tra thêm "bên còn lại").
+**decisions**: shoot_room_id FK NN, title NN 1–120, content NN 1–1000, decision_status default proposed, proposed_by FK NN, responded_by FK, responded_at. Require different responder; backend additionally checks opposite booking side.
 
 **`milestones`**: `shoot_room_id` FK NN, `title` NN (1–120), `due_at`, `status` enum `milestone_status` default `todo`, `done_at`, `created_by` FK NN.
 
-### 3.8 Chọn ảnh và bàn giao
+### 3.8 Proofing and delivery
 
-**`galleries`**: `booking_id` UQ NN FK, `status` enum `gallery_status` default `draft`, `selection_limit` integer (null = không giới hạn), `submitted_at`, `round` integer NN default 1 (check `>= 1`). `round` tăng khi `selection/reopen` được chấp nhận, không tăng khi submit; giới hạn lấy từ brief đã thống nhất (`revision_rounds`, mặc định 1).
+**galleries**: booking_id UQ NN FK, gallery_status default draft, selection_limit integer (null unlimited), submitted_at, round integer NN default 1 CHECK >=1. Increment on accepted reopen, not submit; allowance comes from agreed brief revision_rounds, default 1.
 
-**`gallery_images`**: `gallery_id` FK NN, `storage_path` NN (bucket riêng tư `gallery-previews`; thumbnail path suy ra), `width`, `height`, `sort_order`, `is_selected` boolean NN default false. `selectedCount` = đếm `is_selected`. Lịch sử lựa chọn từng vòng vẫn là câu hỏi mở (**[?]** #18); MVP hiện giữ lựa chọn hiện tại.
+**gallery_images**: gallery_id FK NN, storage_path NN in private gallery-previews, derived thumbnail, width/height, sort_order, is_selected NN default false. selectedCount counts selected rows. Per-round history remains #18; current design keeps latest selection.
 
-**`image_notes`**: `gallery_image_id` FK NN, `author_id` FK NN, `body` NN (1–500), `x`, `y` numeric, check `0 ≤ x,y ≤ 1` và `(x IS NULL) = (y IS NULL)`.
+**image_notes**: gallery_image_id FK NN, author_id FK NN, body NN 1–500, numeric x/y with 0<=x,y<=1 and matching nullability.
 
 **`deliveries`**: `booking_id` UQ NN FK, `status` enum `delivery_status` default `preparing`, `note` (≤ 1000), `delivered_at`, `expires_at` (**[?]** #12).
 
 **`delivery_items`**: `delivery_id` FK NN, `storage_path` NN (bucket `deliveries`), `file_name` NN, `mime_type` enum `delivery_mime_type` NN (`image/jpeg`, `image/png`, `image/webp`), `size_bytes` NN, `gallery_image_id` FK (set null).
 
-### 3.9 Review và báo cáo
+### 3.9 Reviews and reports
 
 **`reviews`**
 
-| Cột | Kiểu | Ghi chú |
-|---|---|---|
-| booking_id | uuid NN UQ FK | Unique không điều kiện: tối đa một review suốt vòng đời booking, kể cả review soft-delete |
-| reviewer_id | uuid NN FK `profiles` | Phải là `customer_id` của booking (BE) |
-| target_type | enum `provider_type` NN | |
-| photographer_id, studio_id | uuid FK | XOR như `services` |
-| rating | smallint NN | 1–5 |
-| comment | text | ≤ 1000 |
-| is_hidden | boolean NN default false | |
-| deleted_at | timestamptz | |
+| Column                     | Type                     | Notes                                                                       |
+| -------------------------- | ------------------------ | --------------------------------------------------------------------------- |
+| booking_id                 | uuid NN UQ FK            | Unconditional unique for entire booking lifetime, including deleted reviews |
+| reviewer_id                | uuid NN FK profiles      | Must match booking customer_id, checked by backend                          |
+| target_type                | enum `provider_type` NN  |                                                                             |
+| photographer_id, studio_id | uuid FK                  | XOR as services                                                             |
+| rating                     | smallint NN              | 1–5                                                                         |
+| comment                    | text                     | ≤ 1000                                                                      |
+| is_hidden                  | boolean NN default false |                                                                             |
+| deleted_at                 | timestamptz              |                                                                             |
 
-Unique không điều kiện trên `booking_id`; POST lại sau soft-delete vẫn trả 409 `already_exists`. Trigger tính lại `rating_avg`, `review_count` của photographer/studio (bỏ qua review đã xoá/ẩn).
+Unconditional booking_id uniqueness: POST after soft deletion remains 409 already_exists. Recompute provider rating_avg/review_count with triggers, excluding deleted/hidden reviews.
 
 **`reports`**
 
-| Cột | Kiểu | Ghi chú |
-|---|---|---|
-| reporter_id | uuid NN FK `profiles` | |
-| target_type | enum `report_target_type` NN | |
-| target_id | uuid NN | **Đa hình, không có FK**; BE kiểm tra tồn tại |
-| reason | enum `report_reason` NN | |
-| detail | text | ≤ 1000 |
-| status | enum `report_status` default `open` | |
-| resolution | enum `report_resolution` | |
-| admin_note | text | ≤ 1000 |
-| resolved_by | uuid FK `profiles` | |
-| resolved_at | timestamptz | |
+| Column      | Type                                | Notes                                              |
+| ----------- | ----------------------------------- | -------------------------------------------------- |
+| reporter_id | uuid NN FK `profiles`               |                                                    |
+| target_type | enum `report_target_type` NN        |                                                    |
+| target_id   | uuid NN                             | Polymorphic without FK; backend verifies existence |
+| reason      | enum `report_reason` NN             |                                                    |
+| detail      | text                                | ≤ 1000                                             |
+| status      | enum `report_status` default `open` |                                                    |
+| resolution  | enum `report_resolution`            |                                                    |
+| admin_note  | text                                | ≤ 1000                                             |
+| resolved_by | uuid FK `profiles`                  |                                                    |
+| resolved_at | timestamptz                         |                                                    |
 
-Partial unique `(reporter_id, target_type, target_id) WHERE status = 'open'` (409). `content_hidden` ⇒ BE đặt `portfolios.status = hidden` hoặc `is_hidden = true` ở `portfolio_images`, `reviews`, `messages`, `photographers`, `studios`.
-
----
-
-## 4. Hàm hỗ trợ cho RLS (`SECURITY DEFINER`, đặt trong schema riêng)
-
-| Hàm | Trả về |
-|---|---|
-| `has_role(uid, role)` | boolean; `client` luôn true với uid đã có profile, `photographer` kiểm tra hồ sơ, `studio_manager` kiểm tra ít nhất một `studio_members.role = manager` thuộc studio chưa soft-delete, `system_admin` kiểm tra `user_roles` |
-| `is_studio_member(studio_id, uid)` / `is_studio_manager(studio_id, uid)` | boolean |
-| `is_booking_customer(booking_id, uid)` | boolean |
-| `is_booking_provider_side(booking_id, uid)` | Chủ hồ sơ, hoặc photographer được phân công, hoặc manager của studio (khớp mục 2.5 contract) |
-| `is_booking_participant(booking_id, uid)` | Khách hoặc bên cung cấp |
-| `shoot_room_booking_id(shoot_room_id)` | uuid, dùng cho chính sách của messages, decisions, milestones |
-
-`booking_resources` và `booking_assignment_events` chỉ cho người tham gia booking hiện tại đọc qua `is_booking_participant()`. Client không ghi trực tiếp: snapshot chỉ cập nhật qua xác nhận/đổi lịch; assignment events chỉ append qua service trong transaction phân công. Các bản ghi lịch sử không cấp quyền cho assignee cũ.
-
-Kênh Realtime `shoot_room:{roomId}` và `booking:{bookingId}` dùng chính các hàm này trong RLS.
+Partial unique (reporter_id,target_type,target_id) WHERE status='open' (409). content_hidden sets portfolios.status=hidden or is_hidden on portfolio_images/reviews/messages/photographers/studios.
 
 ---
 
-## 5. Ràng buộc và trigger tổng hợp
+## 4. RLS helpers (SECURITY DEFINER in a separate schema)
 
-| # | Nội dung | Cơ chế |
-|---|---|---|
-| 1 | `updated_at` | Trigger chung |
-| 2 | Studio đang hoạt động không hết manager; tạo studio và manager đầu tiên nguyên tử | Deferred constraint trigger trên `studios`/`studio_members`, transaction và khoá dòng studio |
-| 3 | Vai trò tài khoản được suy ra | `has_role()` kiểm tra `photographers`/`studio_members`; chỉ `system_admin` lưu trong `user_roles` |
-| 4 | Chống trùng lịch resource và photographer | Exclusion constraint (mục 3.5) |
-| 5 | XOR owner/provider/target | Check constraint cho `services`, `portfolios`, `reviews` |
-| 6 | `rating_avg`, `review_count` | Trigger trên `reviews` |
-| 7 | `price_from` | Trigger tính giá thấp nhất từ các service đang hoạt động và chưa soft-delete |
-| 8 | Tối đa 5 attachment/tin; tối đa 10 ảnh tham chiếu/brief | Trigger/check |
-| 9 | Chuyển trạng thái booking hợp lệ | State machine ở service; DB đảm bảo các ràng buộc nhất quán |
-| 10 | Mọi thao tác ghi trên phòng `closed` bị từ chối | Chính sách RLS/BE kiểm tra `shoot_rooms.status` |
-| 11 | Cleanup portfolio soft-delete quá 30 ngày | Script xoá ảnh chính + thumbnail, bản ghi ảnh, sau đó portfolio đã hết hạn |
-| 12 | Người tạo và mọi thành viên studio phải có hồ sơ photographer | FK tới `photographers(user_id)`; BE kiểm tra quyền |
-| 13 | Username duy nhất và đúng định dạng | UQ + CHECK, chuẩn hoá trước ghi |
-| 14 | Trường phân loại/trạng thái dùng enum | PostgreSQL ENUM đồng bộ contract 3.1, gồm `tag_kind`, `tag_source`, `shoot_room_status`, `delivery_mime_type` |
-| 15 | Phân công và thời gian khớp loại/trạng thái booking | CHECK và deferred constraint trigger trên booking/lịch/brief |
-| 16 | Không rời studio khi còn booking được giao chưa kết thúc | Trigger + BE, khoá studio chung với luồng assignment |
-| 17 | Lịch, snapshot, assignment event và trạng thái nhất quán | Transaction + khoá booking; conflict lịch rollback toàn bộ |
-| 18 | Giữ lịch sử booking và tài nguyên | FK RESTRICT, snapshot `booking_resources`, assignment events append-only |
-| 19 | Một review mỗi booking kể cả sau soft-delete | Unique không điều kiện trên `reviews.booking_id` |
-| 20 | Kích thước ảnh khớp API | CHECK từng chiều `(0, 1280]`; BE xác minh metadata Storage |
+| Function                                                                 | Return                                                                                                                                             |
+| ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| has_role(uid,role)                                                       | client for existing profile; photographer from profile; studio_manager from manager membership in non-deleted studio; system_admin from user_roles |
+| `is_studio_member(studio_id, uid)` / `is_studio_manager(studio_id, uid)` | boolean                                                                                                                                            |
+| `is_booking_customer(booking_id, uid)`                                   | boolean                                                                                                                                            |
+| is_booking_provider_side(booking_id,uid)                                 | Personal provider, current assigned photographer, or relevant studio manager; contract 2.5                                                         |
+| is_booking_participant(booking_id,uid)                                   | Customer or provider side                                                                                                                          |
+| shoot_room_booking_id(shoot_room_id)                                     | uuid for message/decision/milestone policies                                                                                                       |
+
+Only current participants read booking_resources/booking_assignment_events via is_booking_participant(). Clients cannot write directly: confirmation/rescheduling updates snapshots, assignment transactions append events. History grants no access to old assignees.
+
+Realtime channels shoot_room:{roomId} and booking:{bookingId} use the same RLS helpers.
 
 ---
 
-## 6. Điểm cần chốt trong buổi review ERD
+## 5. Constraint and trigger summary
 
-Các vấn đề chưa chốt và quyết định đã chốt được ghi dưới đây, cập nhật ngày 2026-10-20; giữ số thứ tự để các tham chiếu không bị lệch.
-
-| # | Câu hỏi | Người chốt |
-|---|---|---|
-| 1 | Khởi tạo profile bằng trigger DB hay BE; nhận username bắt buộc, xử lý trùng và lỗi khởi tạo như thế nào? | Ly, Khải |
-| 2 | `styles` là `text[]` hay bảng tag chuẩn; taxonomy và cách gán tag cho ảnh ra sao? | Quỳnh Anh, Ly |
-| 3 | Giới hạn số ảnh mỗi portfolio và dung lượng tổng mỗi tài khoản. | Cả nhóm |
-| 4 | Có cần trường credit ekip dạng chữ tự do trong portfolio không? | Quỳnh Anh |
-| 5 | Có cần chỉ số uy tín ngoài `rating_avg`/`review_count` trong MVP không? | Bạn |
-| 6 | Có bắt buộc FE hiển thị nhãn cho ảnh `ai_generated` không? | Bạn, Khoa |
-| 7 | Đã chốt: ID tin mới dùng UUIDv7, cursor vẫn dùng `(created_at, id)` (mục 3.7). | — |
-| 8 | Đã chốt: manager phân công; chặn rời studio khi còn booking được giao chưa kết thúc, lưu lịch sử thay người (mục 3.6). | — |
-| 9 | Chính sách huỷ booking, thời gian tự động hoàn tất sau `delivered` và cách xử lý khi khách không phản hồi ở `proofing` (hiện không có đường huỷ từ `proofing`). | Bạn, Khải |
-| 10 | Đã chốt: chỉ sửa ở pending/confirmed/in_progress; bản đã thống nhất giữ hiệu lực đến khi bản mới được hai bên duyệt, không sửa từ proofing (mục 3.6). | — |
-| 11 | Phạm vi người được vào Shoot Room: chỉ người tham gia booking hay toàn bộ thành viên studio? | Ly, Khải |
-| 12 | Giới hạn dung lượng, số lượng và thời hạn lưu file bàn giao/Shoot Room. | Cả nhóm |
-| 13 | Review có được sửa/phản hồi; booking studio có đánh giá riêng photographer được phân công không? | Bạn |
-| 14 | Photographer độc lập có tự quản lý lịch bận trong MVP không? | Bạn, Khoa |
-| 15 | Ngoài xử lý báo cáo, admin cần endpoint nào để kiểm tra dữ liệu tín nhiệm? | Bạn, Quỳnh Anh |
-| 16 | AI Search: quyền tìm bằng ảnh, kết quả theo ảnh hay photographer, và thời hạn lưu `search-uploads`. | Quỳnh Anh, Khải |
-| 17 | Thông báo đẩy/email/trong app có nằm trong MVP không? Hiện để ngoài. | Cả nhóm |
-| 18 | Có cần bảng `gallery_selections` để lưu lịch sử lựa chọn qua từng vòng hay chỉ giữ trạng thái hiện tại? | Bạn, Khoa |
+| #   | Requirement                                                         | Mechanism                                                                                              |
+| --- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| 1   | `updated_at`                                                        | Trigger chung                                                                                          |
+| 2   | Active studio retains manager; atomic studio/first manager creation | Deferred studios/studio_members trigger, transaction, studio row lock                                  |
+| 3   | Derived capabilities                                                | has_role checks profiles/membership; only admin stored in user_roles                                   |
+| 4   | Resource/photographer overlap prevention                            | Exclusion constraints (3.5)                                                                            |
+| 5   | XOR owner/provider/target                                           | Check constraint cho `services`, `portfolios`, `reviews`                                               |
+| 6   | rating_avg/review_count                                             | Review triggers                                                                                        |
+| 7   | price_from                                                          | Minimum active/non-deleted service trigger                                                             |
+| 8   | <=5 attachments/message, <=10 references/brief                      | Trigger/check                                                                                          |
+| 9   | Valid booking transitions                                           | Service state machine plus DB invariants                                                               |
+| 10  | Reject writes to closed room                                        | RLS/backend checks status                                                                              |
+| 11  | Portfolio cleanup after 30 days                                     | Delete files/thumbnails, image records, expired portfolio                                              |
+| 12  | Studio creator/members need photographer profile                    | FK photographers(user_id), server checks                                                               |
+| 13  | Unique valid username                                               | UQ + CHECK, normalization before write                                                                 |
+| 14  | Controlled classifications/status                                   | DB enums aligned with contract 3.1, including tag_kind/tag_source/shoot_room_status/delivery_mime_type |
+| 15  | Assignment/time match booking type/state                            | CHECK and deferred booking/schedule/brief triggers                                                     |
+| 16  | No departure with active assignment                                 | Trigger/backend, consistent studio locking                                                             |
+| 17  | Consistent schedule/snapshot/events/state                           | Transaction and booking lock; full rollback on conflict                                                |
+| 18  | Retain booking/resource history                                     | FK RESTRICT, booking_resources snapshot, append-only assignment events                                 |
+| 19  | One lifetime review per booking                                     | Unconditional unique reviews.booking_id                                                                |
+| 20  | Image dimensions match API                                          | Each dimension (0,1280]; backend checks Storage metadata                                               |
 
 ---
 
-## Lịch sử thay đổi
+## 6. Open decisions
 
-| Phiên bản | Ngày | Nội dung |
-|---|---|---|
-| v0 | 2026-10-13 | Bản nháp đầu, suy ra từ `contract_v0.md` v0.2. Chưa review. |
-| v0.1 | 2026-10-14 | Cập nhật theo review: role suy ra từ dữ liệu; vai trò chuyên môn hiển thị; portfolio thuộc photographer hoặc studio; soft-delete portfolio 30 ngày; bucket/thumbnail paths; brief references, vòng sửa, booking events và trigger `price_from`. Vẫn chưa freeze. |
-| v0.2 | 2026-10-14 | Rà soát chéo với contract v0.3: bỏ `bookings.deleted_at`; CHECK lịch theo danh sách trạng thái tường minh; bỏ `studio_members.photographer_id` và thêm trigger; thêm `is_hidden` cho `photographers`/`studios`; đổi `references` thành `reference_paths`; đổi FK `*_id` theo quy ước; sửa tham chiếu câu hỏi mở (#6, #9, #11, #12, #18); bổ sung quan hệ vào sơ đồ |
-| v0.3 | 2026-10-20 | Chỉ đăng ký client/photographer; photographer tạo và tham gia nhiều studio; username duy nhất; UUIDv7 cho ID ứng dụng; chuẩn hoá enum. |
+Preserve question numbering for cross-references. Current unresolved items and previously resolved decisions follow.
 
-| v0.4 | 2026-10-20 | Siết assignment/thời gian, đồng bộ lịch nguyên tử; giữ brief đã thống nhất; snapshot số ảnh dịch vụ và tài nguyên; assignment events; FK RESTRICT bảo toàn booking. |
+| #   | Decision                                                                                                               | Owners                   |
+| --- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| 1   | Trigger versus backend profile initialization, username validation/duplicates/errors                                   | Ly, Khai                 |
+| 2   | Free-text styles versus tags, taxonomy, annotation ownership                                                           | Quynh Anh, Ly            |
+| 3   | Image count and per-account storage quotas                                                                             | Team                     |
+| 4   | Free-text portfolio crew credit                                                                                        | Quynh Anh                |
+| 5   | Additional trust metrics beyond ratings/counts                                                                         | Product owner            |
+| 6   | Mandatory ai_generated labels                                                                                          | Product owner, Khoa      |
+| 7   | Resolved: UUIDv7 IDs with (created_at,id) message cursors (3.7)                                                        | —                        |
+| 8   | Resolved: manager assignment, block departure with active assignments, retain history (3.6)                            | —                        |
+| 9   | Cancellation/completion timeout and proofing non-response; no cancellation from proofing                               | Product owner, Khai      |
+| 10  | Resolved: briefs editable only pending/confirmed/in_progress, prior agreement effective until mutual replacement (3.6) | —                        |
+| 11  | Shoot Room participants only versus all studio members                                                                 | Ly, Khai                 |
+| 12  | Delivery/room quotas, file counts, retention                                                                           | Team                     |
+| 13  | Review editing/provider replies/separate assigned-photographer reviews                                                 | Product owner            |
+| 14  | Personal photographer schedule blocks                                                                                  | Product owner, Khoa      |
+| 15  | Admin trust-inspection endpoints                                                                                       | Product owner, Quynh Anh |
+| 16  | Deferred AI search permissions, grouping, search-uploads retention                                                     | Quynh Anh, Khai          |
+| 17  | Push/email/in-app notifications, currently outside scope                                                               | Team                     |
+| 18  | gallery_selections per-round history versus current selection                                                          | Product owner, Khoa      |
 
-| v0.5 | 2026-10-20 | Chỉ booking studio được giữ tài nguyên; unique review suốt vòng đời; ràng buộc kích thước ảnh theo API. |
+---
+
+## Change history
+
+| Version | Date       | Changes                                                                                                                                                                                                   |
+| ------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| v0      | 2026-10-13 | Initial draft from API v0.2; not reviewed                                                                                                                                                                 |
+| v0.1    | 2026-10-14 | Derived roles, display specialties, studio portfolios, 30-day cleanup, upload pairs/private references/revisions/events/price trigger; not frozen                                                         |
+| v0.2    | 2026-10-14 | API v0.3 reconciliation: no booking deleted_at, explicit state checks, membership/profile constraints, hidden providers, reference_paths, FK conventions, open-question references, diagram relationships |
+| v0.3    | 2026-10-20 | Signup roles, multiple studios, unique username, UUIDv7, enums                                                                                                                                            |
+
+| v0.4 | 2026-10-20 | Assignment/time consistency, atomic scheduling, effective agreed brief, counts/resource snapshots, assignment events, FK RESTRICT |
+
+| v0.5 | 2026-10-20 | Studio-only resources, lifetime review uniqueness, image size constraints |
+| v0.6 | 2026-10-21 | English translation; distinguish deferred design from implemented foundation |

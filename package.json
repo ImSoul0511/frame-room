@@ -3,15 +3,45 @@
   "private": true,
   "version": "0.1.0",
   "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=22.13.0 <23",
+    "pnpm": "9.15.0"
+  },
   "scripts": {
-    "dev:web": "pnpm --filter web dev",
-    "dev:api": "pnpm --filter api dev",
-    "build": "pnpm -r build",
-    "typecheck": "pnpm -r typecheck",
-    "lint": "pnpm -r lint"
+    "dev": "node scripts/dev.mjs",
+    "dev:web": "corepack pnpm --filter @frameroom/shared build && corepack pnpm --filter web dev",
+    "dev:api": "corepack pnpm --filter @frameroom/shared build && corepack pnpm --filter api dev",
+    "build": "corepack pnpm -r build",
+    "typecheck": "corepack pnpm -r typecheck",
+    "lint": "eslint . --max-warnings 0",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "pretypecheck": "corepack pnpm --filter @frameroom/shared build",
+    "pretest": "corepack pnpm --filter @frameroom/shared build",
+    "test": "vitest run",
+    "check": "corepack pnpm format:check && corepack pnpm docs:check && corepack pnpm lint && corepack pnpm typecheck && corepack pnpm test && corepack pnpm build",
+    "prepare": "husky",
+    "db:start": "supabase start",
+    "db:stop": "supabase stop",
+    "db:status": "supabase status",
+    "db:reset": "supabase db reset --local",
+    "db:types": "node scripts/db-types.mjs",
+    "docs:check": "node scripts/check-docs.mjs"
   },
   "devDependencies": {
+    "@commitlint/cli": "19.8.1",
+    "@commitlint/config-conventional": "19.8.1",
+    "@eslint/js": "10.0.1",
     "@types/node": "^22.10.2",
-    "typescript": "^5.7.2"
+    "eslint": "10.13.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "globals": "16.5.0",
+    "husky": "9.1.7",
+    "lint-staged": "15.5.2",
+    "prettier": "3.9.10",
+    "supabase": "2.121.0",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "8.72.0",
+    "vitest": "3.2.7"
   }
 }

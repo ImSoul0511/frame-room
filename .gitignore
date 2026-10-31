@@ -14,5 +14,7 @@ __pycache__/
 .ruff_cache/
 .mypy_cache/
 .DS_Store
-supabase/.branches/
 supabase/.temp/
+supabase/.branches/
+*.tmp
+.artifacts/
