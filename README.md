@@ -35,16 +35,18 @@ Web/API currently communicate through GET /health. Business endpoints in the con
 
 ## Install and run
 
-Requirements: Node.js 22 (minimum 22.13), Corepack, and Git. Docker Desktop's Linux engine is needed only for local Supabase. Python and cloud credentials are not needed for web/API.
+Requirements: Node.js 22 (minimum 22.13), npm, pnpm 9.15.0, and Git. Install the pinned pnpm version with npm; Docker Desktop's Linux engine is needed only for the historical local Supabase workflow. Python and cloud credentials are not needed for the foundation web/API health check.
 
 From the root:
 
 ```sh
-corepack pnpm install --frozen-lockfile
-corepack pnpm dev
+npm install --global pnpm@9.15.0
+pnpm --version
+pnpm install --frozen-lockfile
+pnpm dev
 ```
 
-Corepack reads the pinned version from package.json. Commands also work as pnpm after `corepack enable` if your Node installation permits PATH shims. No global pnpm installation is required.
+Confirm `pnpm --version` is `9.15.0`. The version is pinned in `package.json`; npm installs the pnpm CLI, and pnpm installs the workspace dependencies using `pnpm-lock.yaml`. Do not run `npm install` in the repository: workspace dependencies use pnpm's `workspace:*` protocol. See the [pnpm setup guide](docs/infrastructure/pnpm-without-corepack.md).
 
 The dev command builds shared, then runs its compiler watcher, the API watcher, and Vite in the current terminal. Shared changes rebuild and restart the API; Vite updates the web. Stop with Ctrl+C. It never installs Python, starts Docker, or resets a database.
 
@@ -76,7 +78,7 @@ Process variables override the API's root .env. Vite loads root environment file
 
 ## Commands
 
-Use `corepack pnpm` in place of pnpm when its shim is unavailable.
+All workspace commands use the pnpm CLI installed with npm.
 
 | Command                                   | Purpose                                                           |
 | ----------------------------------------- | ----------------------------------------------------------------- |

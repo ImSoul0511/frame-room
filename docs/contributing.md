@@ -52,11 +52,14 @@ Aim for approximately 400 changed lines excluding generated files. This approved
 CI/CD and staging deployment are disabled for foundation. No active workflow files exist. Local verification and reviewer approval replace CI/staging gates. Do not enable deployments or add hosted credentials incidentally.
 
 ```sh
-corepack pnpm install --frozen-lockfile
-corepack pnpm check
+npm install --global pnpm@9.15.0
+pnpm install --frozen-lockfile
+pnpm check
 ```
 
 Check runs formatting, documentation links/translation scan, lint, typecheck, Vitest, and builds sequentially. Record Passed/Failed/Blocked/Not run with evidence. Never claim unexecuted checks passed; include the exact remaining command for blocked prerequisites.
+
+Use the pinned pnpm version from `package.json` directly after installing it with npm. Verify `pnpm --version` reports `9.15.0`. Do not use `npm install` for workspace dependencies; see [pnpm setup](infrastructure/pnpm-without-corepack.md).
 
 Root ESLint/Prettier configurations apply throughout. TypeScript is strict. Prefer unknown and narrowing over any. Disable rules only with a specific reason. Formatting: single quotes, semicolons, two spaces, 100 characters, trailing commas, UTF-8, LF; batch files use CRLF.
 
@@ -100,7 +103,7 @@ Booking changes go through a service state machine. Multi-step writes use transa
 
 ## 4. Database
 
-SQL migrations are the schema source of truth; ERD is a draft until implemented/reviewed. Never change dashboard schema or edit merged migrations. Add small migrations, verify with local db:reset, generate types with db:types, and get Ly/Khai review.
+SQL migrations are the schema source of truth; ERD is a draft until implemented/reviewed. Never change dashboard schema or edit merged migrations. Add small migrations, verify against a designated disposable Supabase Cloud test project, generate types after schema verification, and get Ly/Khai review.
 
 Use plural snake_case tables, snake_case columns, and UUIDv7 business IDs from a migration-provided function, not gen_random_uuid(). Preserve Auth IDs/references. Document composite/FK PK exceptions. Use timestamptz with created_at/updated_at, except documented append-only events and user_roles.granted_at.
 
@@ -110,7 +113,7 @@ Enable RLS on every public table, deny by default, and add explicit role/action 
 
 Use tstzrange + btree_gist exclusions for schedule overlap and indexes for FK/filter/join columns. Embeddings remain separate; dimensions/HNSW wait for AI model selection.
 
-See [local workflow](db/local-development.md). Foundation implements no business migrations/RLS. Reset destroys local data and never runs during ordinary app startup.
+See the [Cloud migration workflow](infrastructure/migration-workflow.md). Checked out `main` implements no business migrations/RLS; the MVP feature branch contains them as a reference. Do not run the historical local reset command against a hosted project.
 
 ## 5. Optional AI and security
 

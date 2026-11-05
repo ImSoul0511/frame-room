@@ -1,6 +1,8 @@
 # AGENT-001: Verification
 
 Environment: Windows PowerShell; Node 22.19.0; pnpm 9.15.0 through Corepack; Python 3.13 with PyYAML; installed Astryx 0.7.0.
+
+Historical verification record: Corepack commands below describe the original run. For current setup, follow the [pnpm guide](../../docs/infrastructure/pnpm-without-corepack.md).
 Revision: content commit 7437b82 based on d87e6c9; the review handoff follow-up records draft PR #3.
 
 | Check / scenario                                     | Status  | Evidence                                                                                                                                                                  |

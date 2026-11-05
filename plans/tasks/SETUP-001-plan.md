@@ -10,7 +10,7 @@ Use the existing pnpm workspace and product decisions. Build a usable local foun
 - Compile shared ESM/declarations and use NodeNext for API/shared; keep Vite bundler resolution for web.
 - Separate Fastify construction/listening, validate environment settings, constrain CORS, redact logs, preserve GET /health.
 - Add minimal routing, TanStack Query, and verified Astryx API health states.
-- Provide root Corepack-compatible development/check/database commands and local hooks.
+- Provide root Corepack-compatible development/check/database commands and local hooks. (Historical requirement; current commands use npm-installed pnpm directly.)
 - Pin project Supabase CLI; validate local configuration. No business migrations or default Python execution.
 - Translate existing documentation outside report, retain draft business rules/open questions, and add product/architecture/backlog artifacts.
 - Disable workflow discovery; use local verification and reviewed PRs.

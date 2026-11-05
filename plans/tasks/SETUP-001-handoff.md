@@ -13,12 +13,12 @@ See [verification](SETUP-001-verification.md), [task](SETUP-001.md), and [implem
 ## Reproduce
 
 ```sh
-corepack pnpm install --frozen-lockfile
-corepack pnpm check
-corepack pnpm dev
+pnpm install --frozen-lockfile
+pnpm check
+pnpm dev
 ```
 
-Web: http://localhost:5173. API: http://localhost:4000/health. Build and use corepack pnpm --filter api start to run the compiled server. Full dev watches shared changes; individual dev commands build shared once.
+Web: http://localhost:5173. API: http://localhost:4000/health. Build and use `pnpm --filter api start` to run the compiled server. Full dev watches shared changes; individual dev commands build shared once.
 
 Tell the assistant: Read agents/README.md before working.
 
