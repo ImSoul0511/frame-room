@@ -36,3 +36,5 @@ Use multiple skills only when their boundaries are actually crossed. An auth scr
 The [auth feature packet](../docs/features/auth/packet.md) is the first worked specification. See [AGENT-001](../plans/tasks/AGENT-001.md) for its skill exercises and verification.
 
 User instructions take precedence; keep guidance consistent. Contribution rules own detailed policies. All documentation outside report/ is English. Do not modify reports or input files unless assigned. Work one task at a time; no sub-agent delegation by default. Never invent evidence, Jira keys, implementations, secrets, or product decisions.
+
+Install pnpm 9.15.0 with `npm install --global pnpm@9.15.0`, then use `pnpm` directly for workspace commands. See the [pnpm setup guide](../docs/infrastructure/pnpm-without-corepack.md). Do not use Corepack or `npm install` for workspace dependencies.

@@ -6,7 +6,7 @@ Three explicitly routed [project skills](../../agents/README.md#focused-skills) 
 
 ## Reproduce
 
-From the repository root, run `corepack pnpm docs:check` and `corepack pnpm format:check`. With the installed skill-creator tooling, run `python C:/Users/phanp/.codex/skills/.system/skill-creator/scripts/quick_validate.py <skill-folder>` for each of the three folders. That validator is environment-provided tooling, not a new project dependency. Re-run the read-only prompts from the exercise artifact when changing these skills.
+From the repository root, run `pnpm docs:check` and `pnpm format:check`. With the installed skill-creator tooling, run `python C:/Users/phanp/.codex/skills/.system/skill-creator/scripts/quick_validate.py <skill-folder>` for each of the three folders. That validator is environment-provided tooling, not a new project dependency. Re-run the read-only prompts from the exercise artifact when changing these skills.
 
 ## Review and next work
 

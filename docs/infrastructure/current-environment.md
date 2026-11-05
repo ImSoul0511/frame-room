@@ -1,0 +1,7 @@
+# Current environment
+
+Checked out `main` uses Node 22, pnpm 9.15, Vite 5173, Fastify 4000 and optional local Supabase (`supabase/config.toml`, root `package.json`, `.env.example`, `scripts/dev.mjs`, `scripts/db-types.mjs`). `pnpm dev` starts shared/web/API only; `pnpm db:start` and `db:reset --local` require Docker/Supabase CLI. `db:types` explicitly runs `supabase gen types typescript --local`. `scripts/start-dev.bat` wraps development. Supabase config enables local API 54321, DB 54322, Studio 54323, SMTP 54324 and Auth redirects to localhost. `supabase/seed.sql` is a placeholder on `main`.
+
+The MVP branch adds local environment setup `scripts/local-env.mjs`, `demo:configure`, `demo:seed`, `test:db`, `dev:worker`, AI index/evaluate commands and eight migrations. Its `.env.example` adds `DATABASE_URL`, `AI_GATEWAY_API_KEY`, model IDs and a monthly budget. `apps/api/src/config/env.ts` validates consumed variables. `apps/web/src/lib/env.ts` consumes browser-visible `VITE_*`; `apps/api/src/lib/auth.ts` validates Auth identity; `repositories/database.ts` uses PostgreSQL. Python `apps/ai-service` remains outside pnpm and is not started by normal dev scripts.
+
+The `.github/workflows/ci.yml.disabled` file is historical; no active GitHub Actions workflow or hosted deployment is evidenced. No cloud credentials or actual hosted connection were inspected. A documented `.env.example` value is not proof of a live connection. Do not print or copy service-role keys into browser variables.

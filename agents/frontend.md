@@ -4,7 +4,7 @@ Read [contribution rules](../docs/contributing.md#frontend), the [API draft](../
 
 For a concrete screen/form task, load the [Astryx screen skill](skills/frameroom-astryx-screen/SKILL.md). The [auth packet](../docs/features/auth/packet.md) provides the first screen specifications; its proposed onboarding API is not implemented.
 
-Use React functions/hooks, Astryx components/tokens, React Router, and TanStack Query. Inspect installed props with `corepack pnpm --filter web astryx component <Name>`; do not run init or recreate root agent files. Keep UI strings separate.
+Use React functions/hooks, Astryx components/tokens, React Router, and TanStack Query. Inspect installed props with `pnpm --filter web astryx component <Name>`; do not run init or recreate root agent files. Keep UI strings separate.
 
 Use shared Zod wire schemas. Never rely on client-only authorization or expose server keys. Keep browser code portable for future Tauri.
 

@@ -14,7 +14,7 @@ Reproducible web/API, agents/ guidance, lean English artifacts. Preserve report/
 
 ## Dependencies and decisions
 
-Node 22 (minimum 22.13), pnpm 9.15.0, Corepack. Docker Linux engine for local DB only. Explicit agent prompt, no root AGENTS.md. Local IDs/optional Jira. Reviewed setup PR into main, reviewed dev sync afterward. No business migrations.
+Node 22 (minimum 22.13), pnpm 9.15.0, Corepack. Docker Linux engine for local DB only. Explicit agent prompt, no root AGENTS.md. Local IDs/optional Jira. Reviewed setup PR into main, reviewed dev sync afterward. No business migrations. This records the original setup requirement; see the [current pnpm guide](../../docs/infrastructure/pnpm-without-corepack.md).
 
 ## Acceptance criteria
 

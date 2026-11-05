@@ -19,7 +19,7 @@ Make focused project skills reusable and demonstrate them through a reviewable e
 - [Proposed ADR 0003](../../docs/adr/0003-auth-profile-initialization.md): trigger versus explicit API, recommendation, compatibility and recovery requirements. Contract/ERD question #1 stays open.
 - [Read-only exercises](AGENT-001-exercises.md), [verification](AGENT-001-verification.md), and [handoff](AGENT-001-handoff.md).
 
-Node/Corepack and installed Astryx support documentation lookup. Python with PyYAML supports skill validation. No Docker/Auth session is needed for this artifact pass; those prerequisites apply to future runtime checks. AUTH-001 depends on foundation integration and accepted packet gates G1–G4, rather than this task merely existing.
+Node/Corepack and installed Astryx support documentation lookup. Python with PyYAML supports skill validation. No Docker/Auth session is needed for this artifact pass; those prerequisites apply to future runtime checks. AUTH-001 depends on foundation integration and accepted packet gates G1–G4, rather than this task merely existing. This is the original task context; current pnpm setup uses npm as described in the [pnpm guide](../../docs/infrastructure/pnpm-without-corepack.md).
 
 ## Acceptance criteria
 

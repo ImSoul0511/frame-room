@@ -1,13 +1,15 @@
-# Local database development
+# Historical local database development
+
+This page records the old local Supabase workflow. The transition target uses Supabase Cloud for development and testing; see [Cloud setup](../infrastructure/supabase-cloud-setup.md) and [migration workflow](../infrastructure/migration-workflow.md). The commands below are not part of the target workflow.
 
 ## Prerequisites
 
 Install workspace dependencies and start Docker Desktop's Linux engine. Run from the root; the CLI is project-pinned, with no global installation or hosted login needed.
 
 ```sh
-corepack pnpm db:start
-corepack pnpm db:status
-corepack pnpm db:stop
+pnpm db:start
+pnpm db:status
+pnpm db:stop
 ```
 
 First start downloads images. Ports: API 54321, PostgreSQL 54322, Studio 54323, local mail 54324. Do not publish status output containing credentials.
@@ -17,11 +19,11 @@ If the engine is stopped, startup reports a prerequisite failure. Web/API health
 ## Migration workflow
 
 1. Resolve feature API/ERD questions with reviewers.
-2. Create a migration: `corepack pnpm exec supabase migration new descriptive_name`.
+2. Create a migration: `pnpm exec supabase migration new descriptive_name`.
 3. Add SQL constraints/indexes/triggers and deny-by-default RLS. Never edit merged migrations/dashboard schema.
 4. Seed synthetic data only.
-5. Run `corepack pnpm db:reset` to replay **local** migrations/seed. This destroys local data and never runs during normal startup.
-6. Run `corepack pnpm db:types`; UTF-8 types replace the previous file only after successful generation.
+5. Run `pnpm db:reset` to replay **local** migrations/seed. This destroys local data and never runs during normal startup.
+6. Run `pnpm db:types`; UTF-8 types replace the previous file only after successful generation.
 7. Verify roles/failure paths, obtain Ly/Khai review, and update contract/ERD/shared together.
 
 Seed remains a placeholder until business migrations exist. Do not invent tables for foundation.

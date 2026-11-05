@@ -6,7 +6,7 @@ Method: the current agent read each new SKILL.md and followed it against the pro
 
 Prompt: "Use frameroom-astryx-screen to specify AUTH-S01 from the auth packet. Produce a plan only; do not edit application code."
 
-Inspected installed component docs using `corepack pnpm --filter web astryx component --list`, then `component TextInput Button RadioList Banner` and `component RadioListItem Card VStack Heading`. All selected components were found. An earlier Alert lookup failed; discovery selected Banner instead. Ignored the CLI's incidental init suggestion. Read existing App.tsx/styles.css to confirm Theme/neutralTheme and all three CSS imports; do not recreate setup.
+Inspected installed component docs using `corepack pnpm --filter web astryx component --list`, then `component TextInput Button RadioList Banner` and `component RadioListItem Card VStack Heading`. All selected components were found. An earlier Alert lookup failed; discovery selected Banner instead. Ignored the CLI's incidental init suggestion. Read existing App.tsx/styles.css to confirm Theme/neutralTheme and all three CSS imports; do not recreate setup. This is historical evidence; current commands use `pnpm` directly as described in the [pnpm guide](../../docs/infrastructure/pnpm-without-corepack.md).
 
 | Selection                 | Observed API / resulting guidance                                                                                                                                                                         |
 | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
