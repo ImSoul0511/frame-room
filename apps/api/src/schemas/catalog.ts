@@ -183,3 +183,54 @@ export const ownedServiceSchema = serviceSchema.extend({
 
 export type ServiceInput = z.infer<typeof serviceInputSchema>;
 export type OwnedService = z.infer<typeof ownedServiceSchema>;
+
+// ---------- 102d: Portfolios & Images ----------
+
+export const portfolioListQuerySchema = paginationSchema.extend({
+  genre: genreSchema.optional(),
+  tag: z.string().trim().min(1).max(60).optional(),
+});
+
+export const ownedPortfolioSchema = portfolioInputSchema.extend({
+  id: idSchema,
+  ownerType: providerTypeSchema,
+  photographerId: idSchema.nullable(),
+  studioId: idSchema.nullable(),
+  publishedAt: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const portfolioImageInputSchema = z.object({
+  storagePath: z.string().trim().min(1).max(500),
+  caption: z.string().trim().max(500).default(''),
+  sortOrder: z.number().int().min(0).default(0),
+  tagIds: z.array(idSchema).max(20).default([]),
+});
+
+export const portfolioImageSchema = z.object({
+  id: idSchema,
+  portfolioId: idSchema,
+  storagePath: z.string(),
+  url: z.string().nullable(),
+  caption: z.string(),
+  sortOrder: z.number().int(),
+  isHidden: z.boolean(),
+  createdAt: z.string(),
+  tags: z.array(tagSchema),
+});
+
+export const portfolioDetailSchema = ownedPortfolioSchema.extend({
+  images: z.array(portfolioImageSchema),
+});
+
+export const portfolioImageTagsInputSchema = z.object({
+  tagIds: z.array(idSchema).max(20),
+});
+
+export type PortfolioListQuery = z.infer<typeof portfolioListQuerySchema>;
+export type PortfolioInput = z.infer<typeof portfolioInputSchema>;
+export type OwnedPortfolio = z.infer<typeof ownedPortfolioSchema>;
+export type PortfolioImageInput = z.infer<typeof portfolioImageInputSchema>;
+export type PortfolioImage = z.infer<typeof portfolioImageSchema>;
+export type PortfolioDetail = z.infer<typeof portfolioDetailSchema>;

@@ -14,6 +14,14 @@ import {
   studioTeamMemberSchema,
   ownedServiceSchema,
   serviceInputSchema,
+  ownedPortfolioSchema,
+  portfolioDetailSchema,
+  portfolioImageInputSchema,
+  portfolioImageSchema,
+  portfolioImageTagsInputSchema,
+  portfolioInputSchema,
+  portfolioListQuerySchema,
+  publicPortfolioSchema,
 } from '../schemas/catalog.js';
 import * as catalog from '../services/catalog.js';
 
@@ -176,6 +184,123 @@ export const catalogModule: ApiModule = {
         await transaction((tx) => catalog.deleteService(tx, actor.id, params.id));
         return undefined;
       },
+    });
+    // ---------- 102d: Portfolios & Images ----------
+    defineRoute(app, deps, {
+      method: 'GET',
+      url: '/v1/me/portfolios',
+      summary: 'List non-deleted portfolios owned by the caller or their managed studios.',
+      access: 'verified',
+      response: z.array(ownedPortfolioSchema),
+      handler: ({ actor, transaction }) =>
+        transaction((tx) => catalog.listMyPortfolios(tx, actor.id)),
+    });
+
+    defineRoute(app, deps, {
+      method: 'GET',
+      url: '/v1/portfolios',
+      summary: 'Browse published portfolios with optional genre and tag filters.',
+      access: 'public',
+      query: portfolioListQuerySchema,
+      response: z.array(publicPortfolioSchema),
+      handler: ({ query, transaction }) =>
+        transaction((tx) => catalog.listPublicPortfolios(tx, query, deps.env.SUPABASE_URL)),
+    });
+
+    defineRoute(app, deps, {
+      method: 'GET',
+      url: '/v1/portfolios/:id',
+      summary: 'Get portfolio detail with visible images and their tags.',
+      access: 'public',
+      params: idParamsSchema,
+      response: portfolioDetailSchema,
+      errors: [404],
+      handler: ({ params, transaction }) =>
+        transaction((tx) =>
+          catalog.getPortfolioDetail(tx, params.id, undefined, deps.env.SUPABASE_URL),
+        ),
+    });
+
+    defineRoute(app, deps, {
+      method: 'POST',
+      url: '/v1/portfolios',
+      summary: 'Create a personal photographer portfolio.',
+      access: 'verified',
+      body: portfolioInputSchema,
+      response: ownedPortfolioSchema,
+      errors: [403],
+      handler: ({ actor, body, transaction }) =>
+        transaction((tx) => catalog.createPersonalPortfolio(tx, actor.id, body)),
+    });
+
+    defineRoute(app, deps, {
+      method: 'POST',
+      url: '/v1/studios/:id/portfolios',
+      summary: 'Create a portfolio owned by a studio (current manager only).',
+      access: 'verified',
+      params: idParamsSchema,
+      body: portfolioInputSchema,
+      response: ownedPortfolioSchema,
+      errors: [403],
+      handler: ({ actor, params, body, transaction }) =>
+        transaction((tx) => catalog.createStudioPortfolio(tx, actor.id, params.id, body)),
+    });
+
+    defineRoute(app, deps, {
+      method: 'PATCH',
+      url: '/v1/portfolios/:id',
+      summary: 'Update an owned photographer or studio portfolio.',
+      access: 'verified',
+      params: idParamsSchema,
+      body: portfolioInputSchema,
+      response: ownedPortfolioSchema,
+      errors: [403],
+      handler: ({ actor, params, body, transaction }) =>
+        transaction((tx) => catalog.updatePortfolio(tx, actor.id, params.id, body)),
+    });
+
+    defineRoute(app, deps, {
+      method: 'DELETE',
+      url: '/v1/portfolios/:id',
+      summary: 'Soft-delete an owned portfolio.',
+      access: 'verified',
+      params: idParamsSchema,
+      status: 204,
+      envelope: false,
+      response: z.undefined(),
+      errors: [403],
+      handler: async ({ actor, params, transaction }) => {
+        await transaction((tx) => catalog.deletePortfolio(tx, actor.id, params.id));
+        return undefined;
+      },
+    });
+
+    defineRoute(app, deps, {
+      method: 'POST',
+      url: '/v1/portfolios/:id/images',
+      summary: 'Attach an uploaded image to an owned portfolio with optional tags.',
+      access: 'verified',
+      params: idParamsSchema,
+      body: portfolioImageInputSchema,
+      response: portfolioImageSchema,
+      errors: [403],
+      handler: ({ actor, params, body, transaction }) =>
+        transaction((tx) =>
+          catalog.addPortfolioImage(tx, actor.id, params.id, body, deps.env.SUPABASE_URL),
+        ),
+    });
+
+    defineRoute(app, deps, {
+      method: 'PATCH',
+      url: '/v1/portfolio-images/:id/tags',
+      summary: 'Replace tag assignments on a portfolio image.',
+      access: 'verified',
+      params: idParamsSchema,
+      body: portfolioImageTagsInputSchema,
+      response: z.array(tagSchema),
+      errors: [403],
+      handler: ({ actor, params, body, transaction }) =>
+        transaction((tx) => catalog.setPortfolioImageTags(tx, actor.id, params.id, body.tagIds)),
     });
   },
 };

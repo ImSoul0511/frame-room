@@ -11,6 +11,10 @@ import type {
   Tag,
   OwnedService,
   ServiceInput,
+  OwnedPortfolio,
+  PortfolioImageInput,
+  PortfolioInput,
+  PortfolioListQuery,
 } from '../schemas/catalog.js';
 import type { Transaction } from './database.js';
 
@@ -460,4 +464,259 @@ export async function softDeleteService(tx: Transaction, serviceId: string): Pro
     'update services set deleted_at = now(), is_active = false, updated_at = now() where id = $1',
     [serviceId],
   );
+}
+
+// ---------- 102d: Portfolios & Images ----------
+
+export interface PortfolioImageRow {
+  id: string;
+  portfolioId: string;
+  storagePath: string;
+  caption: string;
+  sortOrder: number;
+  isHidden: boolean;
+  createdAt: string;
+}
+
+/** Lists all non-deleted portfolios owned by the caller's photographer profile or managed studios. */
+export async function listOwnedPortfolios(
+  tx: Transaction,
+  userId: string,
+): Promise<OwnedPortfolio[]> {
+  return tx.rows<OwnedPortfolio>(
+    `select po.id, po.title, po.description, po.genre, po.status, po.owner_type,
+            po.photographer_id, po.studio_id, po.published_at, po.created_at, po.updated_at
+     from portfolios po
+     where po.deleted_at is null
+       and (
+         (po.photographer_id is not null and exists (
+           select 1 from photographers p where p.id = po.photographer_id and p.user_id = $1
+         ))
+         or
+         (po.studio_id is not null and exists (
+           select 1 from studio_members m
+           join studios st on st.id = m.studio_id
+           where m.studio_id = po.studio_id
+             and m.user_id = $1
+             and m.role = 'manager'
+             and st.deleted_at is null
+         ))
+       )
+     order by po.updated_at desc`,
+    [userId],
+  );
+}
+
+/** Lists published portfolios from visible providers with optional genre and tag slug filters. */
+export async function listPublicPortfolios(
+  tx: Transaction,
+  filters: PortfolioListQuery,
+): Promise<PublicPortfolio[]> {
+  const conditions: string[] = [
+    `po.status = 'published'`,
+    `po.deleted_at is null`,
+    `exists (select 1 from providers pr where pr.id = coalesce(po.photographer_id, po.studio_id))`,
+  ];
+  const values: unknown[] = [];
+
+  if (filters.genre) {
+    values.push(filters.genre);
+    conditions.push(`po.genre = $${values.length}`);
+  }
+  if (filters.tag) {
+    values.push(filters.tag);
+    conditions.push(
+      `exists (
+        select 1 from portfolio_images pi
+        join image_tags it on it.portfolio_image_id = pi.id
+        join tags t on t.id = it.tag_id
+        where pi.portfolio_id = po.id and not pi.is_hidden and t.slug = $${values.length}
+      )`,
+    );
+  }
+
+  const limit = filters.pageSize;
+  const offset = (filters.page - 1) * filters.pageSize;
+  values.push(limit, offset);
+
+  return tx.rows<PublicPortfolio>(
+    `select po.id, po.title, po.description, po.genre, po.status, po.owner_type,
+            po.photographer_id, po.studio_id, po.published_at, po.created_at, po.updated_at
+     from portfolios po
+     where ${conditions.join(' and ')}
+     order by po.published_at desc nulls last, po.created_at desc
+     limit $${values.length - 1} offset $${values.length}`,
+    values,
+  );
+}
+
+/** Finds a non-deleted portfolio by id regardless of draft/published status. */
+export async function findPortfolioById(
+  tx: Transaction,
+  portfolioId: string,
+): Promise<OwnedPortfolio | undefined> {
+  return tx.optional<OwnedPortfolio>(
+    `select id, title, description, genre, status, owner_type,
+            photographer_id, studio_id, published_at, created_at, updated_at
+     from portfolios
+     where id = $1 and deleted_at is null`,
+    [portfolioId],
+  );
+}
+
+/** Checks whether a portfolio's owning provider is publicly visible (not hidden or deleted). */
+export async function isPortfolioProviderVisible(
+  tx: Transaction,
+  owner: { photographerId: string | null; studioId: string | null },
+): Promise<boolean> {
+  const providerId = owner.photographerId ?? owner.studioId;
+  if (!providerId) return false;
+  const row = await tx.optional<{ id: string }>('select id from providers where id = $1', [
+    providerId,
+  ]);
+  return row !== undefined;
+}
+
+/** Lists visible images in a portfolio ordered by sort_order. */
+export async function listVisiblePortfolioImages(
+  tx: Transaction,
+  portfolioId: string,
+): Promise<PortfolioImageRow[]> {
+  const rows = await tx.rows<PortfolioImageRow>(
+    `select id, portfolio_id, storage_path, caption, sort_order, is_hidden, created_at
+     from portfolio_images
+     where portfolio_id = $1 and not is_hidden
+     order by sort_order asc, created_at asc`,
+    [portfolioId],
+  );
+  return rows.map((r) => ({ ...r, sortOrder: Number(r.sortOrder) }));
+}
+
+/** Lists tags attached to a single portfolio image ordered by kind and name. */
+export async function listTagsForImage(tx: Transaction, imageId: string): Promise<Tag[]> {
+  return tx.rows<Tag>(
+    `select t.id, t.name, t.slug, t.kind
+     from tags t
+     join image_tags it on it.tag_id = t.id
+     where it.portfolio_image_id = $1
+     order by t.kind, t.name`,
+    [imageId],
+  );
+}
+
+/** Inserts a new personal photographer portfolio or studio portfolio. */
+export async function insertPortfolio(
+  tx: Transaction,
+  owner:
+    | { ownerType: 'photographer'; photographerId: string }
+    | { ownerType: 'studio'; studioId: string },
+  input: PortfolioInput,
+): Promise<OwnedPortfolio> {
+  const photographerId = owner.ownerType === 'photographer' ? owner.photographerId : null;
+  const studioId = owner.ownerType === 'studio' ? owner.studioId : null;
+  const publishedAt = input.status === 'published' ? new Date().toISOString() : null;
+
+  return tx.one<OwnedPortfolio>(
+    `insert into portfolios (
+       owner_type, photographer_id, studio_id, title, description, genre, status, published_at
+     )
+     values ($1, $2, $3, $4, $5, $6, $7, $8)
+     returning id, title, description, genre, status, owner_type, photographer_id, studio_id,
+               published_at, created_at, updated_at`,
+    [
+      owner.ownerType,
+      photographerId,
+      studioId,
+      input.title,
+      input.description,
+      input.genre,
+      input.status,
+      publishedAt,
+    ],
+  );
+}
+
+/** Updates an existing non-deleted portfolio, setting published_at on first publish. */
+export async function updatePortfolio(
+  tx: Transaction,
+  portfolioId: string,
+  input: PortfolioInput,
+): Promise<OwnedPortfolio> {
+  return tx.one<OwnedPortfolio>(
+    `update portfolios
+     set title = $2,
+         description = $3,
+         genre = $4,
+         status = $5,
+         published_at = case
+           when $5 = 'published' then coalesce(published_at, now())
+           else published_at
+         end,
+         updated_at = now()
+     where id = $1 and deleted_at is null
+     returning id, title, description, genre, status, owner_type, photographer_id, studio_id,
+               published_at, created_at, updated_at`,
+    [portfolioId, input.title, input.description, input.genre, input.status],
+  );
+}
+
+/** Soft-deletes a portfolio. */
+export async function softDeletePortfolio(tx: Transaction, portfolioId: string): Promise<void> {
+  await tx.execute('update portfolios set deleted_at = now(), updated_at = now() where id = $1', [
+    portfolioId,
+  ]);
+}
+
+/** Inserts an image row into a portfolio. */
+export async function insertPortfolioImage(
+  tx: Transaction,
+  portfolioId: string,
+  input: PortfolioImageInput,
+): Promise<PortfolioImageRow> {
+  const row = await tx.one<PortfolioImageRow>(
+    `insert into portfolio_images (portfolio_id, storage_path, caption, sort_order)
+     values ($1, $2, $3, $4)
+     returning id, portfolio_id, storage_path, caption, sort_order, is_hidden, created_at`,
+    [portfolioId, input.storagePath, input.caption, input.sortOrder],
+  );
+  return { ...row, sortOrder: Number(row.sortOrder) };
+}
+
+/** Finds the owning portfolio of a non-deleted portfolio image. */
+export async function findImagePortfolioOwnership(
+  tx: Transaction,
+  imageId: string,
+): Promise<
+  | { imageId: string; portfolioId: string; photographerId: string | null; studioId: string | null }
+  | undefined
+> {
+  return tx.optional<{
+    imageId: string;
+    portfolioId: string;
+    photographerId: string | null;
+    studioId: string | null;
+  }>(
+    `select pi.id as image_id, po.id as portfolio_id, po.photographer_id, po.studio_id
+     from portfolio_images pi
+     join portfolios po on po.id = pi.portfolio_id
+     where pi.id = $1 and po.deleted_at is null`,
+    [imageId],
+  );
+}
+
+/** Replaces all tag assignments on a portfolio image and returns the resulting tags. */
+export async function replacePortfolioImageTags(
+  tx: Transaction,
+  imageId: string,
+  tagIds: string[],
+): Promise<Tag[]> {
+  await tx.execute('delete from image_tags where portfolio_image_id = $1', [imageId]);
+  const uniqueIds = [...new Set(tagIds)];
+  for (const tagId of uniqueIds) {
+    await tx.execute(
+      'insert into image_tags (portfolio_image_id, tag_id) values ($1, $2) on conflict do nothing',
+      [imageId, tagId],
+    );
+  }
+  return listTagsForImage(tx, imageId);
 }

@@ -11,6 +11,7 @@ import type {
   Service,
   Studio,
   OwnedService,
+  OwnedPortfolio,
 } from '../schemas/catalog.js';
 
 vi.mock('../repositories/catalog.js');
@@ -575,5 +576,243 @@ describe('PATCH /v1/services/:id and DELETE /v1/services/:id', () => {
     expect(res.statusCode).toBe(204);
     expect(res.body).toBe('');
     expect(repo.softDeleteService).toHaveBeenCalledWith(expect.anything(), SERVICE_ID);
+  });
+});
+
+// ---------- 102d: Portfolios & Images ----------
+
+const IMAGE_ID = '55555555-5555-4555-8555-555555555555';
+
+const PORTFOLIO_INPUT = {
+  title: 'Golden Hour Portraits',
+  description: 'Shot in Saigon at sunset',
+  genre: 'portrait' as const,
+  status: 'published' as const,
+};
+
+const OWNED_PORTFOLIO: OwnedPortfolio = {
+  ...PORTFOLIO_INPUT,
+  id: PORTFOLIO_ID,
+  ownerType: 'photographer',
+  photographerId: PHOTOGRAPHER_ID,
+  studioId: null,
+  publishedAt: '2026-11-13T00:00:00.000Z',
+  createdAt: '2026-11-13T00:00:00.000Z',
+  updatedAt: '2026-11-13T00:00:00.000Z',
+};
+
+describe('GET /v1/me/portfolios and GET /v1/portfolios', () => {
+  it('lists portfolios owned by the caller (200)', async () => {
+    vi.mocked(repo.listOwnedPortfolios).mockResolvedValue([OWNED_PORTFOLIO]);
+    const app = await buildTestApp();
+    const res = await app.inject({ method: 'GET', url: '/v1/me/portfolios', headers: AUTH });
+    expect(res.statusCode).toBe(200);
+    expect(bodyData(res)).toEqual([expect.objectContaining({ id: PORTFOLIO_ID })]);
+  });
+
+  it('lists public published portfolios with coverUrl (200)', async () => {
+    vi.mocked(repo.listPublicPortfolios).mockResolvedValue([OWNED_PORTFOLIO]);
+    vi.mocked(repo.findPortfolioCoverPath).mockResolvedValue('covers/golden.jpg');
+
+    const app = await buildTestApp();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/portfolios?genre=portrait&tag=warm-tone',
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(bodyData(res)).toEqual([
+      expect.objectContaining({
+        id: PORTFOLIO_ID,
+        coverUrl: 'covers/golden.jpg',
+      }),
+    ]);
+  });
+});
+
+describe('GET /v1/portfolios/:id', () => {
+  it('returns published portfolio detail with images and tags (200)', async () => {
+    vi.mocked(repo.findPortfolioById).mockResolvedValue(OWNED_PORTFOLIO);
+    vi.mocked(repo.isPortfolioProviderVisible).mockResolvedValue(true);
+    vi.mocked(repo.listVisiblePortfolioImages).mockResolvedValue([
+      {
+        id: IMAGE_ID,
+        portfolioId: PORTFOLIO_ID,
+        storagePath: 'p/img1.jpg',
+        caption: 'Frame 1',
+        sortOrder: 0,
+        isHidden: false,
+        createdAt: '2026-11-13T00:00:00.000Z',
+      },
+    ]);
+    vi.mocked(repo.listTagsForImage).mockResolvedValue([TAG]);
+
+    const app = await buildTestApp();
+    const res = await app.inject({ method: 'GET', url: `/v1/portfolios/${PORTFOLIO_ID}` });
+
+    expect(res.statusCode).toBe(200);
+    expect(bodyData(res)).toMatchObject({
+      id: PORTFOLIO_ID,
+      images: [
+        expect.objectContaining({
+          id: IMAGE_ID,
+          url: 'p/img1.jpg',
+          tags: [TAG],
+        }),
+      ],
+    });
+  });
+
+  it('returns 404 portfolio_not_found for a draft portfolio requested by non-owner', async () => {
+    vi.mocked(repo.findPortfolioById).mockResolvedValue({ ...OWNED_PORTFOLIO, status: 'draft' });
+
+    const app = await buildTestApp();
+    const res = await app.inject({ method: 'GET', url: `/v1/portfolios/${PORTFOLIO_ID}` });
+
+    expect(res.statusCode).toBe(404);
+    expect(res.body).toContain('portfolio_not_found');
+  });
+});
+
+describe('POST /v1/portfolios, POST /v1/studios/:id/portfolios, PATCH & DELETE /v1/portfolios/:id', () => {
+  it('creates a personal portfolio (201)', async () => {
+    vi.mocked(repo.findPhotographerIdByUser).mockResolvedValue(PHOTOGRAPHER_ID);
+    vi.mocked(repo.insertPortfolio).mockResolvedValue(OWNED_PORTFOLIO);
+
+    const app = await buildTestApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/portfolios',
+      payload: PORTFOLIO_INPUT,
+      headers: AUTH,
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(bodyData(res)).toMatchObject({ id: PORTFOLIO_ID, ownerType: 'photographer' });
+  });
+
+  it('creates a studio portfolio for a manager (201)', async () => {
+    vi.mocked(repo.isStudioManager).mockResolvedValue(true);
+    vi.mocked(repo.insertPortfolio).mockResolvedValue({
+      ...OWNED_PORTFOLIO,
+      ownerType: 'studio',
+      photographerId: null,
+      studioId: STUDIO_ID,
+    });
+
+    const app = await buildTestApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: `/v1/studios/${STUDIO_ID}/portfolios`,
+      payload: PORTFOLIO_INPUT,
+      headers: AUTH,
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(bodyData(res)).toMatchObject({ ownerType: 'studio', studioId: STUDIO_ID });
+  });
+
+  it('updates an owned portfolio (200) and soft-deletes it (204)', async () => {
+    vi.mocked(repo.findPortfolioById).mockResolvedValue(OWNED_PORTFOLIO);
+    vi.mocked(repo.findPhotographerIdByUser).mockResolvedValue(PHOTOGRAPHER_ID);
+    vi.mocked(repo.updatePortfolio).mockResolvedValue({ ...OWNED_PORTFOLIO, title: 'Updated' });
+
+    const app = await buildTestApp();
+    const patchRes = await app.inject({
+      method: 'PATCH',
+      url: `/v1/portfolios/${PORTFOLIO_ID}`,
+      payload: { ...PORTFOLIO_INPUT, title: 'Updated' },
+      headers: AUTH,
+    });
+    expect(patchRes.statusCode).toBe(200);
+    expect(bodyData(patchRes)).toMatchObject({ title: 'Updated' });
+
+    const delRes = await app.inject({
+      method: 'DELETE',
+      url: `/v1/portfolios/${PORTFOLIO_ID}`,
+      headers: AUTH,
+    });
+    expect(delRes.statusCode).toBe(204);
+    expect(repo.softDeletePortfolio).toHaveBeenCalledWith(expect.anything(), PORTFOLIO_ID);
+  });
+});
+
+describe('POST /v1/portfolios/:id/images and PATCH /v1/portfolio-images/:id/tags', () => {
+  it('attaches an image with tags to an owned portfolio (201)', async () => {
+    vi.mocked(repo.findPortfolioById).mockResolvedValue(OWNED_PORTFOLIO);
+    vi.mocked(repo.findPhotographerIdByUser).mockResolvedValue(PHOTOGRAPHER_ID);
+    vi.mocked(repo.insertPortfolioImage).mockResolvedValue({
+      id: IMAGE_ID,
+      portfolioId: PORTFOLIO_ID,
+      storagePath: 'p/new.jpg',
+      caption: 'New frame',
+      sortOrder: 1,
+      isHidden: false,
+      createdAt: '2026-11-13T00:00:00.000Z',
+    });
+    vi.mocked(repo.replacePortfolioImageTags).mockResolvedValue([TAG]);
+
+    const app = await buildTestApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: `/v1/portfolios/${PORTFOLIO_ID}/images`,
+      payload: {
+        storagePath: 'p/new.jpg',
+        caption: 'New frame',
+        sortOrder: 1,
+        tagIds: [TAG.id],
+      },
+      headers: AUTH,
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(bodyData(res)).toMatchObject({
+      id: IMAGE_ID,
+      url: 'p/new.jpg',
+      tags: [TAG],
+    });
+  });
+
+  it('replaces tags on an owned portfolio image (200)', async () => {
+    vi.mocked(repo.findImagePortfolioOwnership).mockResolvedValue({
+      imageId: IMAGE_ID,
+      portfolioId: PORTFOLIO_ID,
+      photographerId: PHOTOGRAPHER_ID,
+      studioId: null,
+    });
+    vi.mocked(repo.findPhotographerIdByUser).mockResolvedValue(PHOTOGRAPHER_ID);
+    vi.mocked(repo.replacePortfolioImageTags).mockResolvedValue([TAG]);
+
+    const app = await buildTestApp();
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/v1/portfolio-images/${IMAGE_ID}/tags`,
+      payload: { tagIds: [TAG.id] },
+      headers: AUTH,
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(bodyData(res)).toEqual([TAG]);
+  });
+
+  it('returns 403 not_provider_owner when modifying tags on another user image', async () => {
+    vi.mocked(repo.findImagePortfolioOwnership).mockResolvedValue({
+      imageId: IMAGE_ID,
+      portfolioId: PORTFOLIO_ID,
+      photographerId: PHOTOGRAPHER_ID,
+      studioId: null,
+    });
+    vi.mocked(repo.findPhotographerIdByUser).mockResolvedValue(NONE);
+
+    const app = await buildTestApp();
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/v1/portfolio-images/${IMAGE_ID}/tags`,
+      payload: { tagIds: [TAG.id] },
+      headers: AUTH,
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(res.body).toContain('not_provider_owner');
   });
 });
