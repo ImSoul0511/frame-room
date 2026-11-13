@@ -5,40 +5,42 @@ import {
   exploreProviderSchema,
   exploreQuerySchema,
   idParamsSchema,
-  providerDetailSchema,
-  providerSchema,
-  tagSchema,
+  myInvitationSchema,
   myStudioSchema,
-  studioInputSchema,
-  studioSchema,
-  studioTeamMemberSchema,
-  ownedServiceSchema,
-  serviceInputSchema,
   ownedPortfolioSchema,
+  ownedServiceSchema,
   portfolioDetailSchema,
   portfolioImageInputSchema,
   portfolioImageSchema,
   portfolioImageTagsInputSchema,
   portfolioInputSchema,
   portfolioListQuerySchema,
+  providerDetailSchema,
+  providerListQuerySchema,
+  providerSchema,
   publicPortfolioSchema,
-  myInvitationSchema,
   respondInvitationInputSchema,
   serviceAddOnInputSchema,
   serviceAddOnSchema,
+  serviceInputSchema,
+  studioInputSchema,
   studioInvitationInputSchema,
   studioInvitationSchema,
   studioMemberParamsSchema,
   studioResourceInputSchema,
   studioResourceSchema,
+  studioSchema,
+  studioTeamMemberSchema,
+  tagSchema,
   updateStudioMemberRoleInputSchema,
 } from '../schemas/catalog.js';
 import * as catalog from '../services/catalog.js';
 
-/** 102a: Public discovery routes (/v1/explore, /v1/photographers, /v1/studios, /v1/tags). */
+/** 102: Provider discovery and catalog routes (/v1/*). */
 export const catalogModule: ApiModule = {
   name: 'catalog',
   register(app, deps) {
+    // ---------- 102a: Public discovery ----------
     defineRoute(app, deps, {
       method: 'GET',
       url: '/v1/explore',
@@ -57,10 +59,12 @@ export const catalogModule: ApiModule = {
       defineRoute(app, deps, {
         method: 'GET',
         url: `/v1/${plural}`,
-        summary: `List visible public ${plural}.`,
+        summary: `List visible public ${plural} with pagination and filters.`,
         access: 'public',
+        query: providerListQuerySchema,
         response: z.array(providerSchema),
-        handler: ({ transaction }) => transaction((tx) => catalog.listProviders(tx, type)),
+        handler: ({ query, transaction }) =>
+          transaction((tx) => catalog.listProviders(tx, type, query)),
       });
 
       defineRoute(app, deps, {
@@ -85,6 +89,7 @@ export const catalogModule: ApiModule = {
       response: z.array(tagSchema),
       handler: ({ transaction }) => transaction((tx) => catalog.getAllTags(tx)),
     });
+
     // ---------- 102b: Studios & Team ----------
     defineRoute(app, deps, {
       method: 'GET',
@@ -131,6 +136,7 @@ export const catalogModule: ApiModule = {
       handler: ({ actor, params, transaction }) =>
         transaction((tx) => catalog.getStudioTeam(tx, actor.id, params.id)),
     });
+
     // ---------- 102c: Services ----------
     defineRoute(app, deps, {
       method: 'GET',
@@ -195,6 +201,7 @@ export const catalogModule: ApiModule = {
         return undefined;
       },
     });
+
     // ---------- 102d: Portfolios & Images ----------
     defineRoute(app, deps, {
       method: 'GET',
@@ -220,15 +227,13 @@ export const catalogModule: ApiModule = {
     defineRoute(app, deps, {
       method: 'GET',
       url: '/v1/portfolios/:id',
-      summary: 'Get portfolio detail with visible images and their tags.',
+      summary: 'Get published portfolio detail with visible images and their tags.',
       access: 'public',
       params: idParamsSchema,
       response: portfolioDetailSchema,
       errors: [404],
       handler: ({ params, transaction }) =>
-        transaction((tx) =>
-          catalog.getPortfolioDetail(tx, params.id, undefined, deps.env.SUPABASE_URL),
-        ),
+        transaction((tx) => catalog.getPortfolioDetail(tx, params.id, deps.env.SUPABASE_URL)),
     });
 
     defineRoute(app, deps, {
@@ -288,7 +293,7 @@ export const catalogModule: ApiModule = {
     defineRoute(app, deps, {
       method: 'POST',
       url: '/v1/portfolios/:id/images',
-      summary: 'Attach an uploaded image to an owned portfolio with optional tags.',
+      summary: 'Attach an uploaded image to an owned portfolio with provenance and optional tags.',
       access: 'verified',
       params: idParamsSchema,
       body: portfolioImageInputSchema,
@@ -312,6 +317,7 @@ export const catalogModule: ApiModule = {
       handler: ({ actor, params, body, transaction }) =>
         transaction((tx) => catalog.setPortfolioImageTags(tx, actor.id, params.id, body.tagIds)),
     });
+
     // ---------- 102e: Invitations, Members, Resources & Add-ons ----------
     defineRoute(app, deps, {
       method: 'GET',
@@ -339,14 +345,14 @@ export const catalogModule: ApiModule = {
     defineRoute(app, deps, {
       method: 'PATCH',
       url: '/v1/invitations/:id',
-      summary: 'Accept or decline a pending studio invitation.',
+      summary: 'Accept, decline, or revoke a pending studio invitation.',
       access: 'verified',
       params: idParamsSchema,
       body: respondInvitationInputSchema,
       response: studioInvitationSchema,
       errors: [403, 409],
       handler: ({ actor, params, body, transaction }) =>
-        transaction((tx) => catalog.respondToInvitation(tx, actor.id, params.id, body.action)),
+        transaction((tx) => catalog.respondToInvitation(tx, actor.id, params.id, body.status)),
     });
 
     defineRoute(app, deps, {
@@ -386,12 +392,13 @@ export const catalogModule: ApiModule = {
     defineRoute(app, deps, {
       method: 'GET',
       url: '/v1/studios/:id/resources',
-      summary: 'List non-deleted resources of a studio.',
-      access: 'public',
+      summary: 'List non-deleted resources of a studio (current manager only).',
+      access: 'verified',
       params: idParamsSchema,
       response: z.array(studioResourceSchema),
-      handler: ({ params, transaction }) =>
-        transaction((tx) => catalog.listStudioResources(tx, params.id)),
+      errors: [403],
+      handler: ({ actor, params, transaction }) =>
+        transaction((tx) => catalog.listStudioResources(tx, actor.id, params.id)),
     });
 
     defineRoute(app, deps, {
@@ -439,10 +446,11 @@ export const catalogModule: ApiModule = {
     defineRoute(app, deps, {
       method: 'GET',
       url: '/v1/services/:id/add-ons',
-      summary: 'List non-deleted add-ons for a service.',
+      summary: 'List active add-ons for an active service of a visible provider.',
       access: 'public',
       params: idParamsSchema,
       response: z.array(serviceAddOnSchema),
+      errors: [404],
       handler: ({ params, transaction }) =>
         transaction((tx) => catalog.listServiceAddOns(tx, params.id)),
     });

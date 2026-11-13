@@ -19,8 +19,9 @@ export const providerTypeSchema = z.enum(['photographer', 'studio']);
 const shortText = z.string().trim().min(1).max(120);
 const description = z.string().trim().max(2000).default('');
 const nonnegative = z.number().int().min(0);
+const optionalFilterText = z.string().trim().min(1).max(100).optional();
 
-/** Shared `:id` UUID path parameter schema for detail and mutation routes. */
+/** Shared `:id` UUID path parameter for detail routes. */
 export const idParamsSchema = z.object({
   id: idSchema,
 });
@@ -33,9 +34,16 @@ export const paginationSchema = z.object({
 /** Query parameters for GET /v1/explore. */
 export const exploreQuerySchema = paginationSchema.extend({
   genre: genreSchema.optional(),
-  city: z.string().trim().max(100).optional(),
-  district: z.string().trim().max(100).optional(),
+  city: optionalFilterText,
+  district: optionalFilterText,
   priceMax: z.coerce.number().int().min(0).optional(),
+});
+
+/** Query parameters for GET /v1/photographers and GET /v1/studios. */
+export const providerListQuerySchema = paginationSchema.extend({
+  genre: genreSchema.optional(),
+  city: optionalFilterText,
+  district: optionalFilterText,
 });
 
 export const providerSchema = z.object({
@@ -52,7 +60,7 @@ export const providerSchema = z.object({
   reviewCount: z.number(),
 });
 
-/** Explore provider card enriched with the cover URL from its first published portfolio image. */
+/** Provider card on the Explore page, with the cover URL of its first published portfolio image. */
 export const exploreProviderSchema = providerSchema.extend({
   coverUrl: z.string().nullable().optional(),
 });
@@ -75,6 +83,8 @@ export const serviceSchema = serviceInputSchema.extend({
   studioId: idSchema.nullable(),
 });
 
+export const portfolioStatusSchema = z.enum(['draft', 'published', 'hidden']);
+
 export const portfolioInputSchema = z.object({
   title: shortText,
   description,
@@ -82,9 +92,13 @@ export const portfolioInputSchema = z.object({
   status: z.enum(['draft', 'published']).default('draft'),
 });
 
-/** Published portfolio displayed on a public provider detail page. */
-export const publicPortfolioSchema = portfolioInputSchema.extend({
+/** Published portfolio shown on a public provider detail page. */
+export const publicPortfolioSchema = z.object({
   id: idSchema,
+  title: shortText,
+  description,
+  genre: genreSchema,
+  status: portfolioStatusSchema,
   ownerType: providerTypeSchema,
   photographerId: idSchema.nullable(),
   studioId: idSchema.nullable(),
@@ -94,7 +108,7 @@ export const publicPortfolioSchema = portfolioInputSchema.extend({
   coverUrl: z.string().nullable().optional(),
 });
 
-/** Publicly visible review displayed on a provider detail page. */
+/** Publicly visible review shown on a provider detail page. */
 export const publicReviewSchema = z.object({
   id: idSchema,
   bookingId: idSchema,
@@ -108,7 +122,7 @@ export const publicReviewSchema = z.object({
   updatedAt: z.string(),
 });
 
-/** Taxonomy tag (public.tags). */
+/** Tag taxonomy (bảng public.tags). */
 export const tagKindSchema = z.enum(['tone', 'setting', 'mood']);
 export const tagSchema = z.object({
   id: idSchema,
@@ -128,6 +142,7 @@ export const providerDetailSchema = z.object({
 export type Provider = z.infer<typeof providerSchema>;
 export type Service = z.infer<typeof serviceSchema>;
 export type ExploreQuery = z.infer<typeof exploreQuerySchema>;
+export type ProviderListQuery = z.infer<typeof providerListQuerySchema>;
 export type ExploreProvider = z.infer<typeof exploreProviderSchema>;
 export type Tag = z.infer<typeof tagSchema>;
 export type PublicPortfolio = z.infer<typeof publicPortfolioSchema>;
@@ -191,8 +206,12 @@ export const portfolioListQuerySchema = paginationSchema.extend({
   tag: z.string().trim().min(1).max(60).optional(),
 });
 
-export const ownedPortfolioSchema = portfolioInputSchema.extend({
+export const ownedPortfolioSchema = z.object({
   id: idSchema,
+  title: shortText,
+  description,
+  genre: genreSchema,
+  status: portfolioStatusSchema,
   ownerType: providerTypeSchema,
   photographerId: idSchema.nullable(),
   studioId: idSchema.nullable(),
@@ -201,10 +220,17 @@ export const ownedPortfolioSchema = portfolioInputSchema.extend({
   updatedAt: z.string(),
 });
 
+export const provenanceSchema = z.enum(['captured', 'manipulated', 'ai_generated']);
+
 export const portfolioImageInputSchema = z.object({
   storagePath: z.string().trim().min(1).max(500),
+  width: z.number().int().min(1),
+  height: z.number().int().min(1),
   caption: z.string().trim().max(500).default(''),
   sortOrder: z.number().int().min(0).default(0),
+  provenance: provenanceSchema.default('captured'),
+  source: z.string().trim().max(300).nullable().optional(),
+  licenseNote: z.string().trim().max(500).nullable().optional(),
   tagIds: z.array(idSchema).max(20).default([]),
 });
 
@@ -213,8 +239,13 @@ export const portfolioImageSchema = z.object({
   portfolioId: idSchema,
   storagePath: z.string(),
   url: z.string().nullable(),
+  width: z.number().int(),
+  height: z.number().int(),
   caption: z.string(),
   sortOrder: z.number().int(),
+  provenance: provenanceSchema,
+  source: z.string().nullable(),
+  licenseNote: z.string().nullable(),
   isHidden: z.boolean(),
   createdAt: z.string(),
   tags: z.array(tagSchema),
@@ -237,9 +268,9 @@ export type PortfolioDetail = z.infer<typeof portfolioDetailSchema>;
 
 // ---------- 102e: Invitations, Members, Resources & Add-ons ----------
 
-export const invitationStatusSchema = z.enum(['pending', 'accepted', 'declined', 'cancelled']);
+export const invitationStatusSchema = z.enum(['pending', 'accepted', 'declined', 'revoked']);
 
-export const resourceTypeSchema = z.enum(['room', 'equipment', 'backdrop', 'lighting', 'other']);
+export const resourceTypeSchema = z.enum(['room', 'equipment']);
 
 export const studioInvitationInputSchema = z.object({
   photographerId: idSchema,
@@ -264,7 +295,7 @@ export const myInvitationSchema = studioInvitationSchema.extend({
 });
 
 export const respondInvitationInputSchema = z.object({
-  action: z.enum(['accept', 'decline']),
+  status: z.enum(['accepted', 'declined', 'revoked']),
 });
 
 export const studioMemberParamsSchema = z.object({
@@ -273,7 +304,7 @@ export const studioMemberParamsSchema = z.object({
 });
 
 export const updateStudioMemberRoleInputSchema = z.object({
-  role: z.enum(['manager', 'photographer']),
+  role: studioMemberRoleSchema,
 });
 
 export const studioResourceInputSchema = z.object({

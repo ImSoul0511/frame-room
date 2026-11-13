@@ -1,46 +1,56 @@
+import type { Transaction } from './database.js';
 import type {
+  ExploreProvider,
   ExploreQuery,
+  MyInvitation,
   MyStudio,
-  Provider,
-  PublicPortfolio,
-  PublicReview,
-  Service,
-  Studio,
-  StudioInput,
-  StudioTeamMember,
-  Tag,
-  OwnedService,
-  ServiceInput,
   OwnedPortfolio,
+  OwnedService,
+  PortfolioImage,
   PortfolioImageInput,
   PortfolioInput,
   PortfolioListQuery,
-  MyInvitation,
+  Provider,
+  ProviderListQuery,
+  PublicPortfolio,
+  PublicReview,
+  Service,
   ServiceAddOn,
   ServiceAddOnInput,
+  ServiceInput,
+  Studio,
+  StudioInput,
   StudioInvitation,
   StudioInvitationInput,
   StudioResource,
   StudioResourceInput,
+  StudioTeamMember,
+  Tag,
 } from '../schemas/catalog.js';
-import type { Transaction } from './database.js';
 
-export type ProviderType = 'photographer' | 'studio';
+export type PortfolioImageRow = Omit<PortfolioImage, 'url' | 'tags'>;
 
-/**
- *  Coerces Postgres numeric/bigint string columns into JS numbers to satisfy providerSchema.
- */
+/** Coerces Postgres numeric/bigint string columns into JS numbers to satisfy providerSchema. */
 function coerceProvider(row: Provider): Provider {
   return {
     ...row,
     genres: row.genres ?? [],
     styles: row.styles ?? [],
-    priceFrom: row.priceFrom !== null && row.priceFrom !== undefined ? Number(row.priceFrom) : null,
-    ratingAvg: row.ratingAvg !== null && row.ratingAvg !== undefined ? Number(row.ratingAvg) : null,
+    priceFrom: row.priceFrom === null ? null : Number(row.priceFrom),
+    ratingAvg: row.ratingAvg === null ? null : Number(row.ratingAvg),
     reviewCount: Number(row.reviewCount ?? 0),
   };
 }
 
+/** Coerces a provider row with an optional cover image path for explore cards. */
+function coerceExploreProvider(row: ExploreProvider): ExploreProvider {
+  return {
+    ...coerceProvider(row),
+    coverUrl: row.coverUrl ?? null,
+  };
+}
+
+/** Coerces Postgres integer/numeric columns into JS numbers for serviceSchema. */
 function coerceService(row: Service): Service {
   return {
     ...row,
@@ -51,79 +61,124 @@ function coerceService(row: Service): Service {
   };
 }
 
-/** Queries public providers for GET /v1/explore with optional filters and pagination. */
+/** Coerces Postgres integer/numeric columns into JS numbers for ownedServiceSchema. */
+function coerceOwnedService(row: OwnedService): OwnedService {
+  return {
+    ...coerceService(row),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+/** Coerces Postgres numeric/integer price column into a JS number for serviceAddOnSchema. */
+function coerceServiceAddOn(row: ServiceAddOn): ServiceAddOn {
+  return {
+    ...row,
+    price: Number(row.price),
+  };
+}
+
+/**
+ * Defense-in-depth visibility guard on top of the public.providers view:
+ * guarantees hidden photographers and hidden or soft-deleted studios are never exposed.
+ */
+const VISIBLE_PROVIDER_SQL = `(
+  (p.type = 'photographer' and exists (
+    select 1 from photographers ph where ph.id = p.id and ph.is_hidden = false
+  ))
+  or
+  (p.type = 'studio' and exists (
+    select 1 from studios st where st.id = p.id and st.is_hidden = false and st.deleted_at is null
+  ))
+)`;
+
+/** Queries visible public providers for GET /v1/explore with filters, pagination, and cover image. */
 export async function discoverProviders(
   tx: Transaction,
-  filters: ExploreQuery,
-): Promise<Provider[]> {
-  const conditions: string[] = [];
-  const values: unknown[] = [];
+  query: ExploreQuery,
+): Promise<ExploreProvider[]> {
+  const conditions: string[] = [VISIBLE_PROVIDER_SQL];
+  const params: unknown[] = [];
 
-  if (filters.genre) {
-    values.push(filters.genre);
-    conditions.push(`$${values.length} = any(genres)`);
+  if (query.genre) {
+    params.push(query.genre);
+    conditions.push(`$${params.length}::genre = any(p.genres)`);
   }
-  if (filters.city) {
-    values.push(filters.city);
-    conditions.push(`lower(city) = lower($${values.length})`);
+  if (query.city) {
+    params.push(query.city);
+    conditions.push(`lower(p.city) = lower($${params.length})`);
   }
-  if (filters.district) {
-    values.push(filters.district);
-    conditions.push(`lower(district) = lower($${values.length})`);
+  if (query.district) {
+    params.push(query.district);
+    conditions.push(`lower(p.district) = lower($${params.length})`);
   }
-  if (filters.priceMax !== undefined) {
-    values.push(filters.priceMax);
-    conditions.push(`(price_from is not null and price_from <= $${values.length})`);
+  if (query.priceMax !== undefined) {
+    params.push(query.priceMax);
+    conditions.push(`p.price_from is not null and p.price_from <= $${params.length}`);
   }
 
-  const limit = filters.pageSize;
-  const offset = (filters.page - 1) * filters.pageSize;
-  values.push(limit, offset);
+  const limitParam = params.push(query.pageSize);
+  const offsetParam = params.push((query.page - 1) * query.pageSize);
+  const where = `where ${conditions.join(' and ')}`;
 
-  const where = conditions.length > 0 ? `where ${conditions.join(' and ')}` : '';
-  const rows = await tx.rows<Provider>(
-    `select id, type, display_name, bio, city, district, genres, styles, price_from, rating_avg, review_count
-     from providers
+  const rows = await tx.rows<ExploreProvider>(
+    `select p.id, p.type, p.display_name, p.bio, p.city, p.district,
+            p.genres, p.styles, p.price_from, p.rating_avg, p.review_count,
+            cover.storage_path as cover_url
+     from providers p
+     left join lateral (
+       select pi.storage_path
+       from portfolios pf
+       join portfolio_images pi on pi.portfolio_id = pf.id and pi.is_hidden = false
+       where pf.status = 'published'
+         and pf.deleted_at is null
+         and ((p.type = 'photographer' and pf.photographer_id = p.id)
+           or (p.type = 'studio' and pf.studio_id = p.id))
+       order by pf.published_at desc nulls last, pi.sort_order, pi.created_at
+       limit 1
+     ) cover on true
      ${where}
-     order by rating_avg desc nulls last, review_count desc, display_name asc
-     limit $${values.length - 1} offset $${values.length}`,
-    values,
+     order by p.rating_avg desc nulls last, p.review_count desc, p.display_name
+     limit $${limitParam} offset $${offsetParam}`,
+    params,
   );
-  return rows.map(coerceProvider);
+
+  return rows.map(coerceExploreProvider);
 }
 
-/** Finds the storage path of the first visible image across a provider's published portfolios. */
-export async function findProviderCoverPath(
-  tx: Transaction,
-  providerId: string,
-): Promise<string | undefined> {
-  const row = await tx.optional<{ storagePath: string }>(
-    `select i.storage_path
-     from portfolio_images i
-     join portfolios po on po.id = i.portfolio_id
-     where coalesce(po.photographer_id, po.studio_id) = $1
-       and po.status = 'published'
-       and po.deleted_at is null
-       and not i.is_hidden
-     order by i.sort_order
-     limit 1`,
-    [providerId],
-  );
-  return row?.storagePath;
-}
-
-/** Lists up to 50 visible providers by type for GET /v1/photographers and GET /v1/studios. */
+/** Lists visible public providers by type with optional filters and pagination. */
 export async function listProvidersByType(
   tx: Transaction,
-  type: ProviderType,
+  type: 'photographer' | 'studio',
+  query: ProviderListQuery,
 ): Promise<Provider[]> {
+  const conditions: string[] = ['p.type = $1', VISIBLE_PROVIDER_SQL];
+  const params: unknown[] = [type];
+
+  if (query.genre) {
+    params.push(query.genre);
+    conditions.push(`$${params.length}::genre = any(p.genres)`);
+  }
+  if (query.city) {
+    params.push(query.city);
+    conditions.push(`lower(p.city) = lower($${params.length})`);
+  }
+  if (query.district) {
+    params.push(query.district);
+    conditions.push(`lower(p.district) = lower($${params.length})`);
+  }
+
+  const limitParam = params.push(query.pageSize);
+  const offsetParam = params.push((query.page - 1) * query.pageSize);
+
   const rows = await tx.rows<Provider>(
-    `select id, type, display_name, bio, city, district, genres, styles, price_from, rating_avg, review_count
-     from providers
-     where type = $1
-     order by display_name
-     limit 50`,
-    [type],
+    `select p.id, p.type, p.display_name, p.bio, p.city, p.district,
+            p.genres, p.styles, p.price_from, p.rating_avg, p.review_count
+     from providers p
+     where ${conditions.join(' and ')}
+     order by p.rating_avg desc nulls last, p.review_count desc, p.display_name
+     limit $${limitParam} offset $${offsetParam}`,
+    params,
   );
   return rows.map(coerceProvider);
 }
@@ -131,14 +186,15 @@ export async function listProvidersByType(
 /** Finds a single visible provider by id and type. */
 export async function findProviderById(
   tx: Transaction,
-  type: ProviderType,
+  type: 'photographer' | 'studio',
   id: string,
 ): Promise<Provider | undefined> {
   const row = await tx.optional<Provider>(
-    `select id, type, display_name, bio, city, district, genres, styles, price_from, rating_avg, review_count
-     from providers
-     where id = $1 and type = $2`,
-    [id, type],
+    `select p.id, p.type, p.display_name, p.bio, p.city, p.district,
+            p.genres, p.styles, p.price_from, p.rating_avg, p.review_count
+     from providers p
+     where p.type = $1 and p.id = $2 and ${VISIBLE_PROVIDER_SQL}`,
+    [type, id],
   );
   return row ? coerceProvider(row) : undefined;
 }
@@ -146,66 +202,63 @@ export async function findProviderById(
 /** Lists active, non-deleted services offered by a provider. */
 export async function listActiveServicesByProvider(
   tx: Transaction,
-  type: ProviderType,
+  type: 'photographer' | 'studio',
   providerId: string,
 ): Promise<Service[]> {
-  const column = type === 'studio' ? 'studio_id' : 'photographer_id';
+  const column = type === 'photographer' ? 'photographer_id' : 'studio_id';
   const rows = await tx.rows<Service>(
-    `select id, name, description, genre, duration_minutes, price, photo_count, retouched_count, is_active, owner_type, photographer_id, studio_id
+    `select id, name, description, genre, duration_minutes, price,
+            photo_count, retouched_count, is_active,
+            owner_type, photographer_id, studio_id
      from services
-     where ${column} = $1 and is_active and deleted_at is null
-     order by price`,
+     where ${column} = $1 and is_active = true and deleted_at is null
+     order by price, name`,
     [providerId],
   );
   return rows.map(coerceService);
 }
 
-/** Lists published, non-deleted portfolios owned by a provider. */
+/** Lists published, non-deleted portfolios owned by a provider with their cover image path. */
 export async function listPublishedPortfoliosByProvider(
   tx: Transaction,
-  type: ProviderType,
+  type: 'photographer' | 'studio',
   providerId: string,
 ): Promise<PublicPortfolio[]> {
-  const column = type === 'studio' ? 'studio_id' : 'photographer_id';
+  const column = type === 'photographer' ? 'photographer_id' : 'studio_id';
   return tx.rows<PublicPortfolio>(
-    `select id, title, description, genre, status, owner_type, photographer_id, studio_id, published_at, created_at, updated_at
-     from portfolios
-     where ${column} = $1 and status = 'published' and deleted_at is null
-     order by published_at desc nulls last`,
+    `select pf.id, pf.title, pf.description, pf.genre, pf.status,
+            pf.owner_type, pf.photographer_id, pf.studio_id,
+            pf.published_at, pf.created_at, pf.updated_at,
+            cover.storage_path as cover_url
+     from portfolios pf
+     left join lateral (
+       select storage_path from portfolio_images
+       where portfolio_id = pf.id and is_hidden = false
+       order by sort_order, created_at limit 1
+     ) cover on true
+     where pf.${column} = $1 and pf.status = 'published' and pf.deleted_at is null
+     order by pf.published_at desc nulls last, pf.created_at desc`,
     [providerId],
   );
 }
 
-/** Finds the storage path of the first visible image in a portfolio to use as its cover. */
-export async function findPortfolioCoverPath(
-  tx: Transaction,
-  portfolioId: string,
-): Promise<string | undefined> {
-  const row = await tx.optional<{ storagePath: string }>(
-    `select storage_path
-     from portfolio_images
-     where portfolio_id = $1 and not is_hidden
-     order by sort_order
-     limit 1`,
-    [portfolioId],
-  );
-  return row?.storagePath;
-}
-
-/** Lists up to 50 visible reviews for a provider, joined with author display names. */
+/** Lists up to 20 visible reviews for a provider, joined with author display names. */
 export async function listVisibleReviewsByProvider(
   tx: Transaction,
-  type: ProviderType,
+  type: 'photographer' | 'studio',
   providerId: string,
 ): Promise<PublicReview[]> {
-  const column = type === 'studio' ? 'studio_id' : 'photographer_id';
+  const column = type === 'photographer' ? 'photographer_id' : 'studio_id';
   const rows = await tx.rows<PublicReview>(
-    `select r.id, r.booking_id, r.author_id, p.display_name as author_name, r.photographer_id, r.studio_id, r.rating, r.comment, r.created_at, r.updated_at
+    `select r.id, r.booking_id, r.author_id,
+            coalesce(pr.display_name, '') as author_name,
+            r.photographer_id, r.studio_id, r.rating, r.comment,
+            r.created_at, r.updated_at
      from reviews r
-     join profiles p on p.id = r.author_id
-     where r.${column} = $1 and not r.is_hidden and r.deleted_at is null
+     left join profiles pr on pr.id = r.author_id
+     where r.${column} = $1 and r.is_hidden = false and r.deleted_at is null
      order by r.created_at desc
-     limit 50`,
+     limit 20`,
     [providerId],
   );
   return rows.map((r) => ({ ...r, rating: Number(r.rating) }));
@@ -218,22 +271,14 @@ export async function listTags(tx: Transaction): Promise<Tag[]> {
 
 // ---------- 102b: Studios & Team ----------
 
-/** Checks whether the caller has an existing photographer profile (required to create a studio). */
-export async function photographerExistsByUser(tx: Transaction, userId: string): Promise<boolean> {
-  const row = await tx.optional<{ id: string }>('select id from photographers where user_id = $1', [
-    userId,
-  ]);
-  return row !== undefined;
-}
-
 /** Checks whether the caller is an active manager of a non-deleted studio. */
 export async function isStudioManager(
   tx: Transaction,
   studioId: string,
   userId: string,
 ): Promise<boolean> {
-  const row = await tx.optional<{ userId: string }>(
-    `select m.user_id
+  const row = await tx.optional<{ studioId: string }>(
+    `select m.studio_id
      from studio_members m
      join studios s on s.id = m.studio_id
      where m.studio_id = $1
@@ -246,14 +291,15 @@ export async function isStudioManager(
 }
 
 /** Lists active studios where the user is a member, including their role. */
-export async function listStudiosByMember(tx: Transaction, userId: string): Promise<MyStudio[]> {
+export async function listStudiosForUser(tx: Transaction, userId: string): Promise<MyStudio[]> {
   return tx.rows<MyStudio>(
-    `select s.id, s.name, s.description, s.city, s.district, s.address, s.genres,
-            s.created_by, s.is_hidden, s.created_at, s.updated_at, m.role
+    `select s.id, s.name, s.description, s.city, s.district, s.address,
+            s.genres, s.created_by, s.is_hidden, s.created_at, s.updated_at,
+            m.role
      from studios s
      join studio_members m on m.studio_id = s.id
      where m.user_id = $1 and s.deleted_at is null
-     order by s.name`,
+     order by s.created_at desc`,
     [userId],
   );
 }
@@ -266,8 +312,9 @@ export async function insertStudio(
 ): Promise<Studio> {
   return tx.one<Studio>(
     `insert into studios (name, description, city, district, address, genres, created_by)
-     values ($1, $2, $3, $4, $5, $6, $7)
-     returning id, name, description, city, district, address, genres, created_by, is_hidden, created_at, updated_at`,
+     values ($1, $2, $3, $4, $5, $6::genre[], $7)
+     returning id, name, description, city, district, address,
+               genres, created_by, is_hidden, created_at, updated_at`,
     [
       input.name,
       input.description,
@@ -280,7 +327,7 @@ export async function insertStudio(
   );
 }
 
-/** Inserts a member into studio_members with the given role. */
+/** Inserts a member into studio_members with the given role (idempotent on conflict). */
 export async function insertStudioMember(
   tx: Transaction,
   studioId: string,
@@ -289,7 +336,8 @@ export async function insertStudioMember(
 ): Promise<void> {
   await tx.execute(
     `insert into studio_members (studio_id, user_id, role)
-     values ($1, $2, $3)`,
+     values ($1, $2, $3::studio_member_role)
+     on conflict (studio_id, user_id) do nothing`,
     [studioId, userId, role],
   );
 }
@@ -299,12 +347,14 @@ export async function updateStudio(
   tx: Transaction,
   studioId: string,
   input: StudioInput,
-): Promise<Studio | undefined> {
-  return tx.optional<Studio>(
+): Promise<Studio> {
+  return tx.one<Studio>(
     `update studios
-     set name = $2, description = $3, city = $4, district = $5, address = $6, genres = $7, updated_at = now()
+     set name = $2, description = $3, city = $4, district = $5,
+         address = $6, genres = $7::genre[], updated_at = now()
      where id = $1 and deleted_at is null
-     returning id, name, description, city, district, address, genres, created_by, is_hidden, created_at, updated_at`,
+     returning id, name, description, city, district, address,
+               genres, created_by, is_hidden, created_at, updated_at`,
     [
       studioId,
       input.name,
@@ -324,10 +374,12 @@ export async function listStudioTeam(
 ): Promise<StudioTeamMember[]> {
   return tx.rows<StudioTeamMember>(
     `select m.studio_id, m.user_id, m.role, m.joined_at,
-            p.display_name, p.user_name, ph.id as photographer_id
+            coalesce(pr.display_name, '') as display_name,
+            coalesce(pr.user_name, '') as user_name,
+            p.id as photographer_id
      from studio_members m
-     join profiles p on p.id = m.user_id
-     join photographers ph on ph.user_id = m.user_id
+     left join profiles pr on pr.id = m.user_id
+     left join photographers p on p.user_id = m.user_id
      where m.studio_id = $1
      order by m.joined_at asc`,
     [studioId],
@@ -336,15 +388,11 @@ export async function listStudioTeam(
 
 // ---------- 102c: Services ----------
 
-function coerceOwnedService(row: OwnedService): OwnedService {
-  return {
-    ...row,
-    durationMinutes: Number(row.durationMinutes),
-    price: Number(row.price),
-    photoCount: Number(row.photoCount),
-    retouchedCount: Number(row.retouchedCount),
-  };
-}
+export type ServiceOwnershipRow = {
+  id: string;
+  photographerId: string | null;
+  studioId: string | null;
+};
 
 /** Finds the caller's photographer id by user_id, or undefined if they are not a photographer. */
 export async function findPhotographerIdByUser(
@@ -361,53 +409,74 @@ export async function findPhotographerIdByUser(
 export async function listOwnedServices(tx: Transaction, userId: string): Promise<OwnedService[]> {
   const rows = await tx.rows<OwnedService>(
     `select s.id, s.name, s.description, s.genre, s.duration_minutes, s.price,
-            s.photo_count, s.retouched_count, s.is_active, s.owner_type,
-            s.photographer_id, s.studio_id, s.created_at, s.updated_at
+            s.photo_count, s.retouched_count, s.is_active,
+            s.owner_type, s.photographer_id, s.studio_id,
+            s.created_at, s.updated_at
      from services s
      where s.deleted_at is null
        and (
-         (s.photographer_id is not null and exists (
-           select 1 from photographers p where p.id = s.photographer_id and p.user_id = $1
-         ))
-         or
-         (s.studio_id is not null and exists (
-           select 1 from studio_members m
+         s.photographer_id in (select id from photographers where user_id = $1)
+         or s.studio_id in (
+           select m.studio_id
+           from studio_members m
            join studios st on st.id = m.studio_id
-           where m.studio_id = s.studio_id
-             and m.user_id = $1
-             and m.role = 'manager'
-             and st.deleted_at is null
-         ))
+           where m.user_id = $1 and m.role = 'manager' and st.deleted_at is null
+         )
        )
-     order by s.name`,
+     order by s.created_at desc`,
     [userId],
   );
   return rows.map(coerceOwnedService);
 }
 
-/** Inserts a new personal photographer service or studio service. */
-export async function insertService(
+/** Inserts a new personal photographer service. */
+export async function insertPersonalService(
   tx: Transaction,
-  owner:
-    | { ownerType: 'photographer'; photographerId: string }
-    | { ownerType: 'studio'; studioId: string },
+  photographerId: string,
   input: ServiceInput,
 ): Promise<OwnedService> {
-  const photographerId = owner.ownerType === 'photographer' ? owner.photographerId : null;
-  const studioId = owner.ownerType === 'studio' ? owner.studioId : null;
-
   const row = await tx.one<OwnedService>(
     `insert into services (
        owner_type, photographer_id, studio_id, name, description, genre,
        duration_minutes, price, photo_count, retouched_count, is_active
      )
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-     returning id, name, description, genre, duration_minutes, price, photo_count,
-               retouched_count, is_active, owner_type, photographer_id, studio_id,
+     values ('photographer', $1, null, $2, $3, $4::genre, $5, $6, $7, $8, $9)
+     returning id, name, description, genre, duration_minutes, price,
+               photo_count, retouched_count, is_active,
+               owner_type, photographer_id, studio_id,
                created_at, updated_at`,
     [
-      owner.ownerType,
       photographerId,
+      input.name,
+      input.description,
+      input.genre,
+      input.durationMinutes,
+      input.price,
+      input.photoCount,
+      input.retouchedCount,
+      input.isActive,
+    ],
+  );
+  return coerceOwnedService(row);
+}
+
+/** Inserts a new studio-owned service. */
+export async function insertStudioService(
+  tx: Transaction,
+  studioId: string,
+  input: ServiceInput,
+): Promise<OwnedService> {
+  const row = await tx.one<OwnedService>(
+    `insert into services (
+       owner_type, photographer_id, studio_id, name, description, genre,
+       duration_minutes, price, photo_count, retouched_count, is_active
+     )
+     values ('studio', null, $1, $2, $3, $4::genre, $5, $6, $7, $8, $9)
+     returning id, name, description, genre, duration_minutes, price,
+               photo_count, retouched_count, is_active,
+               owner_type, photographer_id, studio_id,
+               created_at, updated_at`,
+    [
       studioId,
       input.name,
       input.description,
@@ -426,11 +495,9 @@ export async function insertService(
 export async function findServiceOwnership(
   tx: Transaction,
   serviceId: string,
-): Promise<{ id: string; photographerId: string | null; studioId: string | null } | undefined> {
-  return tx.optional<{ id: string; photographerId: string | null; studioId: string | null }>(
-    `select id, photographer_id, studio_id
-     from services
-     where id = $1 and deleted_at is null`,
+): Promise<ServiceOwnershipRow | undefined> {
+  return tx.optional<ServiceOwnershipRow>(
+    'select id, photographer_id, studio_id from services where id = $1 and deleted_at is null',
     [serviceId],
   );
 }
@@ -443,12 +510,13 @@ export async function updateService(
 ): Promise<OwnedService> {
   const row = await tx.one<OwnedService>(
     `update services
-     set name = $2, description = $3, genre = $4, duration_minutes = $5,
+     set name = $2, description = $3, genre = $4::genre, duration_minutes = $5,
          price = $6, photo_count = $7, retouched_count = $8, is_active = $9,
          updated_at = now()
      where id = $1 and deleted_at is null
-     returning id, name, description, genre, duration_minutes, price, photo_count,
-               retouched_count, is_active, owner_type, photographer_id, studio_id,
+     returning id, name, description, genre, duration_minutes, price,
+               photo_count, retouched_count, is_active,
+               owner_type, photographer_id, studio_id,
                created_at, updated_at`,
     [
       serviceId,
@@ -475,15 +543,13 @@ export async function softDeleteService(tx: Transaction, serviceId: string): Pro
 
 // ---------- 102d: Portfolios & Images ----------
 
-export interface PortfolioImageRow {
+export type PortfolioOwnershipRow = {
   id: string;
-  portfolioId: string;
-  storagePath: string;
-  caption: string;
-  sortOrder: number;
-  isHidden: boolean;
-  createdAt: string;
-}
+  photographerId: string | null;
+  studioId: string | null;
+  status: 'draft' | 'published' | 'hidden';
+  publishedAt: string | null;
+};
 
 /** Lists all non-deleted portfolios owned by the caller's photographer profile or managed studios. */
 export async function listOwnedPortfolios(
@@ -491,25 +557,21 @@ export async function listOwnedPortfolios(
   userId: string,
 ): Promise<OwnedPortfolio[]> {
   return tx.rows<OwnedPortfolio>(
-    `select po.id, po.title, po.description, po.genre, po.status, po.owner_type,
-            po.photographer_id, po.studio_id, po.published_at, po.created_at, po.updated_at
-     from portfolios po
-     where po.deleted_at is null
+    `select pf.id, pf.title, pf.description, pf.genre, pf.status,
+            pf.owner_type, pf.photographer_id, pf.studio_id,
+            pf.published_at, pf.created_at, pf.updated_at
+     from portfolios pf
+     where pf.deleted_at is null
        and (
-         (po.photographer_id is not null and exists (
-           select 1 from photographers p where p.id = po.photographer_id and p.user_id = $1
-         ))
-         or
-         (po.studio_id is not null and exists (
-           select 1 from studio_members m
+         pf.photographer_id in (select id from photographers where user_id = $1)
+         or pf.studio_id in (
+           select m.studio_id
+           from studio_members m
            join studios st on st.id = m.studio_id
-           where m.studio_id = po.studio_id
-             and m.user_id = $1
-             and m.role = 'manager'
-             and st.deleted_at is null
-         ))
+           where m.user_id = $1 and m.role = 'manager' and st.deleted_at is null
+         )
        )
-     order by po.updated_at desc`,
+     order by pf.created_at desc`,
     [userId],
   );
 }
@@ -517,54 +579,69 @@ export async function listOwnedPortfolios(
 /** Lists published portfolios from visible providers with optional genre and tag slug filters. */
 export async function listPublicPortfolios(
   tx: Transaction,
-  filters: PortfolioListQuery,
+  query: PortfolioListQuery,
 ): Promise<PublicPortfolio[]> {
   const conditions: string[] = [
-    `po.status = 'published'`,
-    `po.deleted_at is null`,
-    `exists (select 1 from providers pr where pr.id = coalesce(po.photographer_id, po.studio_id))`,
+    "pf.status = 'published'",
+    'pf.deleted_at is null',
+    `((pf.photographer_id is not null and exists (
+        select 1 from photographers ph where ph.id = pf.photographer_id and ph.is_hidden = false
+      ))
+      or (pf.studio_id is not null and exists (
+        select 1 from studios st where st.id = pf.studio_id and st.is_hidden = false and st.deleted_at is null
+      )))`,
   ];
-  const values: unknown[] = [];
+  const params: unknown[] = [];
 
-  if (filters.genre) {
-    values.push(filters.genre);
-    conditions.push(`po.genre = $${values.length}`);
+  if (query.genre) {
+    params.push(query.genre);
+    conditions.push(`pf.genre = $${params.length}::genre`);
   }
-  if (filters.tag) {
-    values.push(filters.tag);
+  if (query.tag) {
+    params.push(query.tag);
     conditions.push(
       `exists (
-        select 1 from portfolio_images pi
-        join image_tags it on it.portfolio_image_id = pi.id
-        join tags t on t.id = it.tag_id
-        where pi.portfolio_id = po.id and not pi.is_hidden and t.slug = $${values.length}
+        select 1
+        from portfolio_images pi
+        join image_tags pit on pit.portfolio_image_id = pi.id
+        join tags t on t.id = pit.tag_id
+        where pi.portfolio_id = pf.id
+          and pi.is_hidden = false
+          and lower(t.slug) = lower($${params.length})
       )`,
     );
   }
 
-  const limit = filters.pageSize;
-  const offset = (filters.page - 1) * filters.pageSize;
-  values.push(limit, offset);
+  const limitParam = params.push(query.pageSize);
+  const offsetParam = params.push((query.page - 1) * query.pageSize);
 
   return tx.rows<PublicPortfolio>(
-    `select po.id, po.title, po.description, po.genre, po.status, po.owner_type,
-            po.photographer_id, po.studio_id, po.published_at, po.created_at, po.updated_at
-     from portfolios po
+    `select pf.id, pf.title, pf.description, pf.genre, pf.status,
+            pf.owner_type, pf.photographer_id, pf.studio_id,
+            pf.published_at, pf.created_at, pf.updated_at,
+            cover.storage_path as cover_url
+     from portfolios pf
+     left join lateral (
+       select storage_path from portfolio_images
+       where portfolio_id = pf.id and is_hidden = false
+       order by sort_order, created_at limit 1
+     ) cover on true
      where ${conditions.join(' and ')}
-     order by po.published_at desc nulls last, po.created_at desc
-     limit $${values.length - 1} offset $${values.length}`,
-    values,
+     order by pf.published_at desc nulls last, pf.created_at desc
+     limit $${limitParam} offset $${offsetParam}`,
+    params,
   );
 }
 
-/** Finds a non-deleted portfolio by id regardless of draft/published status. */
+/** Finds a non-deleted portfolio by id regardless of status. */
 export async function findPortfolioById(
   tx: Transaction,
   portfolioId: string,
 ): Promise<OwnedPortfolio | undefined> {
   return tx.optional<OwnedPortfolio>(
-    `select id, title, description, genre, status, owner_type,
-            photographer_id, studio_id, published_at, created_at, updated_at
+    `select id, title, description, genre, status,
+            owner_type, photographer_id, studio_id,
+            published_at, created_at, updated_at
      from portfolios
      where id = $1 and deleted_at is null`,
     [portfolioId],
@@ -574,72 +651,127 @@ export async function findPortfolioById(
 /** Checks whether a portfolio's owning provider is publicly visible (not hidden or deleted). */
 export async function isPortfolioProviderVisible(
   tx: Transaction,
-  owner: { photographerId: string | null; studioId: string | null },
+  portfolio: Pick<OwnedPortfolio, 'photographerId' | 'studioId'>,
 ): Promise<boolean> {
-  const providerId = owner.photographerId ?? owner.studioId;
-  if (!providerId) return false;
-  const row = await tx.optional<{ id: string }>('select id from providers where id = $1', [
-    providerId,
-  ]);
-  return row !== undefined;
+  if (portfolio.photographerId) {
+    const row = await tx.optional<{ id: string }>(
+      'select id from photographers where id = $1 and is_hidden = false',
+      [portfolio.photographerId],
+    );
+    return row !== undefined;
+  }
+  if (portfolio.studioId) {
+    const row = await tx.optional<{ id: string }>(
+      'select id from studios where id = $1 and is_hidden = false and deleted_at is null',
+      [portfolio.studioId],
+    );
+    return row !== undefined;
+  }
+  return false;
 }
 
 /** Lists visible images in a portfolio ordered by sort_order. */
-export async function listVisiblePortfolioImages(
+export async function listPortfolioImages(
   tx: Transaction,
   portfolioId: string,
 ): Promise<PortfolioImageRow[]> {
   const rows = await tx.rows<PortfolioImageRow>(
-    `select id, portfolio_id, storage_path, caption, sort_order, is_hidden, created_at
+    `select id, portfolio_id, storage_path, width, height, caption, sort_order,
+            provenance, source, license_note, is_hidden, created_at
      from portfolio_images
-     where portfolio_id = $1 and not is_hidden
+     where portfolio_id = $1 and is_hidden = false
      order by sort_order asc, created_at asc`,
     [portfolioId],
   );
-  return rows.map((r) => ({ ...r, sortOrder: Number(r.sortOrder) }));
+  return rows.map((row) => ({
+    ...row,
+    width: Number(row.width),
+    height: Number(row.height),
+    sortOrder: Number(row.sortOrder),
+  }));
+}
+
+/** Fetches tags for a batch of portfolio image IDs in a single query to avoid N+1. */
+export async function listTagsForImages(tx: Transaction, imageIds: string[]) {
+  const grouped = new Map<string, Tag[]>();
+  if (imageIds.length === 0) return grouped;
+
+  const rows = await tx.rows<Tag & { portfolioImageId: string }>(
+    `select pit.portfolio_image_id, t.id, t.name, t.slug, t.kind
+     from image_tags pit
+     join tags t on t.id = pit.tag_id
+     where pit.portfolio_image_id = any($1::uuid[])
+     order by t.kind, t.name`,
+    [imageIds],
+  );
+
+  for (const row of rows) {
+    const { portfolioImageId, ...tag } = row;
+    const list = grouped.get(portfolioImageId) ?? [];
+    list.push(tag);
+    grouped.set(portfolioImageId, list);
+  }
+  return grouped;
 }
 
 /** Lists tags attached to a single portfolio image ordered by kind and name. */
 export async function listTagsForImage(tx: Transaction, imageId: string): Promise<Tag[]> {
-  return tx.rows<Tag>(
-    `select t.id, t.name, t.slug, t.kind
-     from tags t
-     join image_tags it on it.tag_id = t.id
-     where it.portfolio_image_id = $1
-     order by t.kind, t.name`,
-    [imageId],
-  );
+  const map = await listTagsForImages(tx, [imageId]);
+  return map.get(imageId) ?? [];
 }
 
-/** Inserts a new personal photographer portfolio or studio portfolio. */
-export async function insertPortfolio(
+/** Inserts a new personal photographer portfolio, setting published_at when published immediately. */
+export async function insertPersonalPortfolio(
   tx: Transaction,
-  owner:
-    | { ownerType: 'photographer'; photographerId: string }
-    | { ownerType: 'studio'; studioId: string },
+  photographerId: string,
   input: PortfolioInput,
 ): Promise<OwnedPortfolio> {
-  const photographerId = owner.ownerType === 'photographer' ? owner.photographerId : null;
-  const studioId = owner.ownerType === 'studio' ? owner.studioId : null;
-  const publishedAt = input.status === 'published' ? new Date().toISOString() : null;
-
   return tx.one<OwnedPortfolio>(
     `insert into portfolios (
        owner_type, photographer_id, studio_id, title, description, genre, status, published_at
      )
-     values ($1, $2, $3, $4, $5, $6, $7, $8)
-     returning id, title, description, genre, status, owner_type, photographer_id, studio_id,
+     values (
+       'photographer', $1, null, $2, $3, $4::genre, $5::portfolio_status,
+       case when $5::portfolio_status = 'published' then now() else null end
+     )
+     returning id, title, description, genre, status,
+               owner_type, photographer_id, studio_id,
                published_at, created_at, updated_at`,
-    [
-      owner.ownerType,
-      photographerId,
-      studioId,
-      input.title,
-      input.description,
-      input.genre,
-      input.status,
-      publishedAt,
-    ],
+    [photographerId, input.title, input.description, input.genre, input.status],
+  );
+}
+
+/** Inserts a new studio-owned portfolio, setting published_at when published immediately. */
+export async function insertStudioPortfolio(
+  tx: Transaction,
+  studioId: string,
+  input: PortfolioInput,
+): Promise<OwnedPortfolio> {
+  return tx.one<OwnedPortfolio>(
+    `insert into portfolios (
+       owner_type, photographer_id, studio_id, title, description, genre, status, published_at
+     )
+     values (
+       'studio', null, $1, $2, $3, $4::genre, $5::portfolio_status,
+       case when $5::portfolio_status = 'published' then now() else null end
+     )
+     returning id, title, description, genre, status,
+               owner_type, photographer_id, studio_id,
+               published_at, created_at, updated_at`,
+    [studioId, input.title, input.description, input.genre, input.status],
+  );
+}
+
+/** Finds the ownership and status info of a non-deleted portfolio. */
+export async function findPortfolioOwnership(
+  tx: Transaction,
+  portfolioId: string,
+): Promise<PortfolioOwnershipRow | undefined> {
+  return tx.optional<PortfolioOwnershipRow>(
+    `select id, photographer_id, studio_id, status, published_at
+     from portfolios
+     where id = $1 and deleted_at is null`,
+    [portfolioId],
   );
 }
 
@@ -653,15 +785,16 @@ export async function updatePortfolio(
     `update portfolios
      set title = $2,
          description = $3,
-         genre = $4,
-         status = $5,
+         genre = $4::genre,
+         status = $5::portfolio_status,
          published_at = case
-           when $5 = 'published' then coalesce(published_at, now())
+           when $5::portfolio_status = 'published' and published_at is null then now()
            else published_at
          end,
          updated_at = now()
      where id = $1 and deleted_at is null
-     returning id, title, description, genre, status, owner_type, photographer_id, studio_id,
+     returning id, title, description, genre, status,
+               owner_type, photographer_id, studio_id,
                published_at, created_at, updated_at`,
     [portfolioId, input.title, input.description, input.genre, input.status],
   );
@@ -674,67 +807,86 @@ export async function softDeletePortfolio(tx: Transaction, portfolioId: string):
   ]);
 }
 
-/** Inserts an image row into a portfolio. */
+/** Inserts an image row with dimensions and provenance metadata into a portfolio. */
 export async function insertPortfolioImage(
   tx: Transaction,
   portfolioId: string,
   input: PortfolioImageInput,
 ): Promise<PortfolioImageRow> {
   const row = await tx.one<PortfolioImageRow>(
-    `insert into portfolio_images (portfolio_id, storage_path, caption, sort_order)
-     values ($1, $2, $3, $4)
-     returning id, portfolio_id, storage_path, caption, sort_order, is_hidden, created_at`,
-    [portfolioId, input.storagePath, input.caption, input.sortOrder],
+    `insert into portfolio_images (
+       portfolio_id, storage_path, width, height, caption, sort_order,
+       provenance, source, license_note
+     )
+     values ($1, $2, $3, $4, $5, $6, $7::provenance, $8, $9)
+     returning id, portfolio_id, storage_path, width, height, caption, sort_order,
+               provenance, source, license_note, is_hidden, created_at`,
+    [
+      portfolioId,
+      input.storagePath,
+      input.width,
+      input.height,
+      input.caption,
+      input.sortOrder,
+      input.provenance,
+      input.source ?? null,
+      input.licenseNote ?? null,
+    ],
   );
-  return { ...row, sortOrder: Number(row.sortOrder) };
+  return {
+    ...row,
+    width: Number(row.width),
+    height: Number(row.height),
+    sortOrder: Number(row.sortOrder),
+  };
 }
 
 /** Finds the owning portfolio of a non-deleted portfolio image. */
-export async function findImagePortfolioOwnership(
+export async function findPortfolioImageOwnership(
   tx: Transaction,
   imageId: string,
-): Promise<
-  | { imageId: string; portfolioId: string; photographerId: string | null; studioId: string | null }
-  | undefined
-> {
-  return tx.optional<{
-    imageId: string;
-    portfolioId: string;
-    photographerId: string | null;
-    studioId: string | null;
-  }>(
-    `select pi.id as image_id, po.id as portfolio_id, po.photographer_id, po.studio_id
+): Promise<(PortfolioOwnershipRow & { imageId: string }) | undefined> {
+  return tx.optional<PortfolioOwnershipRow & { imageId: string }>(
+    `select pi.id as image_id, pf.id, pf.photographer_id, pf.studio_id, pf.status, pf.published_at
      from portfolio_images pi
-     join portfolios po on po.id = pi.portfolio_id
-     where pi.id = $1 and po.deleted_at is null`,
+     join portfolios pf on pf.id = pi.portfolio_id
+     where pi.id = $1 and pf.deleted_at is null`,
     [imageId],
   );
 }
 
-/** Replaces all tag assignments on a portfolio image and returns the resulting tags. */
+/** Counts how many of the given tag IDs exist in the tags table. */
+export async function countExistingTags(tx: Transaction, tagIds: string[]): Promise<number> {
+  if (tagIds.length === 0) return 0;
+  const row = await tx.one<{ count: string }>(
+    'select count(*)::text as count from tags where id = any($1::uuid[])',
+    [tagIds],
+  );
+  return Number(row.count);
+}
+
+/** Replaces all tag assignments on a portfolio image in bulk. */
 export async function replacePortfolioImageTags(
   tx: Transaction,
   imageId: string,
   tagIds: string[],
-): Promise<Tag[]> {
+): Promise<void> {
   await tx.execute('delete from image_tags where portfolio_image_id = $1', [imageId]);
-  const uniqueIds = [...new Set(tagIds)];
-  for (const tagId of uniqueIds) {
-    await tx.execute(
-      'insert into image_tags (portfolio_image_id, tag_id) values ($1, $2) on conflict do nothing',
-      [imageId, tagId],
-    );
-  }
-  return listTagsForImage(tx, imageId);
+  if (tagIds.length === 0) return;
+
+  await tx.execute(
+    `insert into image_tags (portfolio_image_id, tag_id, source)
+     select $1, unnest($2::uuid[]), 'manual'
+     on conflict (portfolio_image_id, tag_id) do nothing`,
+    [imageId, tagIds],
+  );
 }
 
 // ---------- 102e: Invitations, Members, Resources & Add-ons ----------
 
-function coerceServiceAddOn(row: ServiceAddOn): ServiceAddOn {
-  return {
-    ...row,
-    price: Number(row.price),
-  };
+/** Acquires a transaction-scoped advisory lock per studio to serialize membership mutations. */
+export async function lockStudioMembers(tx: Transaction, studioId: string): Promise<void> {
+  await tx.execute("select pg_advisory_xact_lock(hashtext('studio_members:' || $1))", [studioId]);
 }
 
 /** Lists pending invitations addressed to the caller's photographer profile. */
@@ -807,7 +959,7 @@ export async function insertStudioInvitation(
 ): Promise<StudioInvitation> {
   return tx.one<StudioInvitation>(
     `insert into studio_invitations (studio_id, photographer_id, role, status, invited_by)
-     values ($1, $2, $3, 'pending', $4)
+     values ($1, $2, $3::studio_member_role, 'pending', $4)
      returning id, studio_id, photographer_id, role, status, invited_by,
                responded_at, created_at, updated_at`,
     [studioId, input.photographerId, input.role, invitedBy],
@@ -830,16 +982,16 @@ export async function findInvitationWithRecipient(
   );
 }
 
-/** Marks an invitation as accepted or declined and returns the updated row. */
-export async function updateInvitationStatus(
+/** Atomically transitions a pending invitation; returns undefined if already responded/revoked. */
+export async function respondPendingInvitation(
   tx: Transaction,
   invitationId: string,
-  status: 'accepted' | 'declined',
-): Promise<StudioInvitation> {
-  return tx.one<StudioInvitation>(
+  status: 'accepted' | 'declined' | 'revoked',
+): Promise<StudioInvitation | undefined> {
+  return tx.optional<StudioInvitation>(
     `update studio_invitations
-     set status = $2, responded_at = now(), updated_at = now()
-     where id = $1
+     set status = $2::invitation_status, responded_at = now(), updated_at = now()
+     where id = $1 and status = 'pending'
      returning id, studio_id, photographer_id, role, status, invited_by,
                responded_at, created_at, updated_at`,
     [invitationId, status],
@@ -877,11 +1029,10 @@ export async function updateStudioMemberRole(
   userId: string,
   role: 'manager' | 'photographer',
 ): Promise<StudioTeamMember> {
-  await tx.execute('update studio_members set role = $3 where studio_id = $1 and user_id = $2', [
-    studioId,
-    userId,
-    role,
-  ]);
+  await tx.execute(
+    'update studio_members set role = $3::studio_member_role where studio_id = $1 and user_id = $2',
+    [studioId, userId, role],
+  );
   return tx.one<StudioTeamMember>(
     `select m.studio_id, m.user_id, m.role, m.joined_at,
             coalesce(pr.display_name, '') as display_name,
@@ -907,7 +1058,7 @@ export async function hasActiveStudioBookingAssignments(
      join photographers p on p.id = b.assigned_photographer_id
      where b.studio_id = $1
        and p.user_id = $2
-       and b.status not in ('completed', 'cancelled', 'declined')
+       and b.status not in ('completed', 'cancelled', 'rejected')
      limit 1`,
     [studioId, userId],
   );
@@ -948,7 +1099,7 @@ export async function insertStudioResource(
 ): Promise<StudioResource> {
   return tx.one<StudioResource>(
     `insert into studio_resources (studio_id, name, type, description, is_active)
-     values ($1, $2, $3, $4, $5)
+     values ($1, $2, $3::resource_type, $4, $5)
      returning id, studio_id, name, type, description, is_active, created_at, updated_at`,
     [studioId, input.name, input.type, input.description, input.isActive],
   );
@@ -974,7 +1125,7 @@ export async function updateStudioResource(
 ): Promise<StudioResource> {
   return tx.one<StudioResource>(
     `update studio_resources
-     set name = $2, type = $3, description = $4, is_active = $5, updated_at = now()
+     set name = $2, type = $3::resource_type, description = $4, is_active = $5, updated_at = now()
      where id = $1 and deleted_at is null
      returning id, studio_id, name, type, description, is_active, created_at, updated_at`,
     [resourceId, input.name, input.type, input.description, input.isActive],
@@ -989,15 +1140,34 @@ export async function softDeleteStudioResource(tx: Transaction, resourceId: stri
   );
 }
 
-/** Lists non-deleted add-ons for a service. */
-export async function listServiceAddOns(
+/** Lists active add-ons for an active service belonging to a visible provider, or undefined if hidden/missing. */
+export async function listActivePublicServiceAddOns(
   tx: Transaction,
   serviceId: string,
-): Promise<ServiceAddOn[]> {
+): Promise<ServiceAddOn[] | undefined> {
+  const visibleService = await tx.optional<{ id: string }>(
+    `select s.id
+     from services s
+     where s.id = $1
+       and s.is_active = true
+       and s.deleted_at is null
+       and (
+         (s.photographer_id is not null and exists (
+           select 1 from photographers ph where ph.id = s.photographer_id and ph.is_hidden = false
+         ))
+         or
+         (s.studio_id is not null and exists (
+           select 1 from studios st where st.id = s.studio_id and st.is_hidden = false and st.deleted_at is null
+         ))
+       )`,
+    [serviceId],
+  );
+  if (!visibleService) return undefined;
+
   const rows = await tx.rows<ServiceAddOn>(
     `select id, service_id, name, description, price, is_active, created_at, updated_at
      from service_add_ons
-     where service_id = $1 and deleted_at is null
+     where service_id = $1 and is_active = true and deleted_at is null
      order by name`,
     [serviceId],
   );
