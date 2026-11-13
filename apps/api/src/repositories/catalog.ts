@@ -9,6 +9,8 @@ import type {
   StudioInput,
   StudioTeamMember,
   Tag,
+  OwnedService,
+  ServiceInput,
 } from '../schemas/catalog.js';
 import type { Transaction } from './database.js';
 
@@ -318,5 +320,144 @@ export async function listStudioTeam(
      where m.studio_id = $1
      order by m.joined_at asc`,
     [studioId],
+  );
+}
+
+// ---------- 102c: Services ----------
+
+function coerceOwnedService(row: OwnedService): OwnedService {
+  return {
+    ...row,
+    durationMinutes: Number(row.durationMinutes),
+    price: Number(row.price),
+    photoCount: Number(row.photoCount),
+    retouchedCount: Number(row.retouchedCount),
+  };
+}
+
+/** Finds the caller's photographer id by user_id, or undefined if they are not a photographer. */
+export async function findPhotographerIdByUser(
+  tx: Transaction,
+  userId: string,
+): Promise<string | undefined> {
+  const row = await tx.optional<{ id: string }>('select id from photographers where user_id = $1', [
+    userId,
+  ]);
+  return row?.id;
+}
+
+/** Lists all non-deleted services owned by the caller's photographer profile or managed studios. */
+export async function listOwnedServices(tx: Transaction, userId: string): Promise<OwnedService[]> {
+  const rows = await tx.rows<OwnedService>(
+    `select s.id, s.name, s.description, s.genre, s.duration_minutes, s.price,
+            s.photo_count, s.retouched_count, s.is_active, s.owner_type,
+            s.photographer_id, s.studio_id, s.created_at, s.updated_at
+     from services s
+     where s.deleted_at is null
+       and (
+         (s.photographer_id is not null and exists (
+           select 1 from photographers p where p.id = s.photographer_id and p.user_id = $1
+         ))
+         or
+         (s.studio_id is not null and exists (
+           select 1 from studio_members m
+           join studios st on st.id = m.studio_id
+           where m.studio_id = s.studio_id
+             and m.user_id = $1
+             and m.role = 'manager'
+             and st.deleted_at is null
+         ))
+       )
+     order by s.name`,
+    [userId],
+  );
+  return rows.map(coerceOwnedService);
+}
+
+/** Inserts a new personal photographer service or studio service. */
+export async function insertService(
+  tx: Transaction,
+  owner:
+    | { ownerType: 'photographer'; photographerId: string }
+    | { ownerType: 'studio'; studioId: string },
+  input: ServiceInput,
+): Promise<OwnedService> {
+  const photographerId = owner.ownerType === 'photographer' ? owner.photographerId : null;
+  const studioId = owner.ownerType === 'studio' ? owner.studioId : null;
+
+  const row = await tx.one<OwnedService>(
+    `insert into services (
+       owner_type, photographer_id, studio_id, name, description, genre,
+       duration_minutes, price, photo_count, retouched_count, is_active
+     )
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+     returning id, name, description, genre, duration_minutes, price, photo_count,
+               retouched_count, is_active, owner_type, photographer_id, studio_id,
+               created_at, updated_at`,
+    [
+      owner.ownerType,
+      photographerId,
+      studioId,
+      input.name,
+      input.description,
+      input.genre,
+      input.durationMinutes,
+      input.price,
+      input.photoCount,
+      input.retouchedCount,
+      input.isActive,
+    ],
+  );
+  return coerceOwnedService(row);
+}
+
+/** Finds the ownership info of a non-deleted service. */
+export async function findServiceOwnership(
+  tx: Transaction,
+  serviceId: string,
+): Promise<{ id: string; photographerId: string | null; studioId: string | null } | undefined> {
+  return tx.optional<{ id: string; photographerId: string | null; studioId: string | null }>(
+    `select id, photographer_id, studio_id
+     from services
+     where id = $1 and deleted_at is null`,
+    [serviceId],
+  );
+}
+
+/** Updates an existing non-deleted service. */
+export async function updateService(
+  tx: Transaction,
+  serviceId: string,
+  input: ServiceInput,
+): Promise<OwnedService> {
+  const row = await tx.one<OwnedService>(
+    `update services
+     set name = $2, description = $3, genre = $4, duration_minutes = $5,
+         price = $6, photo_count = $7, retouched_count = $8, is_active = $9,
+         updated_at = now()
+     where id = $1 and deleted_at is null
+     returning id, name, description, genre, duration_minutes, price, photo_count,
+               retouched_count, is_active, owner_type, photographer_id, studio_id,
+               created_at, updated_at`,
+    [
+      serviceId,
+      input.name,
+      input.description,
+      input.genre,
+      input.durationMinutes,
+      input.price,
+      input.photoCount,
+      input.retouchedCount,
+      input.isActive,
+    ],
+  );
+  return coerceOwnedService(row);
+}
+
+/** Soft-deletes a service and marks it inactive. */
+export async function softDeleteService(tx: Transaction, serviceId: string): Promise<void> {
+  await tx.execute(
+    'update services set deleted_at = now(), is_active = false, updated_at = now() where id = $1',
+    [serviceId],
   );
 }

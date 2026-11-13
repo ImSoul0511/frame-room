@@ -10,6 +10,7 @@ import type {
   Provider,
   Service,
   Studio,
+  OwnedService,
 } from '../schemas/catalog.js';
 
 vi.mock('../repositories/catalog.js');
@@ -389,5 +390,190 @@ describe('GET /v1/studios/:id/team', () => {
 
     expect(res.statusCode).toBe(403);
     expect(res.body).toContain('manager_required');
+  });
+});
+
+// ---------- 102c: Services ----------
+
+const SERVICE_INPUT = {
+  name: 'Standard Portrait',
+  description: '2 hours shoot',
+  genre: 'portrait' as const,
+  durationMinutes: 120,
+  price: 1500000,
+  photoCount: 20,
+  retouchedCount: 10,
+  isActive: true,
+};
+
+const OWNED_SERVICE: OwnedService = {
+  ...SERVICE_INPUT,
+  id: SERVICE_ID,
+  ownerType: 'photographer',
+  photographerId: PHOTOGRAPHER_ID,
+  studioId: null,
+  createdAt: '2026-11-13T00:00:00.000Z',
+  updatedAt: '2026-11-13T00:00:00.000Z',
+};
+
+describe('GET /v1/me/services', () => {
+  it('lists services owned by the caller or managed studios (200)', async () => {
+    vi.mocked(repo.listOwnedServices).mockResolvedValue([OWNED_SERVICE]);
+    const app = await buildTestApp();
+    const res = await app.inject({ method: 'GET', url: '/v1/me/services', headers: AUTH });
+    expect(res.statusCode).toBe(200);
+    expect(bodyData(res)).toEqual([expect.objectContaining({ id: SERVICE_ID })]);
+    expect(repo.listOwnedServices).toHaveBeenCalledWith(expect.anything(), 'user-1');
+  });
+});
+
+describe('POST /v1/services and POST /v1/studios/:id/services', () => {
+  it('creates a personal service when caller has a photographer profile (201)', async () => {
+    vi.mocked(repo.findPhotographerIdByUser).mockResolvedValue(PHOTOGRAPHER_ID);
+    vi.mocked(repo.insertService).mockResolvedValue(OWNED_SERVICE);
+
+    const app = await buildTestApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/services',
+      payload: SERVICE_INPUT,
+      headers: AUTH,
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(bodyData(res)).toMatchObject({ id: SERVICE_ID, ownerType: 'photographer' });
+    expect(repo.insertService).toHaveBeenCalledWith(
+      expect.anything(),
+      { ownerType: 'photographer', photographerId: PHOTOGRAPHER_ID },
+      expect.objectContaining({ name: 'Standard Portrait' }),
+    );
+  });
+
+  it('returns 403 photographer_required when creating personal service without photographer profile', async () => {
+    vi.mocked(repo.findPhotographerIdByUser).mockResolvedValue(NONE);
+
+    const app = await buildTestApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/services',
+      payload: SERVICE_INPUT,
+      headers: AUTH,
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(res.body).toContain('photographer_required');
+  });
+
+  it('creates a studio service when caller is a current manager (201)', async () => {
+    vi.mocked(repo.isStudioManager).mockResolvedValue(true);
+    vi.mocked(repo.insertService).mockResolvedValue({
+      ...OWNED_SERVICE,
+      ownerType: 'studio',
+      photographerId: null,
+      studioId: STUDIO_ID,
+    });
+
+    const app = await buildTestApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: `/v1/studios/${STUDIO_ID}/services`,
+      payload: SERVICE_INPUT,
+      headers: AUTH,
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(bodyData(res)).toMatchObject({ ownerType: 'studio', studioId: STUDIO_ID });
+  });
+
+  it('returns 403 manager_required when non-manager creates a studio service', async () => {
+    vi.mocked(repo.isStudioManager).mockResolvedValue(false);
+
+    const app = await buildTestApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: `/v1/studios/${STUDIO_ID}/services`,
+      payload: SERVICE_INPUT,
+      headers: AUTH,
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(res.body).toContain('manager_required');
+  });
+});
+
+describe('PATCH /v1/services/:id and DELETE /v1/services/:id', () => {
+  it('updates an owned personal service (200)', async () => {
+    vi.mocked(repo.findServiceOwnership).mockResolvedValue({
+      id: SERVICE_ID,
+      photographerId: PHOTOGRAPHER_ID,
+      studioId: null,
+    });
+    vi.mocked(repo.findPhotographerIdByUser).mockResolvedValue(PHOTOGRAPHER_ID);
+    vi.mocked(repo.updateService).mockResolvedValue({ ...OWNED_SERVICE, price: 2000000 });
+
+    const app = await buildTestApp();
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/v1/services/${SERVICE_ID}`,
+      payload: { ...SERVICE_INPUT, price: 2000000 },
+      headers: AUTH,
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(bodyData(res)).toMatchObject({ price: 2000000 });
+  });
+
+  it('returns 403 not_provider_owner when updating another photographer service', async () => {
+    vi.mocked(repo.findServiceOwnership).mockResolvedValue({
+      id: SERVICE_ID,
+      photographerId: PHOTOGRAPHER_ID,
+      studioId: null,
+    });
+    vi.mocked(repo.findPhotographerIdByUser).mockResolvedValue(NONE);
+
+    const app = await buildTestApp();
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/v1/services/${SERVICE_ID}`,
+      payload: SERVICE_INPUT,
+      headers: AUTH,
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(res.body).toContain('not_provider_owner');
+  });
+
+  it('returns 404 service_not_found when deleting a missing service', async () => {
+    vi.mocked(repo.findServiceOwnership).mockResolvedValue(NONE);
+
+    const app = await buildTestApp();
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/v1/services/${SERVICE_ID}`,
+      headers: AUTH,
+    });
+
+    expect(res.statusCode).toBe(404);
+    expect(res.body).toContain('service_not_found');
+  });
+
+  it('soft-deletes an owned studio service and returns 204', async () => {
+    vi.mocked(repo.findServiceOwnership).mockResolvedValue({
+      id: SERVICE_ID,
+      photographerId: null,
+      studioId: STUDIO_ID,
+    });
+    vi.mocked(repo.isStudioManager).mockResolvedValue(true);
+
+    const app = await buildTestApp();
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/v1/services/${SERVICE_ID}`,
+      headers: AUTH,
+    });
+
+    expect(res.statusCode).toBe(204);
+    expect(res.body).toBe('');
+    expect(repo.softDeleteService).toHaveBeenCalledWith(expect.anything(), SERVICE_ID);
   });
 });

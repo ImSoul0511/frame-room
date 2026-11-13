@@ -173,3 +173,13 @@ export type StudioInput = z.infer<typeof studioInputSchema>;
 export type Studio = z.infer<typeof studioSchema>;
 export type MyStudio = z.infer<typeof myStudioSchema>;
 export type StudioTeamMember = z.infer<typeof studioTeamMemberSchema>;
+
+// ---------- 102c: Services ----------
+
+export const ownedServiceSchema = serviceSchema.extend({
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export type ServiceInput = z.infer<typeof serviceInputSchema>;
+export type OwnedService = z.infer<typeof ownedServiceSchema>;

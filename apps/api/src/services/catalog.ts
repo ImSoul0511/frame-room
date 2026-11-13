@@ -11,6 +11,8 @@ import type {
   Studio,
   StudioInput,
   StudioTeamMember,
+  OwnedService,
+  ServiceInput,
 } from '../schemas/catalog.js';
 
 /** Tạo public URL cho ảnh trong bucket `portfolio-images` nếu có SUPABASE_URL, hoặc trả về đường dẫn gốc. */
@@ -141,4 +143,79 @@ export async function getStudioTeam(
 ): Promise<StudioTeamMember[]> {
   await requireStudioManager(tx, studioId, userId);
   return repo.listStudioTeam(tx, studioId);
+}
+
+// ---------- 102c: Services ----------
+
+/** Verifies that the caller owns a provider record (either as the photographer or a studio manager). */
+export async function assertProviderOwnership(
+  tx: Transaction,
+  userId: string,
+  owner: { photographerId: string | null; studioId: string | null },
+): Promise<void> {
+  if (owner.photographerId) {
+    const callerPhotographerId = await repo.findPhotographerIdByUser(tx, userId);
+    if (!callerPhotographerId || callerPhotographerId !== owner.photographerId) {
+      throw new ApiError(403, 'FORBIDDEN', 'not_provider_owner');
+    }
+    return;
+  }
+  if (owner.studioId) {
+    await requireStudioManager(tx, owner.studioId, userId);
+    return;
+  }
+  throw new ApiError(403, 'FORBIDDEN', 'not_provider_owner');
+}
+
+export async function listMyServices(tx: Transaction, userId: string): Promise<OwnedService[]> {
+  return repo.listOwnedServices(tx, userId);
+}
+
+export async function createPersonalService(
+  tx: Transaction,
+  userId: string,
+  input: ServiceInput,
+): Promise<OwnedService> {
+  const photographerId = await repo.findPhotographerIdByUser(tx, userId);
+  if (!photographerId) {
+    throw new ApiError(403, 'FORBIDDEN', 'photographer_required');
+  }
+  return repo.insertService(tx, { ownerType: 'photographer', photographerId }, input);
+}
+
+export async function createStudioService(
+  tx: Transaction,
+  userId: string,
+  studioId: string,
+  input: ServiceInput,
+): Promise<OwnedService> {
+  await requireStudioManager(tx, studioId, userId);
+  return repo.insertService(tx, { ownerType: 'studio', studioId }, input);
+}
+
+export async function updateService(
+  tx: Transaction,
+  userId: string,
+  serviceId: string,
+  input: ServiceInput,
+): Promise<OwnedService> {
+  const existing = await repo.findServiceOwnership(tx, serviceId);
+  if (!existing) {
+    throw new ApiError(404, 'NOT_FOUND', 'service_not_found');
+  }
+  await assertProviderOwnership(tx, userId, existing);
+  return repo.updateService(tx, serviceId, input);
+}
+
+export async function deleteService(
+  tx: Transaction,
+  userId: string,
+  serviceId: string,
+): Promise<void> {
+  const existing = await repo.findServiceOwnership(tx, serviceId);
+  if (!existing) {
+    throw new ApiError(404, 'NOT_FOUND', 'service_not_found');
+  }
+  await assertProviderOwnership(tx, userId, existing);
+  await repo.softDeleteService(tx, serviceId);
 }

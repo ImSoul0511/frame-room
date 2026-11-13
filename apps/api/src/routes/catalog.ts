@@ -12,6 +12,8 @@ import {
   studioInputSchema,
   studioSchema,
   studioTeamMemberSchema,
+  ownedServiceSchema,
+  serviceInputSchema,
 } from '../schemas/catalog.js';
 import * as catalog from '../services/catalog.js';
 
@@ -110,6 +112,70 @@ export const catalogModule: ApiModule = {
       errors: [403],
       handler: ({ actor, params, transaction }) =>
         transaction((tx) => catalog.getStudioTeam(tx, actor.id, params.id)),
+    });
+    // ---------- 102c: Services ----------
+    defineRoute(app, deps, {
+      method: 'GET',
+      url: '/v1/me/services',
+      summary: 'List non-deleted services owned by the caller or their managed studios.',
+      access: 'verified',
+      response: z.array(ownedServiceSchema),
+      handler: ({ actor, transaction }) =>
+        transaction((tx) => catalog.listMyServices(tx, actor.id)),
+    });
+
+    defineRoute(app, deps, {
+      method: 'POST',
+      url: '/v1/services',
+      summary: 'Create a personal photographer service.',
+      access: 'verified',
+      body: serviceInputSchema,
+      response: ownedServiceSchema,
+      errors: [403],
+      handler: ({ actor, body, transaction }) =>
+        transaction((tx) => catalog.createPersonalService(tx, actor.id, body)),
+    });
+
+    defineRoute(app, deps, {
+      method: 'POST',
+      url: '/v1/studios/:id/services',
+      summary: 'Create a service owned by a studio (current manager only).',
+      access: 'verified',
+      params: idParamsSchema,
+      body: serviceInputSchema,
+      response: ownedServiceSchema,
+      errors: [403],
+      handler: ({ actor, params, body, transaction }) =>
+        transaction((tx) => catalog.createStudioService(tx, actor.id, params.id, body)),
+    });
+
+    defineRoute(app, deps, {
+      method: 'PATCH',
+      url: '/v1/services/:id',
+      summary: 'Update an owned photographer or studio service.',
+      access: 'verified',
+      params: idParamsSchema,
+      body: serviceInputSchema,
+      response: ownedServiceSchema,
+      errors: [403],
+      handler: ({ actor, params, body, transaction }) =>
+        transaction((tx) => catalog.updateService(tx, actor.id, params.id, body)),
+    });
+
+    defineRoute(app, deps, {
+      method: 'DELETE',
+      url: '/v1/services/:id',
+      summary: 'Soft-delete an owned service and mark it inactive.',
+      access: 'verified',
+      params: idParamsSchema,
+      status: 204,
+      envelope: false,
+      response: z.undefined(),
+      errors: [403],
+      handler: async ({ actor, params, transaction }) => {
+        await transaction((tx) => catalog.deleteService(tx, actor.id, params.id));
+        return undefined;
+      },
     });
   },
 };
