@@ -8,6 +8,10 @@ import {
   providerDetailSchema,
   providerSchema,
   tagSchema,
+  myStudioSchema,
+  studioInputSchema,
+  studioSchema,
+  studioTeamMemberSchema,
 } from '../schemas/catalog.js';
 import * as catalog from '../services/catalog.js';
 
@@ -60,6 +64,52 @@ export const catalogModule: ApiModule = {
       access: 'public',
       response: z.array(tagSchema),
       handler: ({ transaction }) => transaction((tx) => catalog.getAllTags(tx)),
+    });
+    // ---------- 102b: Studios & Team ----------
+    defineRoute(app, deps, {
+      method: 'GET',
+      url: '/v1/me/studios',
+      summary: 'List studios where the caller is a member.',
+      access: 'verified',
+      response: z.array(myStudioSchema),
+      handler: ({ actor, transaction }) => transaction((tx) => catalog.listMyStudios(tx, actor.id)),
+    });
+
+    defineRoute(app, deps, {
+      method: 'POST',
+      url: '/v1/studios',
+      summary: 'Create a studio and add the caller as its initial manager.',
+      access: 'verified',
+      body: studioInputSchema,
+      response: studioSchema,
+      errors: [403],
+      handler: ({ actor, body, transaction }) =>
+        transaction((tx) => catalog.createStudio(tx, actor.id, body)),
+    });
+
+    defineRoute(app, deps, {
+      method: 'PATCH',
+      url: '/v1/studios/:id',
+      summary: 'Update studio details (current manager only).',
+      access: 'verified',
+      params: idParamsSchema,
+      body: studioInputSchema,
+      response: studioSchema,
+      errors: [403],
+      handler: ({ actor, params, body, transaction }) =>
+        transaction((tx) => catalog.updateStudio(tx, actor.id, params.id, body)),
+    });
+
+    defineRoute(app, deps, {
+      method: 'GET',
+      url: '/v1/studios/:id/team',
+      summary: 'List members of a studio (current manager only).',
+      access: 'verified',
+      params: idParamsSchema,
+      response: z.array(studioTeamMemberSchema),
+      errors: [403],
+      handler: ({ actor, params, transaction }) =>
+        transaction((tx) => catalog.getStudioTeam(tx, actor.id, params.id)),
     });
   },
 };

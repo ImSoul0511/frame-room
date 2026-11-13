@@ -133,3 +133,43 @@ export type Tag = z.infer<typeof tagSchema>;
 export type PublicPortfolio = z.infer<typeof publicPortfolioSchema>;
 export type PublicReview = z.infer<typeof publicReviewSchema>;
 export type ProviderDetail = z.infer<typeof providerDetailSchema>;
+
+// ---------- 102b: Studios & Team ----------
+
+export const studioMemberRoleSchema = z.enum(['manager', 'photographer']);
+
+export const studioInputSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  description,
+  city: z.string().trim().max(100).default(''),
+  district: z.string().trim().max(100).default(''),
+  address: z.string().trim().max(200).default(''),
+  genres: z.array(genreSchema).min(1).max(5),
+});
+
+export const studioSchema = studioInputSchema.extend({
+  id: idSchema,
+  createdBy: idSchema,
+  isHidden: z.boolean(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const myStudioSchema = studioSchema.extend({
+  role: studioMemberRoleSchema,
+});
+
+export const studioTeamMemberSchema = z.object({
+  studioId: idSchema,
+  userId: idSchema,
+  role: studioMemberRoleSchema,
+  joinedAt: z.string(),
+  displayName: z.string(),
+  userName: z.string(),
+  photographerId: idSchema,
+});
+
+export type StudioInput = z.infer<typeof studioInputSchema>;
+export type Studio = z.infer<typeof studioSchema>;
+export type MyStudio = z.infer<typeof myStudioSchema>;
+export type StudioTeamMember = z.infer<typeof studioTeamMemberSchema>;

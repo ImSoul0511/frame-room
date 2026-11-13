@@ -3,7 +3,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AUTH, bodyData, buildTestApp, closeTestApps } from '../../test/helpers/build-test-app.js';
 import * as repo from '../repositories/catalog.js';
 import * as profileRepo from '../repositories/profiles.js';
-import type { PublicPortfolio, PublicReview, Tag, Provider, Service } from '../schemas/catalog.js';
+import type {
+  PublicPortfolio,
+  PublicReview,
+  Tag,
+  Provider,
+  Service,
+  Studio,
+} from '../schemas/catalog.js';
 
 vi.mock('../repositories/catalog.js');
 vi.mock('../repositories/profiles.js');
@@ -16,6 +23,7 @@ const REVIEW_ID = '66666666-6666-4666-8666-666666666666';
 const BOOKING_ID = '77777777-7777-4777-8777-777777777777';
 const AUTHOR_ID = '88888888-8888-4888-8888-888888888888';
 const TAG_ID = '99999999-9999-4999-8999-999999999999';
+const USER_ID = '11111111-1111-4111-8111-111111111111';
 
 const PHOTOGRAPHER_PROVIDER: Provider = {
   id: PHOTOGRAPHER_ID,
@@ -222,5 +230,164 @@ describe('GET /v1/tags', () => {
     const res = await app.inject({ method: 'GET', url: '/v1/tags' });
     expect(res.statusCode).toBe(200);
     expect(bodyData(res)).toEqual([TAG]);
+  });
+});
+
+// ---------- 102b: Studios & Team ----------
+
+const STUDIO_INPUT = {
+  name: 'Daylight Studio',
+  description: 'Natural light studio in D1',
+  city: 'Ho Chi Minh',
+  district: 'District 1',
+  address: '123 Le Loi',
+  genres: ['portrait', 'fashion'] as const,
+};
+
+const STUDIO: Studio = {
+  ...STUDIO_INPUT,
+  genres: ['portrait', 'fashion'],
+  id: STUDIO_ID,
+  createdBy: USER_ID,
+  isHidden: false,
+  createdAt: '2026-11-13T00:00:00.000Z',
+  updatedAt: '2026-11-13T00:00:00.000Z',
+};
+
+describe('GET /v1/me/studios', () => {
+  it('returns studios where the caller is a member (200)', async () => {
+    vi.mocked(repo.listStudiosByMember).mockResolvedValue([{ ...STUDIO, role: 'manager' }]);
+    const app = await buildTestApp();
+    const res = await app.inject({ method: 'GET', url: '/v1/me/studios', headers: AUTH });
+    expect(res.statusCode).toBe(200);
+    expect(bodyData(res)).toEqual([expect.objectContaining({ id: STUDIO_ID, role: 'manager' })]);
+    expect(repo.listStudiosByMember).toHaveBeenCalledWith(expect.anything(), 'user-1');
+  });
+
+  it('returns 401 without authorization header', async () => {
+    const app = await buildTestApp();
+    const res = await app.inject({ method: 'GET', url: '/v1/me/studios' });
+    expect(res.statusCode).toBe(401);
+  });
+});
+
+describe('POST /v1/studios', () => {
+  it('creates a studio and adds the caller as initial manager (201)', async () => {
+    vi.mocked(repo.photographerExistsByUser).mockResolvedValue(true);
+    vi.mocked(repo.insertStudio).mockResolvedValue(STUDIO);
+
+    const app = await buildTestApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/studios',
+      payload: STUDIO_INPUT,
+      headers: AUTH,
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(bodyData(res)).toMatchObject({ id: STUDIO_ID, name: 'Daylight Studio' });
+    expect(repo.insertStudioMember).toHaveBeenCalledWith(
+      expect.anything(),
+      STUDIO_ID,
+      'user-1',
+      'manager',
+    );
+  });
+
+  it('returns 403 photographer_required when caller has no photographer profile', async () => {
+    vi.mocked(repo.photographerExistsByUser).mockResolvedValue(false);
+
+    const app = await buildTestApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/studios',
+      payload: STUDIO_INPUT,
+      headers: AUTH,
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(res.body).toContain('photographer_required');
+    expect(repo.insertStudio).not.toHaveBeenCalled();
+  });
+});
+
+describe('PATCH /v1/studios/:id', () => {
+  it('updates studio details when caller is a current manager (200)', async () => {
+    vi.mocked(repo.isStudioManager).mockResolvedValue(true);
+    vi.mocked(repo.updateStudio).mockResolvedValue({ ...STUDIO, name: 'Updated Studio' });
+
+    const app = await buildTestApp();
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/v1/studios/${STUDIO_ID}`,
+      payload: { ...STUDIO_INPUT, name: 'Updated Studio' },
+      headers: AUTH,
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(bodyData(res)).toMatchObject({ name: 'Updated Studio' });
+  });
+
+  it('returns 403 manager_required when caller is not a manager', async () => {
+    vi.mocked(repo.isStudioManager).mockResolvedValue(false);
+
+    const app = await buildTestApp();
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/v1/studios/${STUDIO_ID}`,
+      payload: STUDIO_INPUT,
+      headers: AUTH,
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(res.body).toContain('manager_required');
+    expect(repo.updateStudio).not.toHaveBeenCalled();
+  });
+});
+
+describe('GET /v1/studios/:id/team', () => {
+  it('returns team members for a studio manager (200)', async () => {
+    vi.mocked(repo.isStudioManager).mockResolvedValue(true);
+    vi.mocked(repo.listStudioTeam).mockResolvedValue([
+      {
+        studioId: STUDIO_ID,
+        userId: USER_ID,
+        role: 'manager',
+        joinedAt: '2026-11-13T00:00:00.000Z',
+        displayName: 'Khai',
+        userName: 'khai',
+        photographerId: PHOTOGRAPHER_ID,
+      },
+    ]);
+
+    const app = await buildTestApp();
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/studios/${STUDIO_ID}/team`,
+      headers: AUTH,
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(bodyData(res)).toEqual([
+      expect.objectContaining({
+        userId: USER_ID,
+        role: 'manager',
+        photographerId: PHOTOGRAPHER_ID,
+      }),
+    ]);
+  });
+
+  it('returns 403 manager_required when caller is not a manager', async () => {
+    vi.mocked(repo.isStudioManager).mockResolvedValue(false);
+
+    const app = await buildTestApp();
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/studios/${STUDIO_ID}/team`,
+      headers: AUTH,
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(res.body).toContain('manager_required');
   });
 });

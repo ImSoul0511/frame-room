@@ -7,6 +7,10 @@ import type {
   ProviderDetail,
   Provider,
   Tag,
+  MyStudio,
+  Studio,
+  StudioInput,
+  StudioTeamMember,
 } from '../schemas/catalog.js';
 
 /** Tạo public URL cho ảnh trong bucket `portfolio-images` nếu có SUPABASE_URL, hoặc trả về đường dẫn gốc. */
@@ -82,4 +86,59 @@ export async function getProviderDetail(
 
 export async function getAllTags(tx: Transaction): Promise<Tag[]> {
   return repo.listTags(tx);
+}
+
+// ---------- 102b: Studios & Team ----------
+
+export async function requireStudioManager(
+  tx: Transaction,
+  studioId: string,
+  userId: string,
+): Promise<void> {
+  const allowed = await repo.isStudioManager(tx, studioId, userId);
+  if (!allowed) {
+    throw new ApiError(403, 'FORBIDDEN', 'manager_required');
+  }
+}
+
+export async function listMyStudios(tx: Transaction, userId: string): Promise<MyStudio[]> {
+  return repo.listStudiosByMember(tx, userId);
+}
+
+export async function createStudio(
+  tx: Transaction,
+  userId: string,
+  input: StudioInput,
+): Promise<Studio> {
+  const hasPhotographerProfile = await repo.photographerExistsByUser(tx, userId);
+  if (!hasPhotographerProfile) {
+    throw new ApiError(403, 'FORBIDDEN', 'photographer_required');
+  }
+
+  const studio = await repo.insertStudio(tx, userId, input);
+  await repo.insertStudioMember(tx, studio.id, userId, 'manager');
+  return studio;
+}
+
+export async function updateStudio(
+  tx: Transaction,
+  userId: string,
+  studioId: string,
+  input: StudioInput,
+): Promise<Studio> {
+  await requireStudioManager(tx, studioId, userId);
+  const updated = await repo.updateStudio(tx, studioId, input);
+  if (!updated) {
+    throw new ApiError(404, 'NOT_FOUND', 'studio_not_found');
+  }
+  return updated;
+}
+
+export async function getStudioTeam(
+  tx: Transaction,
+  userId: string,
+  studioId: string,
+): Promise<StudioTeamMember[]> {
+  await requireStudioManager(tx, studioId, userId);
+  return repo.listStudioTeam(tx, studioId);
 }

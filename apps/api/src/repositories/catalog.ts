@@ -1,9 +1,13 @@
 import type {
   ExploreQuery,
+  MyStudio,
+  Provider,
   PublicPortfolio,
   PublicReview,
-  Provider,
   Service,
+  Studio,
+  StudioInput,
+  StudioTeamMember,
   Tag,
 } from '../schemas/catalog.js';
 import type { Transaction } from './database.js';
@@ -197,4 +201,122 @@ export async function listVisibleReviewsByProvider(
 /** Lấy toàn bộ danh sách tags theo kind và name. */
 export async function listTags(tx: Transaction): Promise<Tag[]> {
   return tx.rows<Tag>('select id, name, slug, kind from tags order by kind, name');
+}
+
+// ---------- 102b: Studios & Team ----------
+
+/** Checks whether the caller has an existing photographer profile (required to create a studio). */
+export async function photographerExistsByUser(tx: Transaction, userId: string): Promise<boolean> {
+  const row = await tx.optional<{ id: string }>('select id from photographers where user_id = $1', [
+    userId,
+  ]);
+  return row !== undefined;
+}
+
+/** Checks whether the caller is an active manager of a non-deleted studio. */
+export async function isStudioManager(
+  tx: Transaction,
+  studioId: string,
+  userId: string,
+): Promise<boolean> {
+  const row = await tx.optional<{ userId: string }>(
+    `select m.user_id
+     from studio_members m
+     join studios s on s.id = m.studio_id
+     where m.studio_id = $1
+       and m.user_id = $2
+       and m.role = 'manager'
+       and s.deleted_at is null`,
+    [studioId, userId],
+  );
+  return row !== undefined;
+}
+
+/** Lists active studios where the user is a member, including their role. */
+export async function listStudiosByMember(tx: Transaction, userId: string): Promise<MyStudio[]> {
+  return tx.rows<MyStudio>(
+    `select s.id, s.name, s.description, s.city, s.district, s.address, s.genres,
+            s.created_by, s.is_hidden, s.created_at, s.updated_at, m.role
+     from studios s
+     join studio_members m on m.studio_id = s.id
+     where m.user_id = $1 and s.deleted_at is null
+     order by s.name`,
+    [userId],
+  );
+}
+
+/** Inserts a new studio row and returns the created record. */
+export async function insertStudio(
+  tx: Transaction,
+  userId: string,
+  input: StudioInput,
+): Promise<Studio> {
+  return tx.one<Studio>(
+    `insert into studios (name, description, city, district, address, genres, created_by)
+     values ($1, $2, $3, $4, $5, $6, $7)
+     returning id, name, description, city, district, address, genres, created_by, is_hidden, created_at, updated_at`,
+    [
+      input.name,
+      input.description,
+      input.city,
+      input.district,
+      input.address,
+      input.genres,
+      userId,
+    ],
+  );
+}
+
+/** Inserts a member into studio_members with the given role. */
+export async function insertStudioMember(
+  tx: Transaction,
+  studioId: string,
+  userId: string,
+  role: 'manager' | 'photographer',
+): Promise<void> {
+  await tx.execute(
+    `insert into studio_members (studio_id, user_id, role)
+     values ($1, $2, $3)`,
+    [studioId, userId, role],
+  );
+}
+
+/** Updates mutable details of a non-deleted studio. */
+export async function updateStudio(
+  tx: Transaction,
+  studioId: string,
+  input: StudioInput,
+): Promise<Studio | undefined> {
+  return tx.optional<Studio>(
+    `update studios
+     set name = $2, description = $3, city = $4, district = $5, address = $6, genres = $7, updated_at = now()
+     where id = $1 and deleted_at is null
+     returning id, name, description, city, district, address, genres, created_by, is_hidden, created_at, updated_at`,
+    [
+      studioId,
+      input.name,
+      input.description,
+      input.city,
+      input.district,
+      input.address,
+      input.genres,
+    ],
+  );
+}
+
+/** Lists all team members of a studio joined with their profile and photographer id. */
+export async function listStudioTeam(
+  tx: Transaction,
+  studioId: string,
+): Promise<StudioTeamMember[]> {
+  return tx.rows<StudioTeamMember>(
+    `select m.studio_id, m.user_id, m.role, m.joined_at,
+            p.display_name, p.user_name, ph.id as photographer_id
+     from studio_members m
+     join profiles p on p.id = m.user_id
+     join photographers ph on ph.user_id = m.user_id
+     where m.studio_id = $1
+     order by m.joined_at asc`,
+    [studioId],
+  );
 }
