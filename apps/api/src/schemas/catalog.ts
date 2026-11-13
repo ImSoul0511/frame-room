@@ -20,7 +20,7 @@ const shortText = z.string().trim().min(1).max(120);
 const description = z.string().trim().max(2000).default('');
 const nonnegative = z.number().int().min(0);
 
-/** Path parameter `:id` (UUID) dùng chung cho các route chi tiết. */
+/** Shared `:id` UUID path parameter schema for detail and mutation routes. */
 export const idParamsSchema = z.object({
   id: idSchema,
 });
@@ -30,7 +30,7 @@ export const paginationSchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(50).default(20),
 });
 
-/** Query parameters cho GET /v1/explore. */
+/** Query parameters for GET /v1/explore. */
 export const exploreQuerySchema = paginationSchema.extend({
   genre: genreSchema.optional(),
   city: z.string().trim().max(100).optional(),
@@ -52,7 +52,7 @@ export const providerSchema = z.object({
   reviewCount: z.number(),
 });
 
-/** Card provider trên trang Explore (có thêm coverUrl từ ảnh đầu tiên của portfolio đã publish). */
+/** Explore provider card enriched with the cover URL from its first published portfolio image. */
 export const exploreProviderSchema = providerSchema.extend({
   coverUrl: z.string().nullable().optional(),
 });
@@ -82,7 +82,7 @@ export const portfolioInputSchema = z.object({
   status: z.enum(['draft', 'published']).default('draft'),
 });
 
-/** Portfolio đã publish hiển thị trong trang chi tiết provider. */
+/** Published portfolio displayed on a public provider detail page. */
 export const publicPortfolioSchema = portfolioInputSchema.extend({
   id: idSchema,
   ownerType: providerTypeSchema,
@@ -94,7 +94,7 @@ export const publicPortfolioSchema = portfolioInputSchema.extend({
   coverUrl: z.string().nullable().optional(),
 });
 
-/** Đánh giá công khai hiển thị trong trang chi tiết provider. */
+/** Publicly visible review displayed on a provider detail page. */
 export const publicReviewSchema = z.object({
   id: idSchema,
   bookingId: idSchema,
@@ -108,7 +108,7 @@ export const publicReviewSchema = z.object({
   updatedAt: z.string(),
 });
 
-/** Tag taxonomy (bảng public.tags). */
+/** Taxonomy tag (public.tags). */
 export const tagKindSchema = z.enum(['tone', 'setting', 'mood']);
 export const tagSchema = z.object({
   id: idSchema,
@@ -117,7 +117,7 @@ export const tagSchema = z.object({
   kind: tagKindSchema,
 });
 
-/** Response của GET /v1/photographers/:id và GET /v1/studios/:id. */
+/** Response payload for GET /v1/photographers/:id and GET /v1/studios/:id. */
 export const providerDetailSchema = z.object({
   provider: providerSchema,
   services: z.array(serviceSchema),
@@ -234,3 +234,80 @@ export type OwnedPortfolio = z.infer<typeof ownedPortfolioSchema>;
 export type PortfolioImageInput = z.infer<typeof portfolioImageInputSchema>;
 export type PortfolioImage = z.infer<typeof portfolioImageSchema>;
 export type PortfolioDetail = z.infer<typeof portfolioDetailSchema>;
+
+// ---------- 102e: Invitations, Members, Resources & Add-ons ----------
+
+export const invitationStatusSchema = z.enum(['pending', 'accepted', 'declined', 'cancelled']);
+
+export const resourceTypeSchema = z.enum(['room', 'equipment', 'backdrop', 'lighting', 'other']);
+
+export const studioInvitationInputSchema = z.object({
+  photographerId: idSchema,
+  role: studioMemberRoleSchema.default('photographer'),
+});
+
+export const studioInvitationSchema = z.object({
+  id: idSchema,
+  studioId: idSchema,
+  photographerId: idSchema,
+  role: studioMemberRoleSchema,
+  status: invitationStatusSchema,
+  invitedBy: idSchema,
+  respondedAt: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const myInvitationSchema = studioInvitationSchema.extend({
+  studioName: z.string(),
+  inviterName: z.string(),
+});
+
+export const respondInvitationInputSchema = z.object({
+  action: z.enum(['accept', 'decline']),
+});
+
+export const studioMemberParamsSchema = z.object({
+  id: idSchema,
+  userId: idSchema,
+});
+
+export const updateStudioMemberRoleInputSchema = z.object({
+  role: z.enum(['manager', 'photographer']),
+});
+
+export const studioResourceInputSchema = z.object({
+  name: z.string().trim().min(1).max(160),
+  type: resourceTypeSchema,
+  description: z.string().trim().max(1000).default(''),
+  isActive: z.boolean().default(true),
+});
+
+export const studioResourceSchema = studioResourceInputSchema.extend({
+  id: idSchema,
+  studioId: idSchema,
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const serviceAddOnInputSchema = z.object({
+  name: z.string().trim().min(1).max(160),
+  description: z.string().trim().max(1000).default(''),
+  price: z.number().int().min(0),
+  isActive: z.boolean().default(true),
+});
+
+export const serviceAddOnSchema = serviceAddOnInputSchema.extend({
+  id: idSchema,
+  serviceId: idSchema,
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export type StudioInvitationInput = z.infer<typeof studioInvitationInputSchema>;
+export type StudioInvitation = z.infer<typeof studioInvitationSchema>;
+export type MyInvitation = z.infer<typeof myInvitationSchema>;
+export type StudioResourceInput = z.infer<typeof studioResourceInputSchema>;
+export type StudioResource = z.infer<typeof studioResourceSchema>;
+export type ServiceAddOnInput = z.infer<typeof serviceAddOnInputSchema>;
+export type ServiceAddOn = z.infer<typeof serviceAddOnSchema>;

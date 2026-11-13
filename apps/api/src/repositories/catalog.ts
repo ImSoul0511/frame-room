@@ -15,13 +15,20 @@ import type {
   PortfolioImageInput,
   PortfolioInput,
   PortfolioListQuery,
+  MyInvitation,
+  ServiceAddOn,
+  ServiceAddOnInput,
+  StudioInvitation,
+  StudioInvitationInput,
+  StudioResource,
+  StudioResourceInput,
 } from '../schemas/catalog.js';
 import type { Transaction } from './database.js';
 
 export type ProviderType = 'photographer' | 'studio';
 
 /**
- * Ép kiểu các cột số (numeric/bigint từ pg có thể trả về dạng string) để khớp providerSchema.
+ *  Coerces Postgres numeric/bigint string columns into JS numbers to satisfy providerSchema.
  */
 function coerceProvider(row: Provider): Provider {
   return {
@@ -44,7 +51,7 @@ function coerceService(row: Service): Service {
   };
 }
 
-/** Tìm kiếm danh sách provider cho GET /v1/explore với bộ lọc và phân trang. */
+/** Queries public providers for GET /v1/explore with optional filters and pagination. */
 export async function discoverProviders(
   tx: Transaction,
   filters: ExploreQuery,
@@ -85,7 +92,7 @@ export async function discoverProviders(
   return rows.map(coerceProvider);
 }
 
-/** Lấy đường dẫn ảnh bìa đầu tiên của một provider từ các portfolio đã publish. */
+/** Finds the storage path of the first visible image across a provider's published portfolios. */
 export async function findProviderCoverPath(
   tx: Transaction,
   providerId: string,
@@ -105,7 +112,7 @@ export async function findProviderCoverPath(
   return row?.storagePath;
 }
 
-/** Danh sách tối đa 50 provider theo loại (photographer | studio) cho GET /v1/photographers và /v1/studios. */
+/** Lists up to 50 visible providers by type for GET /v1/photographers and GET /v1/studios. */
 export async function listProvidersByType(
   tx: Transaction,
   type: ProviderType,
@@ -121,7 +128,7 @@ export async function listProvidersByType(
   return rows.map(coerceProvider);
 }
 
-/** Lấy 1 provider theo id và type (trả undefined nếu không có hoặc bị ẩn). */
+/** Finds a single visible provider by id and type. */
 export async function findProviderById(
   tx: Transaction,
   type: ProviderType,
@@ -136,7 +143,7 @@ export async function findProviderById(
   return row ? coerceProvider(row) : undefined;
 }
 
-/** Lấy danh sách các gói dịch vụ đang active của provider. */
+/** Lists active, non-deleted services offered by a provider. */
 export async function listActiveServicesByProvider(
   tx: Transaction,
   type: ProviderType,
@@ -153,7 +160,7 @@ export async function listActiveServicesByProvider(
   return rows.map(coerceService);
 }
 
-/** Lấy danh sách các portfolio đã publish của provider. */
+/** Lists published, non-deleted portfolios owned by a provider. */
 export async function listPublishedPortfoliosByProvider(
   tx: Transaction,
   type: ProviderType,
@@ -169,7 +176,7 @@ export async function listPublishedPortfoliosByProvider(
   );
 }
 
-/** Lấy ảnh đầu tiên không bị ẩn của một portfolio để làm cover. */
+/** Finds the storage path of the first visible image in a portfolio to use as its cover. */
 export async function findPortfolioCoverPath(
   tx: Transaction,
   portfolioId: string,
@@ -185,7 +192,7 @@ export async function findPortfolioCoverPath(
   return row?.storagePath;
 }
 
-/** Lấy danh sách tối đa 50 đánh giá hiển thị công khai của provider. */
+/** Lists up to 50 visible reviews for a provider, joined with author display names. */
 export async function listVisibleReviewsByProvider(
   tx: Transaction,
   type: ProviderType,
@@ -204,7 +211,7 @@ export async function listVisibleReviewsByProvider(
   return rows.map((r) => ({ ...r, rating: Number(r.rating) }));
 }
 
-/** Lấy toàn bộ danh sách tags theo kind và name. */
+/** Lists all taxonomy tags ordered by kind and name. */
 export async function listTags(tx: Transaction): Promise<Tag[]> {
   return tx.rows<Tag>('select id, name, slug, kind from tags order by kind, name');
 }
@@ -719,4 +726,295 @@ export async function replacePortfolioImageTags(
     );
   }
   return listTagsForImage(tx, imageId);
+}
+
+// ---------- 102e: Invitations, Members, Resources & Add-ons ----------
+
+function coerceServiceAddOn(row: ServiceAddOn): ServiceAddOn {
+  return {
+    ...row,
+    price: Number(row.price),
+  };
+}
+
+/** Lists pending invitations addressed to the caller's photographer profile. */
+export async function listPendingInvitationsForUser(
+  tx: Transaction,
+  userId: string,
+): Promise<MyInvitation[]> {
+  return tx.rows<MyInvitation>(
+    `select si.id, si.studio_id, si.photographer_id, si.role, si.status, si.invited_by,
+            si.responded_at, si.created_at, si.updated_at,
+            st.name as studio_name,
+            coalesce(pr.display_name, '') as inviter_name
+     from studio_invitations si
+     join photographers p on p.id = si.photographer_id
+     join studios st on st.id = si.studio_id
+     left join profiles pr on pr.id = si.invited_by
+     where p.user_id = $1
+       and si.status = 'pending'
+       and st.deleted_at is null
+     order by si.created_at desc`,
+    [userId],
+  );
+}
+
+/** Finds the user_id for a photographer id, or undefined if the photographer does not exist. */
+export async function findPhotographerUserId(
+  tx: Transaction,
+  photographerId: string,
+): Promise<string | undefined> {
+  const row = await tx.optional<{ userId: string }>(
+    'select user_id from photographers where id = $1',
+    [photographerId],
+  );
+  return row?.userId;
+}
+
+/** Checks whether a user is already a member of a studio. */
+export async function isStudioMember(
+  tx: Transaction,
+  studioId: string,
+  userId: string,
+): Promise<boolean> {
+  const row = await tx.optional<{ userId: string }>(
+    'select user_id from studio_members where studio_id = $1 and user_id = $2',
+    [studioId, userId],
+  );
+  return row !== undefined;
+}
+
+/** Checks whether a pending invitation already exists for the studio and photographer. */
+export async function hasPendingStudioInvitation(
+  tx: Transaction,
+  studioId: string,
+  photographerId: string,
+): Promise<boolean> {
+  const row = await tx.optional<{ id: string }>(
+    `select id from studio_invitations
+     where studio_id = $1 and photographer_id = $2 and status = 'pending'`,
+    [studioId, photographerId],
+  );
+  return row !== undefined;
+}
+
+/** Creates a pending studio invitation. */
+export async function insertStudioInvitation(
+  tx: Transaction,
+  studioId: string,
+  invitedBy: string,
+  input: StudioInvitationInput,
+): Promise<StudioInvitation> {
+  return tx.one<StudioInvitation>(
+    `insert into studio_invitations (studio_id, photographer_id, role, status, invited_by)
+     values ($1, $2, $3, 'pending', $4)
+     returning id, studio_id, photographer_id, role, status, invited_by,
+               responded_at, created_at, updated_at`,
+    [studioId, input.photographerId, input.role, invitedBy],
+  );
+}
+
+/** Finds an invitation along with the invited photographer's user_id. */
+export async function findInvitationWithRecipient(
+  tx: Transaction,
+  invitationId: string,
+): Promise<(StudioInvitation & { recipientUserId: string }) | undefined> {
+  return tx.optional<StudioInvitation & { recipientUserId: string }>(
+    `select si.id, si.studio_id, si.photographer_id, si.role, si.status, si.invited_by,
+            si.responded_at, si.created_at, si.updated_at,
+            p.user_id as recipient_user_id
+     from studio_invitations si
+     join photographers p on p.id = si.photographer_id
+     where si.id = $1`,
+    [invitationId],
+  );
+}
+
+/** Marks an invitation as accepted or declined and returns the updated row. */
+export async function updateInvitationStatus(
+  tx: Transaction,
+  invitationId: string,
+  status: 'accepted' | 'declined',
+): Promise<StudioInvitation> {
+  return tx.one<StudioInvitation>(
+    `update studio_invitations
+     set status = $2, responded_at = now(), updated_at = now()
+     where id = $1
+     returning id, studio_id, photographer_id, role, status, invited_by,
+               responded_at, created_at, updated_at`,
+    [invitationId, status],
+  );
+}
+
+/** Counts how many current managers a studio has. */
+export async function countStudioManagers(tx: Transaction, studioId: string): Promise<number> {
+  const row = await tx.one<{ count: string }>(
+    `select count(*)::text as count
+     from studio_members
+     where studio_id = $1 and role = 'manager'`,
+    [studioId],
+  );
+  return Number(row.count);
+}
+
+/** Finds a member's current role in a studio, or undefined if not a member. */
+export async function findStudioMemberRole(
+  tx: Transaction,
+  studioId: string,
+  userId: string,
+): Promise<'manager' | 'photographer' | undefined> {
+  const row = await tx.optional<{ role: 'manager' | 'photographer' }>(
+    'select role from studio_members where studio_id = $1 and user_id = $2',
+    [studioId, userId],
+  );
+  return row?.role;
+}
+
+/** Updates a studio member's role and returns their updated team member record. */
+export async function updateStudioMemberRole(
+  tx: Transaction,
+  studioId: string,
+  userId: string,
+  role: 'manager' | 'photographer',
+): Promise<StudioTeamMember> {
+  await tx.execute('update studio_members set role = $3 where studio_id = $1 and user_id = $2', [
+    studioId,
+    userId,
+    role,
+  ]);
+  return tx.one<StudioTeamMember>(
+    `select m.studio_id, m.user_id, m.role, m.joined_at,
+            coalesce(pr.display_name, '') as display_name,
+            coalesce(pr.user_name, '') as user_name,
+            p.id as photographer_id
+     from studio_members m
+     left join profiles pr on pr.id = m.user_id
+     left join photographers p on p.user_id = m.user_id
+     where m.studio_id = $1 and m.user_id = $2`,
+    [studioId, userId],
+  );
+}
+
+/** Checks whether a user has active studio bookings assigned to their photographer profile. */
+export async function hasActiveStudioBookingAssignments(
+  tx: Transaction,
+  studioId: string,
+  userId: string,
+): Promise<boolean> {
+  const row = await tx.optional<{ id: string }>(
+    `select b.id
+     from bookings b
+     join photographers p on p.id = b.assigned_photographer_id
+     where b.studio_id = $1
+       and p.user_id = $2
+       and b.status not in ('completed', 'cancelled', 'declined')
+     limit 1`,
+    [studioId, userId],
+  );
+  return row !== undefined;
+}
+
+/** Removes a member from a studio. */
+export async function deleteStudioMember(
+  tx: Transaction,
+  studioId: string,
+  userId: string,
+): Promise<void> {
+  await tx.execute('delete from studio_members where studio_id = $1 and user_id = $2', [
+    studioId,
+    userId,
+  ]);
+}
+
+/** Lists non-deleted resources belonging to a studio. */
+export async function listStudioResources(
+  tx: Transaction,
+  studioId: string,
+): Promise<StudioResource[]> {
+  return tx.rows<StudioResource>(
+    `select id, studio_id, name, type, description, is_active, created_at, updated_at
+     from studio_resources
+     where studio_id = $1 and deleted_at is null
+     order by name`,
+    [studioId],
+  );
+}
+
+/** Inserts a new studio resource. */
+export async function insertStudioResource(
+  tx: Transaction,
+  studioId: string,
+  input: StudioResourceInput,
+): Promise<StudioResource> {
+  return tx.one<StudioResource>(
+    `insert into studio_resources (studio_id, name, type, description, is_active)
+     values ($1, $2, $3, $4, $5)
+     returning id, studio_id, name, type, description, is_active, created_at, updated_at`,
+    [studioId, input.name, input.type, input.description, input.isActive],
+  );
+}
+
+/** Finds the owning studio_id of a non-deleted resource. */
+export async function findResourceStudioId(
+  tx: Transaction,
+  resourceId: string,
+): Promise<string | undefined> {
+  const row = await tx.optional<{ studioId: string }>(
+    'select studio_id from studio_resources where id = $1 and deleted_at is null',
+    [resourceId],
+  );
+  return row?.studioId;
+}
+
+/** Updates an existing non-deleted studio resource. */
+export async function updateStudioResource(
+  tx: Transaction,
+  resourceId: string,
+  input: StudioResourceInput,
+): Promise<StudioResource> {
+  return tx.one<StudioResource>(
+    `update studio_resources
+     set name = $2, type = $3, description = $4, is_active = $5, updated_at = now()
+     where id = $1 and deleted_at is null
+     returning id, studio_id, name, type, description, is_active, created_at, updated_at`,
+    [resourceId, input.name, input.type, input.description, input.isActive],
+  );
+}
+
+/** Soft-deletes a studio resource and marks it inactive. */
+export async function softDeleteStudioResource(tx: Transaction, resourceId: string): Promise<void> {
+  await tx.execute(
+    'update studio_resources set deleted_at = now(), is_active = false, updated_at = now() where id = $1',
+    [resourceId],
+  );
+}
+
+/** Lists non-deleted add-ons for a service. */
+export async function listServiceAddOns(
+  tx: Transaction,
+  serviceId: string,
+): Promise<ServiceAddOn[]> {
+  const rows = await tx.rows<ServiceAddOn>(
+    `select id, service_id, name, description, price, is_active, created_at, updated_at
+     from service_add_ons
+     where service_id = $1 and deleted_at is null
+     order by name`,
+    [serviceId],
+  );
+  return rows.map(coerceServiceAddOn);
+}
+
+/** Inserts a new add-on for a service. */
+export async function insertServiceAddOn(
+  tx: Transaction,
+  serviceId: string,
+  input: ServiceAddOnInput,
+): Promise<ServiceAddOn> {
+  const row = await tx.one<ServiceAddOn>(
+    `insert into service_add_ons (service_id, name, description, price, is_active)
+     values ($1, $2, $3, $4, $5)
+     returning id, service_id, name, description, price, is_active, created_at, updated_at`,
+    [serviceId, input.name, input.description, input.price, input.isActive],
+  );
+  return coerceServiceAddOn(row);
 }

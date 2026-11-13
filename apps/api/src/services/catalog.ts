@@ -20,9 +20,16 @@ import type {
   PortfolioInput,
   PortfolioListQuery,
   PublicPortfolio,
+  MyInvitation,
+  ServiceAddOn,
+  ServiceAddOnInput,
+  StudioInvitation,
+  StudioInvitationInput,
+  StudioResource,
+  StudioResourceInput,
 } from '../schemas/catalog.js';
 
-/** Tạo public URL cho ảnh trong bucket `portfolio-images` nếu có SUPABASE_URL, hoặc trả về đường dẫn gốc. */
+/** Builds a public URL for the `portfolio-images` bucket when SUPABASE_URL is configured. */
 function buildPublicPortfolioImageUrl(
   supabaseUrl: string | undefined,
   storagePath: string | undefined,
@@ -387,4 +394,188 @@ export async function setPortfolioImageTags(
   }
   await assertProviderOwnership(tx, userId, ownership);
   return repo.replacePortfolioImageTags(tx, imageId, tagIds);
+}
+
+// ---------- 102e: Invitations, Members, Resources & Add-ons ----------
+
+export async function listMyInvitations(tx: Transaction, userId: string): Promise<MyInvitation[]> {
+  return repo.listPendingInvitationsForUser(tx, userId);
+}
+
+export async function createStudioInvitation(
+  tx: Transaction,
+  userId: string,
+  studioId: string,
+  input: StudioInvitationInput,
+): Promise<StudioInvitation> {
+  await requireStudioManager(tx, studioId, userId);
+
+  const targetUserId = await repo.findPhotographerUserId(tx, input.photographerId);
+  if (!targetUserId) {
+    throw new ApiError(404, 'NOT_FOUND', 'photographer_not_found');
+  }
+
+  const alreadyMember = await repo.isStudioMember(tx, studioId, targetUserId);
+  if (alreadyMember) {
+    throw new ApiError(409, 'CONFLICT', 'already_studio_member');
+  }
+
+  const alreadyInvited = await repo.hasPendingStudioInvitation(tx, studioId, input.photographerId);
+  if (alreadyInvited) {
+    throw new ApiError(409, 'CONFLICT', 'invitation_already_pending');
+  }
+
+  return repo.insertStudioInvitation(tx, studioId, userId, input);
+}
+
+export async function respondToInvitation(
+  tx: Transaction,
+  userId: string,
+  invitationId: string,
+  action: 'accept' | 'decline',
+): Promise<StudioInvitation> {
+  const invitation = await repo.findInvitationWithRecipient(tx, invitationId);
+  if (!invitation) {
+    throw new ApiError(404, 'NOT_FOUND', 'invitation_not_found');
+  }
+  if (invitation.recipientUserId !== userId) {
+    throw new ApiError(403, 'FORBIDDEN', 'not_invitation_recipient');
+  }
+  if (invitation.status !== 'pending') {
+    throw new ApiError(409, 'CONFLICT', 'invitation_not_pending');
+  }
+
+  const nextStatus = action === 'accept' ? 'accepted' : 'declined';
+  const updated = await repo.updateInvitationStatus(tx, invitationId, nextStatus);
+
+  if (action === 'accept') {
+    await repo.insertStudioMember(tx, invitation.studioId, userId, invitation.role);
+  }
+
+  return updated;
+}
+
+export async function updateStudioMemberRole(
+  tx: Transaction,
+  callerUserId: string,
+  studioId: string,
+  targetUserId: string,
+  role: 'manager' | 'photographer',
+): Promise<StudioTeamMember> {
+  await requireStudioManager(tx, studioId, callerUserId);
+
+  const currentRole = await repo.findStudioMemberRole(tx, studioId, targetUserId);
+  if (!currentRole) {
+    throw new ApiError(404, 'NOT_FOUND', 'studio_member_not_found');
+  }
+
+  if (currentRole === 'manager' && role !== 'manager') {
+    const managerCount = await repo.countStudioManagers(tx, studioId);
+    if (managerCount <= 1) {
+      throw new ApiError(409, 'CONFLICT', 'last_manager_protected');
+    }
+  }
+
+  return repo.updateStudioMemberRole(tx, studioId, targetUserId, role);
+}
+
+export async function removeStudioMember(
+  tx: Transaction,
+  callerUserId: string,
+  studioId: string,
+  targetUserId: string,
+): Promise<void> {
+  await requireStudioManager(tx, studioId, callerUserId);
+
+  const currentRole = await repo.findStudioMemberRole(tx, studioId, targetUserId);
+  if (!currentRole) {
+    throw new ApiError(404, 'NOT_FOUND', 'studio_member_not_found');
+  }
+
+  if (currentRole === 'manager') {
+    const managerCount = await repo.countStudioManagers(tx, studioId);
+    if (managerCount <= 1) {
+      throw new ApiError(409, 'CONFLICT', 'last_manager_protected');
+    }
+  }
+
+  const hasActiveBookings = await repo.hasActiveStudioBookingAssignments(
+    tx,
+    studioId,
+    targetUserId,
+  );
+  if (hasActiveBookings) {
+    throw new ApiError(409, 'CONFLICT', 'active_booking_assignments');
+  }
+
+  await repo.deleteStudioMember(tx, studioId, targetUserId);
+}
+
+export async function listStudioResources(
+  tx: Transaction,
+  studioId: string,
+): Promise<StudioResource[]> {
+  return repo.listStudioResources(tx, studioId);
+}
+
+export async function createStudioResource(
+  tx: Transaction,
+  userId: string,
+  studioId: string,
+  input: StudioResourceInput,
+): Promise<StudioResource> {
+  await requireStudioManager(tx, studioId, userId);
+  return repo.insertStudioResource(tx, studioId, input);
+}
+
+export async function updateStudioResource(
+  tx: Transaction,
+  userId: string,
+  resourceId: string,
+  input: StudioResourceInput,
+): Promise<StudioResource> {
+  const studioId = await repo.findResourceStudioId(tx, resourceId);
+  if (!studioId) {
+    throw new ApiError(404, 'NOT_FOUND', 'resource_not_found');
+  }
+  await requireStudioManager(tx, studioId, userId);
+  return repo.updateStudioResource(tx, resourceId, input);
+}
+
+export async function deleteStudioResource(
+  tx: Transaction,
+  userId: string,
+  resourceId: string,
+): Promise<void> {
+  const studioId = await repo.findResourceStudioId(tx, resourceId);
+  if (!studioId) {
+    throw new ApiError(404, 'NOT_FOUND', 'resource_not_found');
+  }
+  await requireStudioManager(tx, studioId, userId);
+  await repo.softDeleteStudioResource(tx, resourceId);
+}
+
+export async function listServiceAddOns(
+  tx: Transaction,
+  serviceId: string,
+): Promise<ServiceAddOn[]> {
+  const service = await repo.findServiceOwnership(tx, serviceId);
+  if (!service) {
+    throw new ApiError(404, 'NOT_FOUND', 'service_not_found');
+  }
+  return repo.listServiceAddOns(tx, serviceId);
+}
+
+export async function createServiceAddOn(
+  tx: Transaction,
+  userId: string,
+  serviceId: string,
+  input: ServiceAddOnInput,
+): Promise<ServiceAddOn> {
+  const service = await repo.findServiceOwnership(tx, serviceId);
+  if (!service) {
+    throw new ApiError(404, 'NOT_FOUND', 'service_not_found');
+  }
+  await assertProviderOwnership(tx, userId, service);
+  return repo.insertServiceAddOn(tx, serviceId, input);
 }

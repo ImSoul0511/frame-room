@@ -22,6 +22,16 @@ import {
   portfolioInputSchema,
   portfolioListQuerySchema,
   publicPortfolioSchema,
+  myInvitationSchema,
+  respondInvitationInputSchema,
+  serviceAddOnInputSchema,
+  serviceAddOnSchema,
+  studioInvitationInputSchema,
+  studioInvitationSchema,
+  studioMemberParamsSchema,
+  studioResourceInputSchema,
+  studioResourceSchema,
+  updateStudioMemberRoleInputSchema,
 } from '../schemas/catalog.js';
 import * as catalog from '../services/catalog.js';
 
@@ -301,6 +311,153 @@ export const catalogModule: ApiModule = {
       errors: [403],
       handler: ({ actor, params, body, transaction }) =>
         transaction((tx) => catalog.setPortfolioImageTags(tx, actor.id, params.id, body.tagIds)),
+    });
+    // ---------- 102e: Invitations, Members, Resources & Add-ons ----------
+    defineRoute(app, deps, {
+      method: 'GET',
+      url: '/v1/me/invitations',
+      summary: 'List pending studio invitations for the caller.',
+      access: 'verified',
+      response: z.array(myInvitationSchema),
+      handler: ({ actor, transaction }) =>
+        transaction((tx) => catalog.listMyInvitations(tx, actor.id)),
+    });
+
+    defineRoute(app, deps, {
+      method: 'POST',
+      url: '/v1/studios/:id/invitations',
+      summary: 'Invite a photographer to join a studio (current manager only).',
+      access: 'verified',
+      params: idParamsSchema,
+      body: studioInvitationInputSchema,
+      response: studioInvitationSchema,
+      errors: [403, 409],
+      handler: ({ actor, params, body, transaction }) =>
+        transaction((tx) => catalog.createStudioInvitation(tx, actor.id, params.id, body)),
+    });
+
+    defineRoute(app, deps, {
+      method: 'PATCH',
+      url: '/v1/invitations/:id',
+      summary: 'Accept or decline a pending studio invitation.',
+      access: 'verified',
+      params: idParamsSchema,
+      body: respondInvitationInputSchema,
+      response: studioInvitationSchema,
+      errors: [403, 409],
+      handler: ({ actor, params, body, transaction }) =>
+        transaction((tx) => catalog.respondToInvitation(tx, actor.id, params.id, body.action)),
+    });
+
+    defineRoute(app, deps, {
+      method: 'PATCH',
+      url: '/v1/studios/:id/members/:userId',
+      summary: 'Update a studio member role while protecting the last manager.',
+      access: 'verified',
+      params: studioMemberParamsSchema,
+      body: updateStudioMemberRoleInputSchema,
+      response: studioTeamMemberSchema,
+      errors: [403, 409],
+      handler: ({ actor, params, body, transaction }) =>
+        transaction((tx) =>
+          catalog.updateStudioMemberRole(tx, actor.id, params.id, params.userId, body.role),
+        ),
+    });
+
+    defineRoute(app, deps, {
+      method: 'DELETE',
+      url: '/v1/studios/:id/members/:userId',
+      summary:
+        'Remove a studio member while protecting the last manager and active booking assignments.',
+      access: 'verified',
+      params: studioMemberParamsSchema,
+      status: 204,
+      envelope: false,
+      response: z.undefined(),
+      errors: [403, 409],
+      handler: async ({ actor, params, transaction }) => {
+        await transaction((tx) =>
+          catalog.removeStudioMember(tx, actor.id, params.id, params.userId),
+        );
+        return undefined;
+      },
+    });
+
+    defineRoute(app, deps, {
+      method: 'GET',
+      url: '/v1/studios/:id/resources',
+      summary: 'List non-deleted resources of a studio.',
+      access: 'public',
+      params: idParamsSchema,
+      response: z.array(studioResourceSchema),
+      handler: ({ params, transaction }) =>
+        transaction((tx) => catalog.listStudioResources(tx, params.id)),
+    });
+
+    defineRoute(app, deps, {
+      method: 'POST',
+      url: '/v1/studios/:id/resources',
+      summary: 'Create a studio resource (current manager only).',
+      access: 'verified',
+      params: idParamsSchema,
+      body: studioResourceInputSchema,
+      response: studioResourceSchema,
+      errors: [403],
+      handler: ({ actor, params, body, transaction }) =>
+        transaction((tx) => catalog.createStudioResource(tx, actor.id, params.id, body)),
+    });
+
+    defineRoute(app, deps, {
+      method: 'PATCH',
+      url: '/v1/resources/:id',
+      summary: 'Update a studio resource (current manager only).',
+      access: 'verified',
+      params: idParamsSchema,
+      body: studioResourceInputSchema,
+      response: studioResourceSchema,
+      errors: [403],
+      handler: ({ actor, params, body, transaction }) =>
+        transaction((tx) => catalog.updateStudioResource(tx, actor.id, params.id, body)),
+    });
+
+    defineRoute(app, deps, {
+      method: 'DELETE',
+      url: '/v1/resources/:id',
+      summary: 'Soft-delete a studio resource (current manager only).',
+      access: 'verified',
+      params: idParamsSchema,
+      status: 204,
+      envelope: false,
+      response: z.undefined(),
+      errors: [403],
+      handler: async ({ actor, params, transaction }) => {
+        await transaction((tx) => catalog.deleteStudioResource(tx, actor.id, params.id));
+        return undefined;
+      },
+    });
+
+    defineRoute(app, deps, {
+      method: 'GET',
+      url: '/v1/services/:id/add-ons',
+      summary: 'List non-deleted add-ons for a service.',
+      access: 'public',
+      params: idParamsSchema,
+      response: z.array(serviceAddOnSchema),
+      handler: ({ params, transaction }) =>
+        transaction((tx) => catalog.listServiceAddOns(tx, params.id)),
+    });
+
+    defineRoute(app, deps, {
+      method: 'POST',
+      url: '/v1/services/:id/add-ons',
+      summary: 'Create an add-on for an owned service.',
+      access: 'verified',
+      params: idParamsSchema,
+      body: serviceAddOnInputSchema,
+      response: serviceAddOnSchema,
+      errors: [403],
+      handler: ({ actor, params, body, transaction }) =>
+        transaction((tx) => catalog.createServiceAddOn(tx, actor.id, params.id, body)),
     });
   },
 };

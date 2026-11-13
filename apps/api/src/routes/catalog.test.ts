@@ -12,6 +12,9 @@ import type {
   Studio,
   OwnedService,
   OwnedPortfolio,
+  ServiceAddOn,
+  StudioInvitation,
+  StudioResource,
 } from '../schemas/catalog.js';
 
 vi.mock('../repositories/catalog.js');
@@ -814,5 +817,253 @@ describe('POST /v1/portfolios/:id/images and PATCH /v1/portfolio-images/:id/tags
 
     expect(res.statusCode).toBe(403);
     expect(res.body).toContain('not_provider_owner');
+  });
+});
+
+// ---------- 102e: Invitations, Members, Resources & Add-ons ----------
+
+const INVITATION_ID = '77777777-7777-4777-8777-777777777777';
+const RESOURCE_ID = '88888888-8888-4888-8888-888888888888';
+const ADDON_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const TARGET_USER_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+
+const INVITATION: StudioInvitation = {
+  id: INVITATION_ID,
+  studioId: STUDIO_ID,
+  photographerId: PHOTOGRAPHER_ID,
+  role: 'photographer',
+  status: 'pending',
+  invitedBy: USER_ID,
+  respondedAt: null,
+  createdAt: '2026-11-14T00:00:00.000Z',
+  updatedAt: '2026-11-14T00:00:00.000Z',
+};
+
+const RESOURCE: StudioResource = {
+  id: RESOURCE_ID,
+  studioId: STUDIO_ID,
+  name: 'Cyclorama Wall A',
+  type: 'room',
+  description: '6m x 8m white cyc',
+  isActive: true,
+  createdAt: '2026-11-14T00:00:00.000Z',
+  updatedAt: '2026-11-14T00:00:00.000Z',
+};
+
+const ADDON: ServiceAddOn = {
+  id: ADDON_ID,
+  serviceId: SERVICE_ID,
+  name: 'Extra 10 Retouched Photos',
+  description: 'High-end skin retouching',
+  price: 500000,
+  isActive: true,
+  createdAt: '2026-11-14T00:00:00.000Z',
+  updatedAt: '2026-11-14T00:00:00.000Z',
+};
+
+describe('Studio invitations (/v1/me/invitations, POST /v1/studios/:id/invitations, PATCH /v1/invitations/:id)', () => {
+  it('lists pending invitations for the caller (200)', async () => {
+    vi.mocked(repo.listPendingInvitationsForUser).mockResolvedValue([
+      { ...INVITATION, studioName: 'Daylight Studio', inviterName: 'Khai' },
+    ]);
+
+    const app = await buildTestApp();
+    const res = await app.inject({ method: 'GET', url: '/v1/me/invitations', headers: AUTH });
+
+    expect(res.statusCode).toBe(200);
+    expect(bodyData(res)).toEqual([
+      expect.objectContaining({ id: INVITATION_ID, studioName: 'Daylight Studio' }),
+    ]);
+  });
+
+  it('creates an invitation when caller is a studio manager (201)', async () => {
+    vi.mocked(repo.isStudioManager).mockResolvedValue(true);
+    vi.mocked(repo.findPhotographerUserId).mockResolvedValue(TARGET_USER_ID);
+    vi.mocked(repo.isStudioMember).mockResolvedValue(false);
+    vi.mocked(repo.hasPendingStudioInvitation).mockResolvedValue(false);
+    vi.mocked(repo.insertStudioInvitation).mockResolvedValue(INVITATION);
+
+    const app = await buildTestApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: `/v1/studios/${STUDIO_ID}/invitations`,
+      payload: { photographerId: PHOTOGRAPHER_ID, role: 'photographer' },
+      headers: AUTH,
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(bodyData(res)).toMatchObject({ id: INVITATION_ID, status: 'pending' });
+  });
+
+  it('accepts a pending invitation and adds the user to studio_members (200)', async () => {
+    vi.mocked(repo.findInvitationWithRecipient).mockResolvedValue({
+      ...INVITATION,
+      recipientUserId: 'user-1',
+    });
+    vi.mocked(repo.updateInvitationStatus).mockResolvedValue({
+      ...INVITATION,
+      status: 'accepted',
+      respondedAt: '2026-11-14T01:00:00.000Z',
+    });
+
+    const app = await buildTestApp();
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/v1/invitations/${INVITATION_ID}`,
+      payload: { action: 'accept' },
+      headers: AUTH,
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(bodyData(res)).toMatchObject({ status: 'accepted' });
+    expect(repo.insertStudioMember).toHaveBeenCalledWith(
+      expect.anything(),
+      STUDIO_ID,
+      'user-1',
+      'photographer',
+    );
+  });
+});
+
+describe('Studio member role updates and removal guards', () => {
+  it('blocks demoting the last studio manager with 409 last_manager_protected', async () => {
+    vi.mocked(repo.isStudioManager).mockResolvedValue(true);
+    vi.mocked(repo.findStudioMemberRole).mockResolvedValue('manager');
+    vi.mocked(repo.countStudioManagers).mockResolvedValue(1);
+
+    const app = await buildTestApp();
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/v1/studios/${STUDIO_ID}/members/${TARGET_USER_ID}`,
+      payload: { role: 'photographer' },
+      headers: AUTH,
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.body).toContain('last_manager_protected');
+  });
+
+  it('blocks removing a member with active studio booking assignments (409)', async () => {
+    vi.mocked(repo.isStudioManager).mockResolvedValue(true);
+    vi.mocked(repo.findStudioMemberRole).mockResolvedValue('photographer');
+    vi.mocked(repo.hasActiveStudioBookingAssignments).mockResolvedValue(true);
+
+    const app = await buildTestApp();
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/v1/studios/${STUDIO_ID}/members/${TARGET_USER_ID}`,
+      headers: AUTH,
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.body).toContain('active_booking_assignments');
+  });
+
+  it('removes a member when guards pass and returns 204', async () => {
+    vi.mocked(repo.isStudioManager).mockResolvedValue(true);
+    vi.mocked(repo.findStudioMemberRole).mockResolvedValue('photographer');
+    vi.mocked(repo.hasActiveStudioBookingAssignments).mockResolvedValue(false);
+
+    const app = await buildTestApp();
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/v1/studios/${STUDIO_ID}/members/${TARGET_USER_ID}`,
+      headers: AUTH,
+    });
+
+    expect(res.statusCode).toBe(204);
+    expect(repo.deleteStudioMember).toHaveBeenCalledWith(
+      expect.anything(),
+      STUDIO_ID,
+      TARGET_USER_ID,
+    );
+  });
+});
+
+describe('Studio resources and service add-ons', () => {
+  it('lists, creates, updates, and soft-deletes studio resources', async () => {
+    vi.mocked(repo.listStudioResources).mockResolvedValue([RESOURCE]);
+    vi.mocked(repo.isStudioManager).mockResolvedValue(true);
+    vi.mocked(repo.insertStudioResource).mockResolvedValue(RESOURCE);
+    vi.mocked(repo.findResourceStudioId).mockResolvedValue(STUDIO_ID);
+    vi.mocked(repo.updateStudioResource).mockResolvedValue({ ...RESOURCE, name: 'Room B' });
+
+    const app = await buildTestApp();
+
+    const listRes = await app.inject({
+      method: 'GET',
+      url: `/v1/studios/${STUDIO_ID}/resources`,
+    });
+    expect(listRes.statusCode).toBe(200);
+    expect(bodyData(listRes)).toEqual([expect.objectContaining({ id: RESOURCE_ID })]);
+
+    const createRes = await app.inject({
+      method: 'POST',
+      url: `/v1/studios/${STUDIO_ID}/resources`,
+      payload: {
+        name: 'Cyclorama Wall A',
+        type: 'room',
+        description: '6m x 8m white cyc',
+        isActive: true,
+      },
+      headers: AUTH,
+    });
+    expect(createRes.statusCode).toBe(201);
+
+    const patchRes = await app.inject({
+      method: 'PATCH',
+      url: `/v1/resources/${RESOURCE_ID}`,
+      payload: {
+        name: 'Room B',
+        type: 'room',
+        description: '6m x 8m white cyc',
+        isActive: true,
+      },
+      headers: AUTH,
+    });
+    expect(patchRes.statusCode).toBe(200);
+    expect(bodyData(patchRes)).toMatchObject({ name: 'Room B' });
+
+    const delRes = await app.inject({
+      method: 'DELETE',
+      url: `/v1/resources/${RESOURCE_ID}`,
+      headers: AUTH,
+    });
+    expect(delRes.statusCode).toBe(204);
+    expect(repo.softDeleteStudioResource).toHaveBeenCalledWith(expect.anything(), RESOURCE_ID);
+  });
+
+  it('lists and creates add-ons for an owned service', async () => {
+    vi.mocked(repo.findServiceOwnership).mockResolvedValue({
+      id: SERVICE_ID,
+      photographerId: PHOTOGRAPHER_ID,
+      studioId: null,
+    });
+    vi.mocked(repo.listServiceAddOns).mockResolvedValue([ADDON]);
+    vi.mocked(repo.findPhotographerIdByUser).mockResolvedValue(PHOTOGRAPHER_ID);
+    vi.mocked(repo.insertServiceAddOn).mockResolvedValue(ADDON);
+
+    const app = await buildTestApp();
+
+    const listRes = await app.inject({
+      method: 'GET',
+      url: `/v1/services/${SERVICE_ID}/add-ons`,
+    });
+    expect(listRes.statusCode).toBe(200);
+    expect(bodyData(listRes)).toEqual([expect.objectContaining({ id: ADDON_ID })]);
+
+    const createRes = await app.inject({
+      method: 'POST',
+      url: `/v1/services/${SERVICE_ID}/add-ons`,
+      payload: {
+        name: 'Extra 10 Retouched Photos',
+        description: 'High-end skin retouching',
+        price: 500000,
+        isActive: true,
+      },
+      headers: AUTH,
+    });
+    expect(createRes.statusCode).toBe(201);
+    expect(bodyData(createRes)).toMatchObject({ id: ADDON_ID, price: 500000 });
   });
 });
