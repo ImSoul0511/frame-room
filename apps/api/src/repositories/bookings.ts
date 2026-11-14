@@ -4,7 +4,10 @@ import type {
   BookingWorkspace,
   BriefContent,
   BriefVersion,
+  ScheduleBlockInput,
+  ScheduleEntry,
   ScheduleInput,
+  ScheduleQuery,
   TransitionInput,
   WorkspaceDelivery,
   WorkspaceGallery,
@@ -506,4 +509,87 @@ export async function findBookingReview(
     [bookingId],
   );
   return row ? { ...row, rating: Number(row.rating) } : null;
+}
+
+// --- Slice 105e: Personal photographer and studio resource schedule queries ---
+
+/** Lists schedule entries across owned photographer profiles and managed studio resources. */
+export async function listPersonalSchedule(
+  tx: Transaction,
+  query: ScheduleQuery,
+): Promise<ScheduleEntry[]> {
+  return tx.rows<ScheduleEntry>(
+    `select se.id, se.booking_id, se.photographer_id, se.resource_id, se.kind,
+            se.title, se.starts_at, se.ends_at, se.created_by, se.created_at
+     from schedule_entries se
+     left join studio_resources sr on sr.id = se.resource_id
+     where (
+       (se.photographer_id is not null and private.owns_provider(se.photographer_id, null))
+       or (se.resource_id is not null and private.owns_provider(null, sr.studio_id))
+     )
+       and ($1::timestamptz is null or se.ends_at > $1::timestamptz)
+       and ($2::timestamptz is null or se.starts_at < $2::timestamptz)
+     order by se.starts_at asc
+     limit 500`,
+    [query.from ?? null, query.to ?? null],
+  );
+}
+
+/** Resolves the parent studio_id of a studio resource, or undefined if the resource does not exist. */
+export async function findResourceStudioId(
+  tx: Transaction,
+  resourceId: string,
+): Promise<string | undefined> {
+  const row = await tx.optional<{ studioId: string }>(
+    `select studio_id from studio_resources where id = $1`,
+    [resourceId],
+  );
+  return row?.studioId;
+}
+
+/** Inserts a manual schedule block (blocked or maintenance) for a photographer or resource. */
+export async function insertScheduleBlock(
+  tx: Transaction,
+  userId: string,
+  input: ScheduleBlockInput,
+): Promise<ScheduleEntry> {
+  return tx.one<ScheduleEntry>(
+    `insert into schedule_entries (
+       photographer_id, resource_id, kind, title, starts_at, ends_at, created_by
+     )
+     values ($1, $2, $3::public.schedule_entry_kind, $4, $5::timestamptz, $6::timestamptz, $7)
+     returning id, booking_id, photographer_id, resource_id, kind,
+               title, starts_at, ends_at, created_by, created_at`,
+    [
+      input.photographerId ?? null,
+      input.resourceId ?? null,
+      input.kind,
+      input.title,
+      input.startsAt,
+      input.endsAt,
+      userId,
+    ],
+  );
+}
+
+/** Locks and fetches a schedule entry together with its resource's studio_id if applicable. */
+export async function findScheduleEntryForDelete(
+  tx: Transaction,
+  entryId: string,
+): Promise<(ScheduleEntry & { resourceStudioId: string | null }) | undefined> {
+  return tx.optional<ScheduleEntry & { resourceStudioId: string | null }>(
+    `select se.id, se.booking_id, se.photographer_id, se.resource_id, se.kind,
+            se.title, se.starts_at, se.ends_at, se.created_by, se.created_at,
+            sr.studio_id as resource_studio_id
+     from schedule_entries se
+     left join studio_resources sr on sr.id = se.resource_id
+     where se.id = $1
+     for update of se`,
+    [entryId],
+  );
+}
+
+/** Deletes a standalone schedule entry by id. */
+export async function deleteScheduleEntry(tx: Transaction, entryId: string): Promise<void> {
+  await tx.execute(`delete from schedule_entries where id = $1`, [entryId]);
 }

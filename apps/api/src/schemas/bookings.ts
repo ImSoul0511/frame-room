@@ -239,3 +239,48 @@ export const bookingWorkspaceSchema = z.object({
 export type BookingWorkspace = z.infer<typeof bookingWorkspaceSchema>;
 export type WorkspaceGallery = z.infer<typeof workspaceGallerySchema>;
 export type WorkspaceDelivery = z.infer<typeof workspaceDeliverySchema>;
+
+// --- Slice 105e: Personal & resource schedule entries and manual block schemas ---
+export const scheduleEntryKindSchema = z.enum(['booking', 'blocked', 'maintenance']);
+
+export const scheduleEntrySchema = z.object({
+  id: idSchema,
+  bookingId: idSchema.nullable(),
+  photographerId: idSchema.nullable(),
+  resourceId: idSchema.nullable(),
+  kind: scheduleEntryKindSchema,
+  title: z.string(),
+  startsAt: z.string(),
+  endsAt: z.string(),
+  createdBy: idSchema,
+  createdAt: z.string(),
+});
+
+export const scheduleQuerySchema = z
+  .object({
+    from: z.string().datetime().optional(),
+    to: z.string().datetime().optional(),
+  })
+  .refine(
+    (v) => !v.from || !v.to || Date.parse(v.to) > Date.parse(v.from),
+    'End must follow start',
+  );
+
+export const scheduleBlockInputSchema = z
+  .object({
+    photographerId: idSchema.optional(),
+    resourceId: idSchema.optional(),
+    kind: z.enum(['blocked', 'maintenance']).default('blocked'),
+    title: z.string().trim().min(1).max(200),
+    startsAt: z.string().datetime(),
+    endsAt: z.string().datetime(),
+  })
+  .refine(
+    (v) => (v.photographerId !== undefined) !== (v.resourceId !== undefined),
+    'Specify either photographerId or resourceId',
+  )
+  .refine((v) => Date.parse(v.endsAt) > Date.parse(v.startsAt), 'End must follow start');
+
+export type ScheduleEntry = z.infer<typeof scheduleEntrySchema>;
+export type ScheduleQuery = z.infer<typeof scheduleQuerySchema>;
+export type ScheduleBlockInput = z.infer<typeof scheduleBlockInputSchema>;

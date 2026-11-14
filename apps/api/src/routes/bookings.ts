@@ -9,7 +9,10 @@ import {
   briefContentSchema,
   briefVersionSchema,
   idSchema,
+  scheduleBlockInputSchema,
+  scheduleEntrySchema,
   scheduleInputSchema,
+  scheduleQuerySchema,
   transitionInputSchema,
 } from '../schemas/bookings.js';
 import * as bookingService from '../services/bookings.js';
@@ -120,6 +123,44 @@ export const bookingModule: ApiModule = {
       response: bookingWorkspaceSchema,
       handler: ({ actor, params, transaction }) =>
         transaction((tx) => bookingService.getBookingWorkspace(tx, params.id, actor.id)),
+    });
+    // --- Slice 105e: Personal and managed studio resource schedule routes ---
+    defineRoute(app, deps, {
+      method: 'GET',
+      url: '/v1/me/schedule',
+      summary: 'List schedule entries for owned photographers and managed studio resources',
+      access: 'verified',
+      status: 200,
+      query: scheduleQuerySchema,
+      response: z.array(scheduleEntrySchema),
+      handler: ({ query, transaction }) =>
+        transaction((tx) => bookingService.listMySchedule(tx, query)),
+    });
+
+    defineRoute(app, deps, {
+      method: 'POST',
+      url: '/v1/me/schedule/blocks',
+      summary: 'Block time on an owned photographer or managed studio resource schedule',
+      access: 'verified',
+      status: 201,
+      body: scheduleBlockInputSchema,
+      response: scheduleEntrySchema,
+      errors: [409, 422],
+      handler: ({ actor, body, transaction }) =>
+        transaction((tx) => bookingService.createScheduleBlock(tx, actor.id, body)),
+    });
+
+    defineRoute(app, deps, {
+      method: 'DELETE',
+      url: '/v1/me/schedule/blocks/:id',
+      summary: 'Remove a manual schedule block (rejects booking-linked reservations)',
+      access: 'verified',
+      status: 204,
+      params: bookingIdParamsSchema,
+      response: z.void(),
+      errors: [422],
+      handler: ({ params, transaction }) =>
+        transaction((tx) => bookingService.deleteScheduleBlock(tx, params.id)),
     });
   },
 };

@@ -758,3 +758,155 @@ describe('booking workspace (105d)', () => {
     await app.close();
   });
 });
+
+// --- Slice 105e: Unit tests for personal and resource schedule management ---
+describe('personal and resource schedule (105e)', () => {
+  const STUDIO_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+  const RESOURCE_ID = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  const ENTRY_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+
+  const SAMPLE_BLOCK = {
+    id: ENTRY_ID,
+    bookingId: null,
+    photographerId: PHOTOGRAPHER_ID,
+    resourceId: null,
+    kind: 'blocked' as const,
+    title: 'Personal time off',
+    startsAt: '2030-05-15T08:00:00.000Z',
+    endsAt: '2030-05-15T12:00:00.000Z',
+    createdBy: PROVIDER_USER_ID,
+    createdAt: '2030-05-01T00:00:00.000Z',
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(access.manageProvider).mockResolvedValue(undefined);
+    vi.mocked(bookingRepo.listPersonalSchedule).mockResolvedValue([SAMPLE_BLOCK]);
+    vi.mocked(bookingRepo.findResourceStudioId).mockResolvedValue(STUDIO_ID);
+    vi.mocked(bookingRepo.insertScheduleBlock).mockResolvedValue(SAMPLE_BLOCK);
+    vi.mocked(bookingRepo.findScheduleEntryForDelete).mockResolvedValue({
+      ...SAMPLE_BLOCK,
+      resourceStudioId: null,
+    });
+    vi.mocked(bookingRepo.deleteScheduleEntry).mockResolvedValue(undefined);
+  });
+
+  it('lists personal/resource schedule entries with 200 and validates date range', async () => {
+    const app = createTestApp();
+
+    const badQuery = await app.inject({
+      method: 'GET',
+      url: '/v1/me/schedule?from=2030-05-16T00:00:00.000Z&to=2030-05-15T00:00:00.000Z',
+      headers: { authorization: 'Bearer provider-token' },
+    });
+    expect(badQuery.statusCode).toBe(400);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/me/schedule?from=2030-05-15T00:00:00.000Z&to=2030-05-16T00:00:00.000Z',
+      headers: { authorization: 'Bearer provider-token' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().data).toEqual([SAMPLE_BLOCK]);
+    expect(bookingRepo.listPersonalSchedule).toHaveBeenCalledWith(expect.anything(), {
+      from: '2030-05-15T00:00:00.000Z',
+      to: '2030-05-16T00:00:00.000Z',
+    });
+    await app.close();
+  });
+
+  it('creates schedule blocks for owned photographers and managed studio resources (201) and maps overlap (409)', async () => {
+    const app = createTestApp();
+
+    const missingTarget = await app.inject({
+      method: 'POST',
+      url: '/v1/me/schedule/blocks',
+      headers: { authorization: 'Bearer provider-token' },
+      payload: {
+        title: 'Invalid target',
+        startsAt: '2030-05-15T08:00:00.000Z',
+        endsAt: '2030-05-15T12:00:00.000Z',
+      },
+    });
+    expect(missingTarget.statusCode).toBe(400);
+
+    const photoBlock = await app.inject({
+      method: 'POST',
+      url: '/v1/me/schedule/blocks',
+      headers: { authorization: 'Bearer provider-token' },
+      payload: {
+        photographerId: PHOTOGRAPHER_ID,
+        title: 'Personal time off',
+        startsAt: '2030-05-15T08:00:00.000Z',
+        endsAt: '2030-05-15T12:00:00.000Z',
+      },
+    });
+    expect(photoBlock.statusCode).toBe(201);
+    expect(access.manageProvider).toHaveBeenCalledWith(expect.anything(), PHOTOGRAPHER_ID, null);
+
+    vi.mocked(bookingRepo.insertScheduleBlock).mockResolvedValueOnce({
+      ...SAMPLE_BLOCK,
+      photographerId: null,
+      resourceId: RESOURCE_ID,
+      kind: 'maintenance',
+    });
+    const resourceBlock = await app.inject({
+      method: 'POST',
+      url: '/v1/me/schedule/blocks',
+      headers: { authorization: 'Bearer provider-token' },
+      payload: {
+        resourceId: RESOURCE_ID,
+        kind: 'maintenance',
+        title: 'Cyclorama repaint',
+        startsAt: '2030-05-15T08:00:00.000Z',
+        endsAt: '2030-05-15T12:00:00.000Z',
+      },
+    });
+    expect(resourceBlock.statusCode).toBe(201);
+    expect(access.manageProvider).toHaveBeenCalledWith(expect.anything(), null, STUDIO_ID);
+
+    vi.mocked(bookingRepo.insertScheduleBlock).mockRejectedValueOnce({ code: '23P01' });
+    const overlap = await app.inject({
+      method: 'POST',
+      url: '/v1/me/schedule/blocks',
+      headers: { authorization: 'Bearer provider-token' },
+      payload: {
+        photographerId: PHOTOGRAPHER_ID,
+        title: 'Overlapping block',
+        startsAt: '2030-05-15T09:00:00.000Z',
+        endsAt: '2030-05-15T11:00:00.000Z',
+      },
+    });
+    expect(overlap.statusCode).toBe(409);
+    expect(overlap.json().error.details[0]?.reason).toBe('slot_overlap');
+    await app.close();
+  });
+
+  it('deletes manual schedule blocks with 204 empty body and rejects booking reservations with 422', async () => {
+    const app = createTestApp();
+
+    const delOk = await app.inject({
+      method: 'DELETE',
+      url: `/v1/me/schedule/blocks/${ENTRY_ID}`,
+      headers: { authorization: 'Bearer provider-token' },
+    });
+    expect(delOk.statusCode).toBe(204);
+    expect(delOk.body).toBe('');
+    expect(bookingRepo.deleteScheduleEntry).toHaveBeenCalledWith(expect.anything(), ENTRY_ID);
+
+    vi.mocked(bookingRepo.findScheduleEntryForDelete).mockResolvedValueOnce({
+      ...SAMPLE_BLOCK,
+      bookingId: BOOKING_ID,
+      kind: 'booking',
+      resourceStudioId: null,
+    });
+    const delBooking = await app.inject({
+      method: 'DELETE',
+      url: `/v1/me/schedule/blocks/${ENTRY_ID}`,
+      headers: { authorization: 'Bearer provider-token' },
+    });
+    expect(delBooking.statusCode).toBe(422);
+    expect(delBooking.json().error.details[0]?.reason).toBe('booking_reservation');
+    await app.close();
+  });
+});
