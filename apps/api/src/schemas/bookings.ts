@@ -102,3 +102,140 @@ export const briefVersionSchema = z.object({
 
 export type BriefContent = z.infer<typeof briefContentSchema>;
 export type BriefVersion = z.infer<typeof briefVersionSchema>;
+
+// --- Slice 105d: 13-part participant workspace projection schemas ---
+export const workspaceProjectSchema = z.object({
+  id: idSchema,
+  ownerId: idSchema,
+  title: z.string(),
+  idea: z.string().nullable(),
+  brief: z.record(z.unknown()).nullable(),
+  referencePaths: z.array(z.string()),
+  version: z.number().int(),
+  bookingId: idSchema.nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const workspaceProviderSchema = z.object({
+  ownerType: z.enum(['photographer', 'studio']),
+  id: idSchema,
+  displayName: z.string(),
+  avatarPath: z.string().nullable(),
+  city: z.string().nullable(),
+});
+
+export const workspaceAssignedPhotographerSchema = z.object({
+  id: idSchema,
+  userId: idSchema,
+  displayName: z.string(),
+  avatarPath: z.string().nullable(),
+});
+
+export const workspaceResourceSchema = z.object({
+  id: idSchema,
+  studioId: idSchema,
+  name: z.string(),
+  type: z.enum(['room', 'equipment']),
+});
+
+export const workspaceMessageAttachmentSchema = z.object({
+  storagePath: z.string(),
+  url: z.string().nullable(),
+  mimeType: z.string().nullable().optional(),
+  fileName: z.string().nullable().optional(),
+});
+
+export const workspaceMessageSchema = z.object({
+  id: idSchema,
+  bookingId: idSchema,
+  senderId: idSchema,
+  kind: z.string(),
+  body: z.string(),
+  attachments: z.array(workspaceMessageAttachmentSchema),
+  createdAt: z.string(),
+});
+
+export const workspaceDecisionSchema = z.object({
+  id: idSchema,
+  bookingId: idSchema,
+  title: z.string(),
+  summary: z.string(),
+  createdBy: idSchema,
+  createdAt: z.string(),
+});
+
+export const workspaceMilestoneSchema = z.object({
+  id: idSchema,
+  bookingId: idSchema,
+  title: z.string(),
+  status: z.enum(['pending', 'in_progress', 'completed']),
+  dueAt: z.string().nullable(),
+  completedAt: z.string().nullable(),
+  sortOrder: z.number().int(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const workspaceGalleryImageSchema = z.object({
+  id: idSchema,
+  galleryId: idSchema,
+  storagePath: z.string(),
+  url: z.string().nullable(),
+  caption: z.string().nullable(),
+  selected: z.boolean(),
+  sortOrder: z.number().int(),
+  createdAt: z.string(),
+});
+
+export const workspaceGallerySchema = z.object({
+  id: idSchema,
+  bookingId: idSchema,
+  title: z.string(),
+  status: z.enum(['draft', 'published', 'selected']),
+  images: z.array(workspaceGalleryImageSchema),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const workspaceDeliverySchema = z.object({
+  id: idSchema,
+  bookingId: idSchema,
+  storagePath: z.string(),
+  url: z.string().nullable(),
+  fileName: z.string(),
+  mimeType: z.string().nullable(),
+  sizeBytes: z.number().int().nullable(),
+  note: z.string().nullable(),
+  uploadedBy: idSchema,
+  createdAt: z.string(),
+});
+
+export const workspaceReviewSchema = z.object({
+  id: idSchema,
+  bookingId: idSchema,
+  reviewerId: idSchema,
+  rating: z.number().int(),
+  comment: z.string().nullable(),
+  createdAt: z.string(),
+});
+
+export const bookingWorkspaceSchema = z.object({
+  booking: bookingSchema,
+  project: workspaceProjectSchema,
+  provider: workspaceProviderSchema,
+  assignedPhotographer: workspaceAssignedPhotographerSchema.nullable(),
+  resources: z.array(workspaceResourceSchema),
+  briefVersions: z.array(briefVersionSchema),
+  agreedBrief: briefVersionSchema.nullable(),
+  messages: z.array(workspaceMessageSchema),
+  decisions: z.array(workspaceDecisionSchema),
+  milestones: z.array(workspaceMilestoneSchema),
+  galleries: z.array(workspaceGallerySchema),
+  deliveries: z.array(workspaceDeliverySchema),
+  review: workspaceReviewSchema.nullable(),
+});
+
+export type BookingWorkspace = z.infer<typeof bookingWorkspaceSchema>;
+export type WorkspaceGallery = z.infer<typeof workspaceGallerySchema>;
+export type WorkspaceDelivery = z.infer<typeof workspaceDeliverySchema>;

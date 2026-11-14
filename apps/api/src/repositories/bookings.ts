@@ -1,10 +1,13 @@
 import type { Transaction } from './database.js';
 import type {
   Booking,
+  BookingWorkspace,
   BriefContent,
   BriefVersion,
   ScheduleInput,
   TransitionInput,
+  WorkspaceDelivery,
+  WorkspaceGallery,
 } from '../schemas/bookings.js';
 
 export interface BookableServiceRow {
@@ -287,4 +290,220 @@ export async function setAgreedBriefVersion(
        and agreed_brief_version is distinct from $2`,
     [bookingId, briefVersion],
   );
+}
+
+// --- Slice 105d: Workspace projection read queries ---
+
+/** Fetches the project linked to a booking. */
+export async function findBookingProject(
+  tx: Transaction,
+  projectId: string,
+): Promise<BookingWorkspace['project']> {
+  const row = await tx.one<BookingWorkspace['project']>(
+    `select id, owner_id, title, idea, brief, reference_paths, version, booking_id, created_at, updated_at
+     from creative_projects
+     where id = $1`,
+    [projectId],
+  );
+  return { ...row, version: Number(row.version) };
+}
+
+/** Fetches the provider summary (photographer or studio) for a booking. */
+export async function findBookingProvider(
+  tx: Transaction,
+  booking: Booking,
+): Promise<BookingWorkspace['provider']> {
+  if (booking.ownerType === 'photographer' && booking.photographerId) {
+    return tx.one<BookingWorkspace['provider']>(
+      `select 'photographer'::text as owner_type, id, display_name, avatar_path, city
+       from photographers
+       where id = $1`,
+      [booking.photographerId],
+    );
+  }
+  return tx.one<BookingWorkspace['provider']>(
+    `select 'studio'::text as owner_type, id, name as display_name, logo_path as avatar_path, city
+     from studios
+     where id = $1`,
+    [booking.studioId],
+  );
+}
+
+/** Fetches the assigned photographer summary when one is assigned to the booking. */
+export async function findAssignedPhotographer(
+  tx: Transaction,
+  photographerId: string | null,
+): Promise<BookingWorkspace['assignedPhotographer']> {
+  if (!photographerId) return null;
+  const row = await tx.optional<NonNullable<BookingWorkspace['assignedPhotographer']>>(
+    `select id, user_id, display_name, avatar_path
+     from photographers
+     where id = $1`,
+    [photographerId],
+  );
+  return row ?? null;
+}
+
+/** Lists studio resources reserved for the booking via schedule_entries. */
+export async function listBookingResources(
+  tx: Transaction,
+  bookingId: string,
+): Promise<BookingWorkspace['resources']> {
+  return tx.rows<BookingWorkspace['resources'][number]>(
+    `select distinct sr.id, sr.studio_id, sr.name, sr.type
+     from schedule_entries se
+     join studio_resources sr on sr.id = se.resource_id
+     where se.booking_id = $1 and se.resource_id is not null
+     order by sr.name asc`,
+    [bookingId],
+  );
+}
+
+/** Lists all brief versions for a booking ordered sequentially by version. */
+export async function listBriefVersions(
+  tx: Transaction,
+  bookingId: string,
+): Promise<BriefVersion[]> {
+  const rows = await tx.rows<BriefVersion>(
+    `select id, booking_id, version, content, created_by, client_approved, provider_approved, created_at
+     from brief_versions
+     where booking_id = $1
+     order by version asc`,
+    [bookingId],
+  );
+  return rows.map(coerceBriefVersion);
+}
+
+/** Lists room messages for a booking with nullable signed URLs until BE-103 merges. */
+export async function listBookingMessages(
+  tx: Transaction,
+  bookingId: string,
+): Promise<BookingWorkspace['messages']> {
+  const rows = await tx.rows<{
+    id: string;
+    bookingId: string;
+    senderId: string;
+    kind: string;
+    body: string;
+    attachments: Array<{
+      storagePath: string;
+      mimeType?: string | null;
+      fileName?: string | null;
+    }> | null;
+    createdAt: string;
+  }>(
+    `select id, booking_id, sender_id, kind, body, attachments, created_at
+     from room_messages
+     where booking_id = $1
+     order by created_at asc`,
+    [bookingId],
+  );
+  return rows.map((row) => ({
+    ...row,
+    attachments: (row.attachments ?? []).map((att) => ({
+      storagePath: att.storagePath,
+      url: null,
+      mimeType: att.mimeType ?? null,
+      fileName: att.fileName ?? null,
+    })),
+  }));
+}
+
+/** Lists room decisions recorded on a booking. */
+export async function listBookingDecisions(
+  tx: Transaction,
+  bookingId: string,
+): Promise<BookingWorkspace['decisions']> {
+  return tx.rows<BookingWorkspace['decisions'][number]>(
+    `select id, booking_id, title, summary, created_by, created_at
+     from room_decisions
+     where booking_id = $1
+     order by created_at asc`,
+    [bookingId],
+  );
+}
+
+/** Lists room milestones ordered by sort_order then created_at. */
+export async function listBookingMilestones(
+  tx: Transaction,
+  bookingId: string,
+): Promise<BookingWorkspace['milestones']> {
+  const rows = await tx.rows<BookingWorkspace['milestones'][number]>(
+    `select id, booking_id, title, status, due_at, completed_at, sort_order, created_at, updated_at
+     from room_milestones
+     where booking_id = $1
+     order by sort_order asc, created_at asc`,
+    [bookingId],
+  );
+  return rows.map((row) => ({ ...row, sortOrder: Number(row.sortOrder) }));
+}
+
+/** Lists visible proofing galleries and their images (draft galleries are provider-only). */
+export async function listBookingGalleries(
+  tx: Transaction,
+  bookingId: string,
+  includeDrafts: boolean,
+): Promise<WorkspaceGallery[]> {
+  const galleries = await tx.rows<Omit<WorkspaceGallery, 'images'>>(
+    `select id, booking_id, title, status, created_at, updated_at
+     from proofing_galleries
+     where booking_id = $1
+       and ($2::boolean or status <> 'draft')
+     order by created_at asc`,
+    [bookingId, includeDrafts],
+  );
+  if (galleries.length === 0) return [];
+
+  const galleryIds = galleries.map((g) => g.id);
+  const images = await tx.rows<WorkspaceGallery['images'][number]>(
+    `select id, gallery_id, storage_path, null::text as url, caption, selected, sort_order, created_at
+     from proofing_images
+     where gallery_id = any($1::uuid[])
+     order by sort_order asc, created_at asc`,
+    [galleryIds],
+  );
+
+  const byGallery = new Map<string, WorkspaceGallery['images']>();
+  for (const img of images) {
+    const list = byGallery.get(img.galleryId) ?? [];
+    list.push({ ...img, sortOrder: Number(img.sortOrder) });
+    byGallery.set(img.galleryId, list);
+  }
+
+  return galleries.map((g) => ({
+    ...g,
+    images: byGallery.get(g.id) ?? [],
+  }));
+}
+
+/** Lists final delivery files for a booking with nullable signed URLs until BE-103 merges. */
+export async function listBookingDeliveries(
+  tx: Transaction,
+  bookingId: string,
+): Promise<WorkspaceDelivery[]> {
+  const rows = await tx.rows<WorkspaceDelivery>(
+    `select id, booking_id, storage_path, null::text as url, file_name, mime_type, size_bytes, note, uploaded_by, created_at
+     from deliveries
+     where booking_id = $1
+     order by created_at asc`,
+    [bookingId],
+  );
+  return rows.map((row) => ({
+    ...row,
+    sizeBytes: row.sizeBytes === null ? null : Number(row.sizeBytes),
+  }));
+}
+
+/** Fetches the single booking review if one has been submitted. */
+export async function findBookingReview(
+  tx: Transaction,
+  bookingId: string,
+): Promise<BookingWorkspace['review']> {
+  const row = await tx.optional<NonNullable<BookingWorkspace['review']>>(
+    `select id, booking_id, reviewer_id, rating, comment, created_at
+     from reviews
+     where booking_id = $1`,
+    [bookingId],
+  );
+  return row ? { ...row, rating: Number(row.rating) } : null;
 }

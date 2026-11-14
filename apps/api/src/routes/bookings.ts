@@ -5,6 +5,7 @@ import { defineRoute, type ApiDependencies, type ApiModule } from '../plugins/ro
 import {
   bookingInputSchema,
   bookingSchema,
+  bookingWorkspaceSchema,
   briefContentSchema,
   briefVersionSchema,
   idSchema,
@@ -106,6 +107,19 @@ export const bookingModule: ApiModule = {
         transaction((tx) =>
           bookingService.approveBriefVersion(tx, params.id, params.briefId, actor.id),
         ),
+    });
+
+    // --- Slice 105d: Participant workspace projection route ---
+    defineRoute(app, deps, {
+      method: 'GET',
+      url: '/v1/bookings/:id/workspace',
+      summary: 'Get the 13-part participant workspace for a booking',
+      access: 'verified',
+      status: 200,
+      params: bookingIdParamsSchema,
+      response: bookingWorkspaceSchema,
+      handler: ({ actor, params, transaction }) =>
+        transaction((tx) => bookingService.getBookingWorkspace(tx, params.id, actor.id)),
     });
   },
 };

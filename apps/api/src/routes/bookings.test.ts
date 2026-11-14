@@ -596,3 +596,165 @@ describe('brief versions and approval (105c)', () => {
     await app.close();
   });
 });
+
+// --- Slice 105d: Unit tests for workspace projection and role-based visibility ---
+describe('booking workspace (105d)', () => {
+  const SAMPLE_PROJECT = {
+    id: PROJECT_ID,
+    ownerId: CLIENT_ID,
+    title: 'Spring Editorial',
+    idea: 'Natural light studio look',
+    brief: null,
+    referencePaths: [],
+    version: 1,
+    bookingId: BOOKING_ID,
+    createdAt: '2030-05-01T00:00:00.000Z',
+    updatedAt: '2030-05-01T00:00:00.000Z',
+  };
+
+  const SAMPLE_PROVIDER = {
+    ownerType: 'photographer' as const,
+    id: PHOTOGRAPHER_ID,
+    displayName: 'Linh Nguyen',
+    avatarPath: null,
+    city: 'Ho Chi Minh City',
+  };
+
+  const SAMPLE_AGREED_BRIEF = {
+    id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    bookingId: BOOKING_ID,
+    version: 1,
+    content: {
+      title: 'Spring Editorial Brief',
+      concept: 'Natural light portrait',
+      shotList: ['Half body'],
+      lighting: ['Window light'],
+      checklist: ['50mm lens'],
+      milestones: ['Moodboard'],
+    },
+    createdBy: CLIENT_ID,
+    clientApproved: true,
+    providerApproved: true,
+    createdAt: '2030-05-02T00:00:00.000Z',
+  };
+
+  const SAMPLE_DELIVERY = {
+    id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    bookingId: BOOKING_ID,
+    storagePath: 'deliveries/final.zip',
+    url: null,
+    fileName: 'final.zip',
+    mimeType: 'application/zip',
+    sizeBytes: 1024,
+    note: 'Final retouched set',
+    uploadedBy: PROVIDER_USER_ID,
+    createdAt: '2030-05-12T00:00:00.000Z',
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(access.booking).mockResolvedValue({
+      ...SAMPLE_BOOKING,
+      status: 'proofing',
+      agreedBriefVersion: 1,
+    });
+    vi.mocked(access.providerSide).mockResolvedValue(undefined);
+    vi.mocked(bookingRepo.findBookingProject).mockResolvedValue(SAMPLE_PROJECT);
+    vi.mocked(bookingRepo.findBookingProvider).mockResolvedValue(SAMPLE_PROVIDER);
+    vi.mocked(bookingRepo.findAssignedPhotographer).mockResolvedValue({
+      id: PHOTOGRAPHER_ID,
+      userId: PROVIDER_USER_ID,
+      displayName: 'Linh Nguyen',
+      avatarPath: null,
+    });
+    vi.mocked(bookingRepo.listBookingResources).mockResolvedValue([]);
+    vi.mocked(bookingRepo.listBriefVersions).mockResolvedValue([SAMPLE_AGREED_BRIEF]);
+    vi.mocked(bookingRepo.listBookingMessages).mockResolvedValue([]);
+    vi.mocked(bookingRepo.listBookingDecisions).mockResolvedValue([]);
+    vi.mocked(bookingRepo.listBookingMilestones).mockResolvedValue([]);
+    vi.mocked(bookingRepo.listBookingGalleries).mockResolvedValue([]);
+    vi.mocked(bookingRepo.listBookingDeliveries).mockResolvedValue([SAMPLE_DELIVERY]);
+    vi.mocked(bookingRepo.findBookingReview).mockResolvedValue(null);
+  });
+
+  it('returns the full 13-part workspace with draft galleries and deliveries for providers', async () => {
+    const app = createTestApp();
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/bookings/${BOOKING_ID}/workspace`,
+      headers: { authorization: 'Bearer provider-token' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const data = res.json().data;
+    expect(Object.keys(data)).toEqual([
+      'booking',
+      'project',
+      'provider',
+      'assignedPhotographer',
+      'resources',
+      'briefVersions',
+      'agreedBrief',
+      'messages',
+      'decisions',
+      'milestones',
+      'galleries',
+      'deliveries',
+      'review',
+    ]);
+    expect(data.agreedBrief).toEqual(SAMPLE_AGREED_BRIEF);
+    expect(data.deliveries).toEqual([SAMPLE_DELIVERY]);
+    expect(bookingRepo.listBookingGalleries).toHaveBeenCalledWith(
+      expect.anything(),
+      BOOKING_ID,
+      true,
+    );
+    await app.close();
+  });
+
+  it('hides draft galleries and pre-delivery files from clients until delivered', async () => {
+    const app = createTestApp();
+
+    const proofingRes = await app.inject({
+      method: 'GET',
+      url: `/v1/bookings/${BOOKING_ID}/workspace`,
+      headers: { authorization: 'Bearer client-token' },
+    });
+    expect(proofingRes.statusCode).toBe(200);
+    expect(proofingRes.json().data.deliveries).toEqual([]);
+    expect(bookingRepo.listBookingGalleries).toHaveBeenCalledWith(
+      expect.anything(),
+      BOOKING_ID,
+      false,
+    );
+    expect(bookingRepo.listBookingDeliveries).not.toHaveBeenCalled();
+
+    vi.mocked(access.booking).mockResolvedValueOnce({
+      ...SAMPLE_BOOKING,
+      status: 'delivered',
+      agreedBriefVersion: 1,
+    });
+    const deliveredRes = await app.inject({
+      method: 'GET',
+      url: `/v1/bookings/${BOOKING_ID}/workspace`,
+      headers: { authorization: 'Bearer client-token' },
+    });
+    expect(deliveredRes.statusCode).toBe(200);
+    expect(deliveredRes.json().data.deliveries).toEqual([SAMPLE_DELIVERY]);
+    await app.close();
+  });
+
+  it('returns 404 when caller is not a booking participant', async () => {
+    vi.mocked(access.booking).mockRejectedValueOnce(new ApiError(404, 'NOT_FOUND', 'not_found'));
+    const app = createTestApp();
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/bookings/${BOOKING_ID}/workspace`,
+      headers: { authorization: 'Bearer outsider-token' },
+    });
+
+    expect(res.statusCode).toBe(404);
+    await app.close();
+  });
+});
