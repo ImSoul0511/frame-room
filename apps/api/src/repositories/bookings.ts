@@ -1,5 +1,11 @@
 import type { Transaction } from './database.js';
-import type { Booking, ScheduleInput, TransitionInput } from '../schemas/bookings.js';
+import type {
+  Booking,
+  BriefContent,
+  BriefVersion,
+  ScheduleInput,
+  TransitionInput,
+} from '../schemas/bookings.js';
 
 export interface BookableServiceRow {
   id: string;
@@ -207,4 +213,78 @@ export async function callRescheduleBooking(
     ],
   );
   return coerceBooking(row);
+}
+
+// --- Slice 105c: Brief version persistence and bilateral approval queries ---
+
+function coerceBriefVersion(row: BriefVersion): BriefVersion {
+  return { ...row, version: Number(row.version) };
+}
+
+/** Inserts a new sequential brief version and auto-approves the author's side. */
+export async function insertBriefVersion(
+  tx: Transaction,
+  bookingId: string,
+  userId: string,
+  content: BriefContent,
+  isClient: boolean,
+): Promise<BriefVersion> {
+  const row = await tx.one<BriefVersion>(
+    `insert into brief_versions (booking_id, version, content, created_by, client_approved, provider_approved)
+     select $1, coalesce(max(version), 0) + 1, $2::jsonb, $3, $4, not $4
+     from brief_versions
+     where booking_id = $1
+     returning id, booking_id, version, content, created_by, client_approved, provider_approved, created_at`,
+    [bookingId, JSON.stringify(content), userId, isClient],
+  );
+  return coerceBriefVersion(row);
+}
+
+/** Locks and fetches a specific brief version belonging to the given booking. */
+export async function findBriefVersionForUpdate(
+  tx: Transaction,
+  bookingId: string,
+  briefId: string,
+): Promise<BriefVersion | undefined> {
+  const row = await tx.optional<BriefVersion>(
+    `select id, booking_id, version, content, created_by, client_approved, provider_approved, created_at
+     from brief_versions
+     where id = $1 and booking_id = $2
+     for update`,
+    [briefId, bookingId],
+  );
+  return row ? coerceBriefVersion(row) : undefined;
+}
+
+/** Marks the caller's side (client or provider) as approved on a brief version. */
+export async function approveBriefSide(
+  tx: Transaction,
+  briefId: string,
+  isClient: boolean,
+): Promise<BriefVersion> {
+  const row = await tx.one<BriefVersion>(
+    `update brief_versions
+     set client_approved = client_approved or $2,
+         provider_approved = provider_approved or not $2
+     where id = $1
+     returning id, booking_id, version, content, created_by, client_approved, provider_approved, created_at`,
+    [briefId, isClient],
+  );
+  return coerceBriefVersion(row);
+}
+
+/** Updates agreed_brief_version and bumps booking version only when the agreed version changes. */
+export async function setAgreedBriefVersion(
+  tx: Transaction,
+  bookingId: string,
+  briefVersion: number,
+): Promise<void> {
+  await tx.execute(
+    `update bookings
+     set agreed_brief_version = $2,
+         version = version + 1
+     where id = $1
+       and agreed_brief_version is distinct from $2`,
+    [bookingId, briefVersion],
+  );
 }

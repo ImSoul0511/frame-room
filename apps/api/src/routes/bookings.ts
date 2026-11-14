@@ -5,6 +5,8 @@ import { defineRoute, type ApiDependencies, type ApiModule } from '../plugins/ro
 import {
   bookingInputSchema,
   bookingSchema,
+  briefContentSchema,
+  briefVersionSchema,
   idSchema,
   scheduleInputSchema,
   transitionInputSchema,
@@ -12,6 +14,7 @@ import {
 import * as bookingService from '../services/bookings.js';
 
 const bookingIdParamsSchema = z.object({ id: idSchema });
+const briefParamsSchema = z.object({ id: idSchema, briefId: idSchema });
 
 export const bookingModule: ApiModule = {
   name: 'bookings',
@@ -74,6 +77,35 @@ export const bookingModule: ApiModule = {
       errors: [409, 422],
       handler: ({ params, body, transaction }) =>
         transaction((tx) => bookingService.rescheduleBooking(tx, params.id, body)),
+    });
+    // --- Slice 105c: Brief version creation and approval routes ---
+    defineRoute(app, deps, {
+      method: 'POST',
+      url: '/v1/bookings/:id/brief-versions',
+      summary: 'Create a new brief version on an active booking',
+      access: 'verified',
+      status: 201,
+      params: bookingIdParamsSchema,
+      body: briefContentSchema,
+      response: briefVersionSchema,
+      errors: [422],
+      handler: ({ actor, params, body, transaction }) =>
+        transaction((tx) => bookingService.createBriefVersion(tx, params.id, actor.id, body)),
+    });
+
+    defineRoute(app, deps, {
+      method: 'POST',
+      url: '/v1/bookings/:id/brief-versions/:briefId/approve',
+      summary: 'Approve a brief version on behalf of client or provider',
+      access: 'verified',
+      status: 200,
+      params: briefParamsSchema,
+      response: briefVersionSchema,
+      errors: [409, 422],
+      handler: ({ actor, params, transaction }) =>
+        transaction((tx) =>
+          bookingService.approveBriefVersion(tx, params.id, params.briefId, actor.id),
+        ),
     });
   },
 };

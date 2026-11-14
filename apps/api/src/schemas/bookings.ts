@@ -78,3 +78,27 @@ export const transitionInputSchema = z.object({
 
 export type ScheduleInput = z.infer<typeof scheduleInputSchema>;
 export type TransitionInput = z.infer<typeof transitionInputSchema>;
+
+// --- Slice 105c: Brief versioning and bilateral approval schemas ---
+export const briefContentSchema = z.object({
+  title: z.string().trim().min(1).max(120),
+  concept: z.string().max(4000),
+  shotList: z.array(z.string().max(500)).max(30),
+  lighting: z.array(z.string().max(500)).max(20),
+  checklist: z.array(z.string().max(500)).max(30),
+  milestones: z.array(z.string().max(200)).max(20),
+});
+
+export const briefVersionSchema = z.object({
+  id: idSchema,
+  bookingId: idSchema,
+  version: z.number().int(),
+  content: briefContentSchema,
+  createdBy: idSchema,
+  clientApproved: z.boolean(),
+  providerApproved: z.boolean(),
+  createdAt: z.string(),
+});
+
+export type BriefContent = z.infer<typeof briefContentSchema>;
+export type BriefVersion = z.infer<typeof briefVersionSchema>;

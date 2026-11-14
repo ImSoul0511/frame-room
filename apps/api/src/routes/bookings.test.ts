@@ -475,3 +475,124 @@ describe('booking transitions and schedule (105b)', () => {
     await app.close();
   });
 });
+
+// --- Slice 105c: Unit tests for brief versioning, approval, and locking rules ---
+describe('brief versions and approval (105c)', () => {
+  const BRIEF_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+
+  const SAMPLE_BRIEF = {
+    id: BRIEF_ID,
+    bookingId: BOOKING_ID,
+    version: 1,
+    content: {
+      title: 'Spring Editorial Brief',
+      concept: 'Natural light portrait',
+      shotList: ['Half body'],
+      lighting: ['Window light'],
+      checklist: ['50mm lens'],
+      milestones: ['Moodboard'],
+    },
+    createdBy: CLIENT_ID,
+    clientApproved: true,
+    providerApproved: false,
+    createdAt: '2030-05-02T00:00:00.000Z',
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(access.booking).mockResolvedValue({
+      ...SAMPLE_BOOKING,
+      status: 'confirmed',
+    });
+    vi.mocked(access.providerSide).mockResolvedValue(undefined);
+    vi.mocked(bookingRepo.insertBriefVersion).mockResolvedValue(SAMPLE_BRIEF);
+    vi.mocked(bookingRepo.findBriefVersionForUpdate).mockResolvedValue(SAMPLE_BRIEF);
+    vi.mocked(bookingRepo.approveBriefSide).mockResolvedValue({
+      ...SAMPLE_BRIEF,
+      providerApproved: true,
+    });
+    vi.mocked(bookingRepo.setAgreedBriefVersion).mockResolvedValue(undefined);
+  });
+
+  it('creates a brief version with 201 and bumps agreed_brief_version once both sides approve', async () => {
+    const app = createTestApp();
+
+    const createRes = await app.inject({
+      method: 'POST',
+      url: `/v1/bookings/${BOOKING_ID}/brief-versions`,
+      headers: { authorization: 'Bearer client-token' },
+      payload: SAMPLE_BRIEF.content,
+    });
+    expect(createRes.statusCode).toBe(201);
+    expect(createRes.json().data).toEqual(SAMPLE_BRIEF);
+    expect(bookingRepo.insertBriefVersion).toHaveBeenCalledWith(
+      expect.anything(),
+      BOOKING_ID,
+      CLIENT_ID,
+      SAMPLE_BRIEF.content,
+      true,
+    );
+
+    const approveRes = await app.inject({
+      method: 'POST',
+      url: `/v1/bookings/${BOOKING_ID}/brief-versions/${BRIEF_ID}/approve`,
+      headers: { authorization: 'Bearer provider-token' },
+    });
+    expect(approveRes.statusCode).toBe(200);
+    expect(approveRes.json().data.providerApproved).toBe(true);
+    expect(bookingRepo.setAgreedBriefVersion).toHaveBeenCalledWith(
+      expect.anything(),
+      BOOKING_ID,
+      1,
+    );
+    await app.close();
+  });
+
+  it('rejects non-provider participants on provider-side approval with 403', async () => {
+    vi.mocked(access.providerSide).mockRejectedValueOnce(
+      new ApiError(403, 'FORBIDDEN', 'forbidden'),
+    );
+    const app = createTestApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/v1/bookings/${BOOKING_ID}/brief-versions/${BRIEF_ID}/approve`,
+      headers: { authorization: 'Bearer outsider-token' },
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(bookingRepo.approveBriefSide).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it('rejects brief mutation when booking is locked (422) or brief version is stale (409)', async () => {
+    const app = createTestApp();
+
+    vi.mocked(access.booking).mockResolvedValueOnce({
+      ...SAMPLE_BOOKING,
+      status: 'proofing',
+    });
+    const lockedRes = await app.inject({
+      method: 'POST',
+      url: `/v1/bookings/${BOOKING_ID}/brief-versions`,
+      headers: { authorization: 'Bearer client-token' },
+      payload: SAMPLE_BRIEF.content,
+    });
+    expect(lockedRes.statusCode).toBe(422);
+    expect(lockedRes.json().error.details[0]?.reason).toBe('brief_locked');
+
+    vi.mocked(access.booking).mockResolvedValueOnce({
+      ...SAMPLE_BOOKING,
+      status: 'confirmed',
+      agreedBriefVersion: 2,
+    });
+    const staleRes = await app.inject({
+      method: 'POST',
+      url: `/v1/bookings/${BOOKING_ID}/brief-versions/${BRIEF_ID}/approve`,
+      headers: { authorization: 'Bearer provider-token' },
+    });
+    expect(staleRes.statusCode).toBe(409);
+    expect(staleRes.json().error.details[0]?.reason).toBe('stale_brief');
+    await app.close();
+  });
+});
