@@ -1,0 +1,160 @@
+import type { Transaction } from './database.js';
+import type { Booking } from '../schemas/bookings.js';
+
+export interface BookableServiceRow {
+  id: string;
+  ownerType: 'photographer' | 'studio';
+  photographerId: string | null;
+  studioId: string | null;
+  name: string;
+  description: string;
+  genre: string;
+  durationMinutes: number;
+  price: number;
+  photoCount: number;
+  retouchedCount: number;
+}
+
+export interface BookableAddOnRow {
+  id: string;
+  name: string;
+  price: number;
+}
+
+export interface CreateBookingRecord {
+  clientId: string;
+  projectId: string;
+  serviceId: string;
+  ownerType: 'photographer' | 'studio';
+  photographerId: string | null;
+  studioId: string | null;
+  assignedPhotographerId: string | null;
+  scheduledStart: string;
+  scheduledEnd: string;
+  totalPrice: number;
+  serviceName: string;
+  serviceSnapshot: Record<string, unknown>;
+  note: string;
+}
+
+function coerceBooking(row: Booking): Booking {
+  return {
+    ...row,
+    totalPrice: Number(row.totalPrice),
+    version: Number(row.version),
+    agreedBriefVersion: row.agreedBriefVersion === null ? null : Number(row.agreedBriefVersion),
+  };
+}
+
+/** Finds an active, non-deleted service whose provider is publicly visible, locking for share. */
+export async function findBookableService(
+  tx: Transaction,
+  serviceId: string,
+): Promise<BookableServiceRow | undefined> {
+  const row = await tx.optional<BookableServiceRow>(
+    `select s.id, s.owner_type, s.photographer_id, s.studio_id,
+            s.name, s.description, s.genre, s.duration_minutes, s.price,
+            s.photo_count, s.retouched_count
+     from services s
+     where s.id = $1
+       and s.is_active = true
+       and s.deleted_at is null
+       and private.provider_visible(s.photographer_id, s.studio_id)
+     for share`,
+    [serviceId],
+  );
+  if (!row) return undefined;
+  return {
+    ...row,
+    durationMinutes: Number(row.durationMinutes),
+    price: Number(row.price),
+    photoCount: Number(row.photoCount),
+    retouchedCount: Number(row.retouchedCount),
+  };
+}
+
+/** Checks via DB helper whether the current actor owns or manages the provider. */
+export async function isSelfProvider(
+  tx: Transaction,
+  photographerId: string | null,
+  studioId: string | null,
+): Promise<boolean> {
+  const row = await tx.one<{ own: boolean }>('select private.owns_provider($1, $2) as own', [
+    photographerId,
+    studioId,
+  ]);
+  return row.own;
+}
+
+/** Loads active, non-deleted add-ons belonging to the target service, locking for share. */
+export async function findActiveServiceAddOns(
+  tx: Transaction,
+  serviceId: string,
+  addOnIds: string[],
+): Promise<BookableAddOnRow[]> {
+  if (addOnIds.length === 0) return [];
+  const rows = await tx.rows<BookableAddOnRow>(
+    `select id, name, price
+     from service_add_ons
+     where id = any($1::uuid[])
+       and service_id = $2
+       and is_active = true
+       and deleted_at is null
+     for share`,
+    [addOnIds, serviceId],
+  );
+  return rows.map((row) => ({ ...row, price: Number(row.price) }));
+}
+
+/** Inserts a pending booking row and returns the coerced booking record. */
+export async function insertBooking(
+  tx: Transaction,
+  record: CreateBookingRecord,
+): Promise<Booking> {
+  const row = await tx.one<Booking>(
+    `insert into bookings (
+       client_id, project_id, service_id, owner_type, photographer_id, studio_id,
+       assigned_photographer_id, scheduled_start, scheduled_end, total_price,
+       service_name, service_snapshot, note
+     )
+     values ($1, $2, $3, $4::public.provider_type, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13)
+     returning id, client_id, project_id, service_id, owner_type, photographer_id, studio_id,
+               assigned_photographer_id, status, scheduled_start, scheduled_end, total_price,
+               service_name, version, agreed_brief_version, created_at, updated_at`,
+    [
+      record.clientId,
+      record.projectId,
+      record.serviceId,
+      record.ownerType,
+      record.photographerId,
+      record.studioId,
+      record.assignedPhotographerId,
+      record.scheduledStart,
+      record.scheduledEnd,
+      record.totalPrice,
+      record.serviceName,
+      JSON.stringify(record.serviceSnapshot),
+      record.note,
+    ],
+  );
+  return coerceBooking(row);
+}
+
+/** Bumps creative_projects.version after attaching a booking. */
+export async function incrementProjectVersion(tx: Transaction, projectId: string): Promise<void> {
+  await tx.execute('update creative_projects set version = version + 1 where id = $1', [projectId]);
+}
+
+/** Lists up to 100 bookings readable by the current actor, newest scheduled first. */
+export async function listReadableBookings(tx: Transaction): Promise<Booking[]> {
+  const rows = await tx.rows<Booking>(
+    `select id, client_id, project_id, service_id, owner_type, photographer_id, studio_id,
+            assigned_photographer_id, status, scheduled_start, scheduled_end, total_price,
+            service_name, version, agreed_brief_version, created_at, updated_at
+     from bookings
+     where private.can_read_booking(id)
+     order by scheduled_start desc
+     limit 100`,
+  );
+  return rows.map(coerceBooking);
+}
