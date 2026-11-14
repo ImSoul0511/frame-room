@@ -51,3 +51,30 @@ export const bookingSchema = z.object({
 
 export type BookingInput = z.infer<typeof bookingInputSchema>;
 export type Booking = z.infer<typeof bookingSchema>;
+
+// --- Slice 105b: Reschedule and lifecycle transition payloads ---
+export const scheduleInputSchema = z
+  .object({
+    scheduledStart: z.string().datetime(),
+    scheduledEnd: z.string().datetime(),
+    assignedPhotographerId: idSchema.optional(),
+    resourceIds: z.array(idSchema).max(20).default([]),
+    version: z.number().int().min(1),
+  })
+  .refine(
+    (v) => Date.parse(v.scheduledEnd) > Date.parse(v.scheduledStart),
+    'End must follow start',
+  );
+
+export const transitionInputSchema = z.object({
+  to: bookingStatusSchema,
+  version: z.number().int().min(1),
+  reason: z.string().max(1000).default(''),
+  scheduledStart: z.string().datetime().optional(),
+  scheduledEnd: z.string().datetime().optional(),
+  assignedPhotographerId: idSchema.optional(),
+  resourceIds: z.array(idSchema).max(20).default([]),
+});
+
+export type ScheduleInput = z.infer<typeof scheduleInputSchema>;
+export type TransitionInput = z.infer<typeof transitionInputSchema>;

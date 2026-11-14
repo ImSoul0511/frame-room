@@ -2,7 +2,13 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
 import { defineRoute, type ApiDependencies, type ApiModule } from '../plugins/route.js';
-import { bookingInputSchema, bookingSchema, idSchema } from '../schemas/bookings.js';
+import {
+  bookingInputSchema,
+  bookingSchema,
+  idSchema,
+  scheduleInputSchema,
+  transitionInputSchema,
+} from '../schemas/bookings.js';
 import * as bookingService from '../services/bookings.js';
 
 const bookingIdParamsSchema = z.object({ id: idSchema });
@@ -41,6 +47,33 @@ export const bookingModule: ApiModule = {
       response: bookingSchema,
       handler: ({ params, transaction }) =>
         transaction((tx) => bookingService.getBooking(tx, params.id)),
+    });
+    // --- Slice 105b: Booking lifecycle transition and rescheduling routes ---
+    defineRoute(app, deps, {
+      method: 'POST',
+      url: '/v1/bookings/:id/transitions',
+      summary: 'Transition a booking through its lifecycle state machine',
+      access: 'verified',
+      status: 200,
+      params: bookingIdParamsSchema,
+      body: transitionInputSchema,
+      response: bookingSchema,
+      errors: [409, 422],
+      handler: ({ params, body, transaction }) =>
+        transaction((tx) => bookingService.transitionBooking(tx, params.id, body)),
+    });
+
+    defineRoute(app, deps, {
+      method: 'PATCH',
+      url: '/v1/bookings/:id/schedule',
+      summary: 'Reschedule time slot, assigned photographer, or studio resources',
+      access: 'verified',
+      params: bookingIdParamsSchema,
+      body: scheduleInputSchema,
+      response: bookingSchema,
+      errors: [409, 422],
+      handler: ({ params, body, transaction }) =>
+        transaction((tx) => bookingService.rescheduleBooking(tx, params.id, body)),
     });
   },
 };

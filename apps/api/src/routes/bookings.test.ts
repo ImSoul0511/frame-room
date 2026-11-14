@@ -256,6 +256,18 @@ describe('booking routes (105a)', () => {
     const app = createTestApp();
 
     vi.mocked(bookingRepo.isSelfProvider).mockResolvedValueOnce(true);
+    vi.mocked(access.project).mockResolvedValueOnce({
+      id: PROJECT_ID,
+      ownerId: PROVIDER_USER_ID,
+      bookingId: null,
+      title: 'Spring Editorial',
+      idea: 'Natural light',
+      brief: null,
+      referencePaths: [],
+      version: 1,
+      createdAt: '2030-05-01T00:00:00.000Z',
+      updatedAt: '2030-05-01T00:00:00.000Z',
+    });
     const selfRes = await app.inject({
       method: 'POST',
       url: '/v1/bookings',
@@ -286,6 +298,7 @@ describe('booking routes (105a)', () => {
     expect(addOnRes.statusCode).toBe(422);
     expect(addOnRes.json().error.details[0]?.reason).toBe('invalid_add_on');
 
+    vi.mocked(bookingRepo.findActiveServiceAddOns).mockResolvedValueOnce([]);
     const longRes = await app.inject({
       method: 'POST',
       url: '/v1/bookings',
@@ -320,6 +333,145 @@ describe('booking routes (105a)', () => {
       headers: { authorization: 'Bearer outsider-token' },
     });
     expect(detailRes.statusCode).toBe(404);
+    await app.close();
+  });
+});
+
+// --- Slice 105b: Unit tests for transitions, rescheduling, and SQLSTATE error mapping ---
+describe('booking transitions and schedule (105b)', () => {
+  const RESOURCE_ID = '99999999-9999-4999-8999-999999999999';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(bookingRepo.callTransitionBooking).mockResolvedValue({
+      ...SAMPLE_BOOKING,
+      status: 'confirmed',
+      version: 2,
+    });
+    vi.mocked(bookingRepo.callRescheduleBooking).mockResolvedValue({
+      ...SAMPLE_BOOKING,
+      status: 'confirmed',
+      scheduledStart: '2030-05-11T08:00:00.000Z',
+      scheduledEnd: '2030-05-11T10:00:00.000Z',
+      version: 3,
+    });
+  });
+
+  it('transitions booking status with 200 and forwards positional RPC parameters', async () => {
+    const app = createTestApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: `/v1/bookings/${BOOKING_ID}/transitions`,
+      headers: { authorization: 'Bearer provider-token' },
+      payload: {
+        to: 'confirmed',
+        version: 1,
+        reason: 'Confirmed studio slot',
+        assignedPhotographerId: PHOTOGRAPHER_ID,
+        resourceIds: [RESOURCE_ID],
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().data.status).toBe('confirmed');
+    expect(res.json().data.version).toBe(2);
+    expect(bookingRepo.callTransitionBooking).toHaveBeenCalledWith(expect.anything(), BOOKING_ID, {
+      to: 'confirmed',
+      version: 1,
+      reason: 'Confirmed studio slot',
+      assignedPhotographerId: PHOTOGRAPHER_ID,
+      resourceIds: [RESOURCE_ID],
+    });
+    await app.close();
+  });
+
+  it('reschedules booking with 200 and rejects invalid time intervals with 400', async () => {
+    const app = createTestApp();
+
+    const invalid = await app.inject({
+      method: 'PATCH',
+      url: `/v1/bookings/${BOOKING_ID}/schedule`,
+      headers: { authorization: 'Bearer provider-token' },
+      payload: {
+        scheduledStart: '2030-05-11T10:00:00.000Z',
+        scheduledEnd: '2030-05-11T08:00:00.000Z',
+        version: 2,
+      },
+    });
+    expect(invalid.statusCode).toBe(400);
+
+    const valid = await app.inject({
+      method: 'PATCH',
+      url: `/v1/bookings/${BOOKING_ID}/schedule`,
+      headers: { authorization: 'Bearer provider-token' },
+      payload: {
+        scheduledStart: '2030-05-11T08:00:00.000Z',
+        scheduledEnd: '2030-05-11T10:00:00.000Z',
+        assignedPhotographerId: PHOTOGRAPHER_ID,
+        resourceIds: [RESOURCE_ID],
+        version: 2,
+      },
+    });
+    expect(valid.statusCode).toBe(200);
+    expect(valid.json().data.version).toBe(3);
+    expect(bookingRepo.callRescheduleBooking).toHaveBeenCalledWith(expect.anything(), BOOKING_ID, {
+      scheduledStart: '2030-05-11T08:00:00.000Z',
+      scheduledEnd: '2030-05-11T10:00:00.000Z',
+      assignedPhotographerId: PHOTOGRAPHER_ID,
+      resourceIds: [RESOURCE_ID],
+      version: 2,
+    });
+    await app.close();
+  });
+
+  it('maps Postgres RPC SQLSTATE errors to stable HTTP statuses and reasons', async () => {
+    const app = createTestApp();
+
+    vi.mocked(bookingRepo.callTransitionBooking).mockRejectedValueOnce({ code: '40001' });
+    const stale = await app.inject({
+      method: 'POST',
+      url: `/v1/bookings/${BOOKING_ID}/transitions`,
+      headers: { authorization: 'Bearer provider-token' },
+      payload: { to: 'confirmed', version: 1 },
+    });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json().error.details[0]?.reason).toBe('stale_version');
+
+    vi.mocked(bookingRepo.callTransitionBooking).mockRejectedValueOnce({ code: '23P01' });
+    const overlap = await app.inject({
+      method: 'POST',
+      url: `/v1/bookings/${BOOKING_ID}/transitions`,
+      headers: { authorization: 'Bearer provider-token' },
+      payload: { to: 'confirmed', version: 1 },
+    });
+    expect(overlap.statusCode).toBe(409);
+    expect(overlap.json().error.details[0]?.reason).toBe('slot_overlap');
+
+    vi.mocked(bookingRepo.callTransitionBooking).mockRejectedValueOnce({
+      code: '23514',
+      message: 'brief_required',
+    });
+    const briefReq = await app.inject({
+      method: 'POST',
+      url: `/v1/bookings/${BOOKING_ID}/transitions`,
+      headers: { authorization: 'Bearer provider-token' },
+      payload: { to: 'in_progress', version: 2 },
+    });
+    expect(briefReq.statusCode).toBe(422);
+    expect(briefReq.json().error.details[0]?.reason).toBe('brief_required');
+
+    vi.mocked(bookingRepo.callRescheduleBooking).mockRejectedValueOnce({ code: '42501' });
+    const forbidden = await app.inject({
+      method: 'PATCH',
+      url: `/v1/bookings/${BOOKING_ID}/schedule`,
+      headers: { authorization: 'Bearer outsider-token' },
+      payload: {
+        scheduledStart: '2030-05-11T08:00:00.000Z',
+        scheduledEnd: '2030-05-11T10:00:00.000Z',
+        version: 2,
+      },
+    });
+    expect(forbidden.statusCode).toBe(403);
     await app.close();
   });
 });

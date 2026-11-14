@@ -1,5 +1,5 @@
 import type { Transaction } from './database.js';
-import type { Booking } from '../schemas/bookings.js';
+import type { Booking, ScheduleInput, TransitionInput } from '../schemas/bookings.js';
 
 export interface BookableServiceRow {
   id: string;
@@ -157,4 +157,54 @@ export async function listReadableBookings(tx: Transaction): Promise<Booking[]> 
      limit 100`,
   );
   return rows.map(coerceBooking);
+}
+
+// --- Slice 105b: Positional DB RPC invocations for transitions and rescheduling ---
+
+/** Calls the DB state-machine RPC frameroom_transition using positional arguments. */
+export async function callTransitionBooking(
+  tx: Transaction,
+  bookingId: string,
+  input: TransitionInput,
+): Promise<Booking> {
+  const row = await tx.one<Booking>(
+    `select id, client_id, project_id, service_id, owner_type, photographer_id, studio_id,
+            assigned_photographer_id, status, scheduled_start, scheduled_end, total_price,
+            service_name, version, agreed_brief_version, created_at, updated_at
+     from public.frameroom_transition($1, $2::public.booking_status, $3, $4, $5, $6, $7, $8::uuid[])`,
+    [
+      bookingId,
+      input.to,
+      input.version,
+      input.reason,
+      input.scheduledStart ?? null,
+      input.scheduledEnd ?? null,
+      input.assignedPhotographerId ?? null,
+      input.resourceIds,
+    ],
+  );
+  return coerceBooking(row);
+}
+
+/** Calls the DB rescheduling RPC frameroom_reschedule using positional arguments. */
+export async function callRescheduleBooking(
+  tx: Transaction,
+  bookingId: string,
+  input: ScheduleInput,
+): Promise<Booking> {
+  const row = await tx.one<Booking>(
+    `select id, client_id, project_id, service_id, owner_type, photographer_id, studio_id,
+            assigned_photographer_id, status, scheduled_start, scheduled_end, total_price,
+            service_name, version, agreed_brief_version, created_at, updated_at
+     from public.frameroom_reschedule($1, $2, $3, $4, $5, $6::uuid[])`,
+    [
+      bookingId,
+      input.version,
+      input.scheduledStart,
+      input.scheduledEnd,
+      input.assignedPhotographerId ?? null,
+      input.resourceIds,
+    ],
+  );
+  return coerceBooking(row);
 }
