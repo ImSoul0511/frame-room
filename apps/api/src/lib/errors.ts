@@ -32,6 +32,7 @@ export class ApiError extends Error {
 
 const CODE_BY_STATUS: Record<number, ErrorCode> = {
   400: 'VALIDATION_ERROR',
+  413: 'VALIDATION_ERROR',
   401: 'UNAUTHORIZED',
   404: 'NOT_FOUND',
   409: 'CONFLICT',

@@ -42,6 +42,7 @@ export interface OpenApiOperation {
   response: z.ZodTypeAny;
   envelope: boolean;
   errors: number[];
+  requestContentType?: string;
 }
 
 type JsonSchema = { properties?: Record<string, unknown>; required?: string[] };
@@ -116,7 +117,18 @@ export class OpenApiRegistry {
           ? {
               requestBody: {
                 required: true,
-                content: { 'application/json': { schema: jsonSchema(operation.body) } },
+                content: {
+                  [operation.requestContentType ?? 'application/json']: {
+                    schema:
+                      operation.requestContentType === 'multipart/form-data'
+                        ? {
+                            type: 'object',
+                            required: ['file'],
+                            properties: { file: { type: 'string', format: 'binary' } },
+                          }
+                        : jsonSchema(operation.body),
+                  },
+                },
               },
             }
           : {}),

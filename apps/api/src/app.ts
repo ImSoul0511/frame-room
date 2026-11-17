@@ -1,4 +1,5 @@
 import cors from '@fastify/cors';
+import multipart from '@fastify/multipart';
 import Fastify from 'fastify';
 
 import type { ApiEnv } from './config/env.js';
@@ -10,6 +11,8 @@ import { PgDatabase, type Database } from './repositories/database.js';
 import { catalogModule } from './routes/catalog.js';
 import { profileModule } from './routes/profile.js';
 import { systemModule } from './routes/system.js';
+import { projectsModule } from './routes/projects.js';
+import { uploadsModule } from './routes/uploads.js';
 
 export interface BuildAppOptions {
   /** Replace the Postgres adapter, mainly in tests. */
@@ -40,6 +43,9 @@ export function buildApp(env: ApiEnv, options: BuildAppOptions = {}) {
     },
   });
   registerErrorHandling(app);
+  void app.register(multipart, {
+    limits: { fileSize: 20 * 1024 * 1024, files: 1, fields: 0, parts: 1 },
+  });
   void app.register(cors, {
     origin: (origin, callback) => callback(null, origin === env.WEB_ORIGIN),
   });
@@ -51,7 +57,14 @@ export function buildApp(env: ApiEnv, options: BuildAppOptions = {}) {
     authenticate: options.authenticate ?? createAuthenticator(env),
     openApi: new OpenApiRegistry(),
   };
-  for (const module of [systemModule, profileModule, catalogModule, ...(options.modules ?? [])]) {
+  for (const module of [
+    systemModule,
+    profileModule,
+    catalogModule,
+    projectsModule,
+    uploadsModule,
+    ...(options.modules ?? []),
+  ]) {
     module.register(app, dependencies);
   }
   // Only close a pool this function created.
