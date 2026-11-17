@@ -48,6 +48,7 @@ describe('GET /v1/photographers/me', () => {
     const res = await app.inject({ method: 'GET', url: '/v1/photographers/me', headers: AUTH });
     expect(res.statusCode).toBe(200);
     expect(bodyData(res)).toBeNull();
+    expect(res.json()).toEqual({ data: null });
   });
 
   it('returns 200 with the photographer profile', async () => {
@@ -56,6 +57,7 @@ describe('GET /v1/photographers/me', () => {
     const res = await app.inject({ method: 'GET', url: '/v1/photographers/me', headers: AUTH });
     expect(res.statusCode).toBe(200);
     expect(bodyData(res)).toMatchObject({ id: PHOTOG_ID });
+    expect(res.json()).toEqual({ data: PHOTOG });
     expect(repo.findPhotographer).toHaveBeenCalledWith(expect.anything(), 'user-1');
   });
 

@@ -35,6 +35,7 @@ export interface OpenApiOperation {
   summary: string;
   isPublic: boolean;
   status: number;
+  successStatuses: number[];
   params?: z.ZodTypeAny;
   query?: z.ZodTypeAny;
   body?: z.ZodTypeAny;
@@ -72,8 +73,26 @@ export class OpenApiRegistry {
     const paths: Record<string, Record<string, unknown>> = {};
     for (const operation of this.operations) {
       const key = operation.url.replace(/:([A-Za-z]+)/g, '{$1}');
-      const success = jsonSchema(
-        operation.envelope ? z.object({ data: operation.response }) : operation.response,
+      const successes = Object.fromEntries(
+        [...new Set([operation.status, ...operation.successStatuses])].map((status) => [
+          String(status),
+          {
+            description: 'Success',
+            ...(status === 204
+              ? {}
+              : {
+                  content: {
+                    'application/json': {
+                      schema: jsonSchema(
+                        operation.envelope
+                          ? z.object({ data: operation.response })
+                          : operation.response,
+                      ),
+                    },
+                  },
+                }),
+          },
+        ]),
       );
       const errors = Object.fromEntries(
         [...new Set(operation.errors)].map((status) => [
@@ -102,10 +121,7 @@ export class OpenApiRegistry {
             }
           : {}),
         responses: {
-          [String(operation.status)]: {
-            description: 'Success',
-            content: { 'application/json': { schema: success } },
-          },
+          ...successes,
           ...errors,
         },
       };

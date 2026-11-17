@@ -61,6 +61,8 @@ export interface RouteSpec<
   response: R;
   /** Default success status. 201 for creates, 202 for queued jobs. */
   status?: number;
+  /** Additional success codes returned through Respond, using the same payload schema. */
+  successStatuses?: number[];
   /** False only for unenveloped responses such as GET /health. */
   envelope?: boolean;
   /** Extra error statuses to document beyond those implied by the spec. */
@@ -107,6 +109,7 @@ export function defineRoute<
     summary: spec.summary,
     isPublic: spec.access === 'public',
     status,
+    successStatuses: spec.successStatuses ?? [],
     params: spec.params,
     query: spec.query,
     body: spec.body,
@@ -136,7 +139,7 @@ export function defineRoute<
       const outcome = result instanceof Respond ? result : new Respond(status, result);
       const parsed = spec.response.safeParse(outcome.data);
       if (!parsed.success) {
-        // Hợp đồng response bị vi phạm là lỗi của server: trả 500 chung, không lộ chi tiết.
+        // A response contract violation is a server error; keep its details private.
         request.log.error({ issues: parsed.error.issues }, 'response contract violation');
         throw new ApiError(500, 'INTERNAL_ERROR', 'internal_error', 'Unexpected server error');
       }

@@ -50,6 +50,16 @@ export const photographerInputSchema = z.object({
   genres: z.array(genreSchema).min(1).max(5),
   styles: z.array(z.string().trim().max(30)).max(10).default([]),
 });
+/** The caller's own photographer row; public discovery uses providerSchema instead. */
+export const ownPhotographerSchema = photographerInputSchema.extend({
+  id: idSchema,
+  userId: idSchema,
+  genres: z.array(genreSchema),
+  isHidden: z.boolean(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type OwnPhotographer = z.output<typeof ownPhotographerSchema>;
 export const providerSchema = z.object({
   id: idSchema,
   type: providerTypeSchema,
