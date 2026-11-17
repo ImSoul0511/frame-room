@@ -2,6 +2,8 @@
 
 **Confirmed gap:** MVP `fixtures/search-evaluation.json` is a small test fixture, and `plans/tasks/MVP-001-verification.md` says expand to 100–200 permitted labeled images before meaningful evaluation. `apps/api/src/demo-seed.ts` seeds synthetic/demo data; it is not a curated training or evaluation corpus. No complete dataset pipeline is present in the Python scaffold.
 
+The standalone [demo photograph intake workflow](portfolio-dataset.md) now collects loose images and prepares a bilingual manual tag catalog. Its suggested genres and random demo photographer assignments are not reviewed labels or real author identities; the resulting intake data is not yet an evaluation corpus.
+
 | Dataset slice       | Required records and labels                                                                                                                                                                    | Gate                                                                                          |
 | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | Portfolio retrieval | Permitted images across portrait/fashion/wedding/family/product/food/event/cosplay, provider ID, genre, tone/setting/mood, location, publication status, relevance judgments for EN/VI queries | At least 100–200 labeled permitted images for first benchmark; separate train/eval identities |

@@ -1,0 +1,93 @@
+{
+  "note": "Genres are intake hints, never reviewed image_tags. Jobs can overlap; normalized images are deduplicated. Add public URLs or more queries to expand coverage. Facebook is deliberately deferred.",
+  "jobs": [
+    {
+      "source": "mywed",
+      "genre": "wedding",
+      "urls": [
+        "https://mywed.com/vi/photo/editors/",
+        "https://mywed.com/vi/photo/year/",
+        "https://mywed.com/vi/photo/"
+      ]
+    },
+    {
+      "source": "pinterest",
+      "genre": "wedding",
+      "queries": [
+        "wedding photography editorial",
+        "Vietnam prewedding photography",
+        "wedding photography documentary"
+      ]
+    },
+    {
+      "source": "pinterest",
+      "genre": "portrait",
+      "queries": [
+        "portrait photography natural light",
+        "studio portrait photography",
+        "Vietnam graduation portrait photography"
+      ]
+    },
+    {
+      "source": "pinterest",
+      "genre": "fashion",
+      "queries": [
+        "fashion editorial photography",
+        "fashion lookbook photography",
+        "direct flash fashion photography"
+      ]
+    },
+    {
+      "source": "pinterest",
+      "genre": "family",
+      "queries": [
+        "family photography lifestyle",
+        "outdoor family photoshoot",
+        "studio family photography"
+      ]
+    },
+    {
+      "source": "pinterest",
+      "genre": "product",
+      "queries": [
+        "cosmetics product photography",
+        "jewelry product photography",
+        "advertising still life photography"
+      ]
+    },
+    {
+      "source": "pinterest",
+      "genre": "food",
+      "queries": [
+        "food photography editorial",
+        "restaurant food photography",
+        "beverage advertising photography"
+      ]
+    },
+    {
+      "source": "pinterest",
+      "genre": "event",
+      "queries": [
+        "event photography gala",
+        "concert photography live performance",
+        "Vietnam graduation group photography"
+      ]
+    },
+    {
+      "source": "pinterest",
+      "genre": "cosplay",
+      "queries": [
+        "cosplay photography photoshoot",
+        "cosplay portrait studio photography",
+        "fantasy costume photography"
+      ]
+    },
+    {
+      "source": "potonow",
+      "genre": "portrait",
+      "enabled": false,
+      "note": "Mixed-genre profile feeds. Enable only when you accept portrait as a weak intake hint, or replace URLs with profiles you have inspected.",
+      "urls": ["https://potonow.vn/photographers"]
+    }
+  ]
+}

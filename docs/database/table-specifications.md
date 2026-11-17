@@ -143,6 +143,7 @@ Table constraints: `check ((owner_type='photographer' and photographer_id is not
 | `status`          | `status public.portfolio_status not null default 'draft'`  |
 | `published_at`    | `published_at timestamptz`                                 |
 | `deleted_at`      | `deleted_at timestamptz`                                   |
+| `dataset_key`     | `dataset_key text unique`                                  |
 | `created_at`      | `created_at timestamptz not null default now()`            |
 | `updated_at`      | `updated_at timestamptz not null default now()`            |
 
@@ -161,20 +162,22 @@ Table constraints: `check ((owner_type='photographer' and photographer_id is not
 | `provenance`   | `provenance public.provenance not null default 'captured'`    |
 | `sort_order`   | `sort_order integer not null default 0`                       |
 | `is_hidden`    | `is_hidden boolean not null default false`                    |
-| `source`       | `source text`                                                 |
-| `collected_at` | `collected_at timestamptz`                                    |
-| `license_note` | `license_note text`                                           |
 | `created_at`   | `created_at timestamptz not null default now()`               |
 | `updated_at`   | `updated_at timestamptz not null default now()`               |
 
 ## `public.tags`
 
-| Column | SQL declaration                                         |
-| ------ | ------------------------------------------------------- |
-| `id`   | `id uuid primary key default public.uuid_generate_v7()` |
-| `slug` | `slug text not null unique`                             |
-| `name` | `name text not null`                                    |
-| `kind` | `kind public.tag_kind not null`                         |
+| Column          | SQL declaration                                                                                                              |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `id`            | `id uuid primary key default public.uuid_generate_v7()`                                                                      |
+| `slug`          | `slug text not null unique`                                                                                                  |
+| `name`          | `name text not null`                                                                                                         |
+| `kind`          | `kind public.tag_kind not null`                                                                                              |
+| `category`      | `category text not null` (genre, subject, setting, lighting, color_tone, mood, composition, style, editing, styling, source) |
+| `name_vi`       | `name_vi text`                                                                                                               |
+| `definition_en` | `definition_en text`                                                                                                         |
+| `definition_vi` | `definition_vi text`                                                                                                         |
+| `aliases`       | `aliases text[] not null default '{}'`                                                                                       |
 
 ## `public.image_tags`
 
@@ -182,7 +185,7 @@ Table constraints: `check ((owner_type='photographer' and photographer_id is not
 | -------------------- | ------------------------------------------------------------------------- |
 | `portfolio_image_id` | `portfolio_image_id uuid not null references public.portfolio_images(id)` |
 | `tag_id`             | `tag_id uuid not null references public.tags(id)`                         |
-| `source`             | `source text not null check(source in ('manual','ai'))`                   |
+| `source`             | `source text not null check(source in ('manual','ai','metadata'))`        |
 | `confidence`         | `confidence real check(confidence between 0 and 1)`                       |
 
 Table constraints: `primary key(portfolio_image_id,tag_id)`.
@@ -329,16 +332,18 @@ Table constraints: `primary key(booking_id,resource_id)`.
 
 ## `public.gallery_images`
 
-| Column         | SQL declaration                                            |
-| -------------- | ---------------------------------------------------------- |
-| `id`           | `id uuid primary key default public.uuid_generate_v7()`    |
-| `gallery_id`   | `gallery_id uuid not null references public.galleries(id)` |
-| `storage_path` | `storage_path text not null unique`                        |
-| `caption`      | `caption text not null default ''`                         |
-| `provenance`   | `provenance public.provenance not null default 'captured'` |
-| `width`        | `width integer not null`                                   |
-| `height`       | `height integer not null`                                  |
-| `created_at`   | `created_at timestamptz not null default now()`            |
+| Column                 | SQL declaration                                            |
+| ---------------------- | ---------------------------------------------------------- |
+| `id`                   | `id uuid primary key default public.uuid_generate_v7()`    |
+| `gallery_id`           | `gallery_id uuid not null references public.galleries(id)` |
+| `storage_path`         | `storage_path text not null unique`                        |
+| `caption`              | `caption text not null default ''`                         |
+| `provenance`           | `provenance public.provenance not null default 'captured'` |
+| `width`                | `width integer not null`                                   |
+| `height`               | `height integer not null`                                  |
+| `sort_order`           | `sort_order integer not null default 0`                    |
+| `similarity_group_key` | `similarity_group_key text`                                |
+| `created_at`           | `created_at timestamptz not null default now()`            |
 
 ## `public.gallery_selections`
 

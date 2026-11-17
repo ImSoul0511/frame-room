@@ -281,20 +281,21 @@ Indexes: (status,published_at desc), photographer_id, studio_id. Public queries 
 
 **`portfolio_images`**
 
-| Column                             | Type                                    | Notes                                                                       |
-| ---------------------------------- | --------------------------------------- | --------------------------------------------------------------------------- |
-| portfolio_id                       | uuid NN FK                              |                                                                             |
-| storage_path                       | text NN                                 | portfolio-images main path; derive thumbnail with _thumb suffix             |
-| width, height                      | integer NN                              | Each >0 and <=1280; backend verifies actual Storage metadata                |
-| caption                            | text                                    | ≤ 300                                                                       |
-| provenance                         | enum `provenance` NN default `captured` |                                                                             |
-| sort_order                         | integer NN                              | Starts at 0                                                                 |
-| is_hidden                          | boolean NN default false                | Admin-hidden in API (contract 17); cannot revoke direct public Storage URLs |
-| source, collected_at, license_note | text, timestamptz, text                 | Demo provenance; null for photographer uploads                              |
+| Column        | Type                                    | Notes                                                                       |
+| ------------- | --------------------------------------- | --------------------------------------------------------------------------- |
+| portfolio_id  | uuid NN FK                              |                                                                             |
+| storage_path  | text NN                                 | portfolio-images main path; derive thumbnail with _thumb suffix             |
+| width, height | integer NN                              | Each >0 and <=1280; backend verifies actual Storage metadata                |
+| caption       | text                                    | ≤ 300                                                                       |
+| provenance    | enum `provenance` NN default `captured` |                                                                             |
+| sort_order    | integer NN                              | Starts at 0                                                                 |
+| is_hidden     | boolean NN default false                | Admin-hidden in API (contract 17); cannot revoke direct public Storage URLs |
 
-**tags**: slug UQ NN, name NN, kind tag_kind NN (tone/setting/mood). Detailed taxonomy awaits decision #2. Extend DB/API enum groups together.
+**portfolios** also has nullable unique `dataset_key` for idempotent demo imports.
 
-**image_tags**: composite PK(portfolio_image_id,tag_id), source tag_source NN (manual/ai), nullable confidence numeric(3,2). Annotation ownership remains partially open in question #2.
+**tags**: slug UQ NN, name NN, kind tag_kind NN (tone/setting/mood), category NN, optional Vietnamese name/definition, English definition, aliases text array. Category values: genre, subject, setting, lighting, color_tone, mood, composition, style, editing, styling, source.
+
+**image_tags**: composite PK(portfolio_image_id,tag_id), source text NN (`manual`, `ai`, `metadata`), nullable confidence numeric(3,2). `metadata` identifies an original tag imported from the image source.
 
 **image_embeddings** (deferred; no migration yet): portfolio_image_id PK FK, model text, embedding vector(<dim>), created_at. Dimensions await model choice; add HNSW with AI implementation.
 
@@ -461,7 +462,7 @@ Index (shoot_room_id,created_at desc,id desc). Require body or attachments. befo
 
 **galleries**: booking_id UQ NN FK, gallery_status default draft, selection_limit integer (null unlimited), submitted_at, round integer NN default 1 CHECK >=1. Increment on accepted reopen, not submit; allowance comes from agreed brief revision_rounds, default 1.
 
-**gallery_images**: gallery_id FK NN, storage_path NN in private gallery-previews, derived thumbnail, width/height, sort_order, is_selected NN default false. selectedCount counts selected rows. Per-round history remains #18; current design keeps latest selection.
+**gallery_images**: gallery_id FK NN, storage_path NN in private gallery-previews, derived thumbnail, width/height, sort_order, optional similarity_group_key, is_selected NN default false. selectedCount counts selected rows. Per-round history remains #18; current design keeps latest selection.
 
 **image_notes**: gallery_image_id FK NN, author_id FK NN, body NN 1–500, numeric x/y with 0<=x,y<=1 and matching nullability.
 

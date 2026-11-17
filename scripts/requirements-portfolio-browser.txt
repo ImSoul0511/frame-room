@@ -1,0 +1,2 @@
+-r requirements-portfolio-dataset.txt
+playwright>=1.51,<2.0
