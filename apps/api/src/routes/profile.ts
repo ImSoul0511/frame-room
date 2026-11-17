@@ -14,7 +14,7 @@ export const profileModule: ApiModule = {
       summary: 'Own profile with derived roles. Read-only; 404 profile_required if missing.',
       access: 'verified',
       response: profileSchema,
-      envelope: false,
+      errors: [404],
       handler: ({ actor, transaction }) =>
         transaction((tx) => profiles.getOwnProfile(tx, actor.id)),
     });
@@ -26,6 +26,7 @@ export const profileModule: ApiModule = {
       access: 'verified',
       body: profileInputSchema,
       response: profileSchema,
+      successStatuses: [200],
       errors: [409],
       handler: async ({ actor, body, transaction }) => {
         const { profile, created } = await transaction((tx) =>
@@ -42,7 +43,6 @@ export const profileModule: ApiModule = {
       access: 'verified',
       body: profileInputSchema,
       response: profileSchema,
-      envelope: false,
       errors: [404, 409],
       handler: ({ actor, body, transaction }) =>
         transaction((tx) => profiles.updateOwnProfile(tx, actor.id, body)),
@@ -54,7 +54,6 @@ export const profileModule: ApiModule = {
       summary: 'Own photographer profile, or null when the caller has none.',
       access: 'verified',
       response: ownPhotographerSchema.nullable(),
-      envelope: false,
       handler: ({ actor, transaction }) =>
         transaction((tx) => profiles.getOwnPhotographer(tx, actor.id)),
     });
@@ -66,7 +65,6 @@ export const profileModule: ApiModule = {
       access: 'verified',
       body: photographerInputSchema,
       response: ownPhotographerSchema,
-      envelope: false,
       errors: [404, 409],
       handler: ({ actor, body, transaction }) =>
         transaction((tx) => profiles.createOwnPhotographer(tx, actor.id, body)),
@@ -79,7 +77,6 @@ export const profileModule: ApiModule = {
       access: 'verified',
       body: photographerInputSchema,
       response: ownPhotographerSchema,
-      envelope: false,
       errors: [404],
       handler: ({ actor, body, transaction }) =>
         transaction((tx) => profiles.updateOwnPhotographer(tx, actor.id, body)),

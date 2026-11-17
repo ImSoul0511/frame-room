@@ -24,6 +24,17 @@ const testModule: ApiModule = {
   name: 'test',
   register(app, deps) {
     defineRoute(app, deps, {
+      method: 'DELETE',
+      url: '/v1/notes/:id',
+      summary: 'Delete note',
+      access: 'verified',
+      params: z.object({ id: z.string().uuid() }),
+      status: 204,
+      envelope: false,
+      response: z.undefined(),
+      handler: async () => undefined,
+    });
+    defineRoute(app, deps, {
       method: 'POST',
       url: '/v1/notes',
       summary: 'Create note',
@@ -40,6 +51,7 @@ const testModule: ApiModule = {
       access: 'verified',
       body: noteInput,
       response: noteOutput,
+      successStatuses: [200],
       handler: async ({ actor, body }) => new Respond(200, { id: actor.id, title: body.title }),
     });
     defineRoute(app, deps, {
@@ -204,5 +216,21 @@ describe('OpenAPI document', () => {
     const read = document.paths['/v1/notes/{id}'].get;
     expect(read.security).toEqual([]);
     expect(read.parameters[0]).toMatchObject({ in: 'path', name: 'id', required: true });
+  });
+
+  it('documents profile response envelopes and both create/retry success codes', async () => {
+    const response = await createApp().inject({ url: '/v1/openapi.json' });
+    const paths = response.json().paths;
+    for (const path of ['/v1/me', '/v1/photographers/me']) {
+      for (const method of ['get', 'post', 'patch']) {
+        const status = method === 'post' ? '201' : '200';
+        const schema = paths[path][method].responses[status].content['application/json'].schema;
+        expect(schema.properties.data).toBeDefined();
+        expect(schema.required).toContain('data');
+      }
+    }
+    expect(paths['/v1/me'].post.responses['200']).toBeDefined();
+    expect(paths['/v1/me'].get.responses['404']).toBeDefined();
+    expect(paths['/v1/notes/{id}'].delete.responses['204']).toEqual({ description: 'Success' });
   });
 });

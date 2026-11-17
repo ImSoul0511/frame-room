@@ -811,7 +811,7 @@ export async function softDeletePortfolio(tx: Transaction, portfolioId: string):
 export async function insertPortfolioImage(
   tx: Transaction,
   portfolioId: string,
-  input: PortfolioImageInput,
+  input: PortfolioImageInput & { width: number; height: number },
 ): Promise<PortfolioImageRow> {
   const row = await tx.one<PortfolioImageRow>(
     `insert into portfolio_images (
@@ -871,7 +871,9 @@ export async function replacePortfolioImageTags(
   imageId: string,
   tagIds: string[],
 ): Promise<void> {
-  await tx.execute('delete from image_tags where portfolio_image_id = $1', [imageId]);
+  await tx.execute("delete from image_tags where portfolio_image_id = $1 and source = 'manual'", [
+    imageId,
+  ]);
   if (tagIds.length === 0) return;
 
   await tx.execute(

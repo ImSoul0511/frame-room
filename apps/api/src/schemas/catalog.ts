@@ -1,34 +1,42 @@
+import {
+  genreSchema,
+  idSchema,
+  paginationSchema,
+  portfolioInputSchema,
+  portfolioImageInputSchema as sharedPortfolioImageInputSchema,
+  providerSchema,
+  providerTypeSchema,
+  provenanceSchema,
+  serviceInputSchema,
+  serviceSchema,
+  studioInputSchema,
+  invitationInputSchema,
+  invitationResponseSchema,
+  resourceInputSchema,
+  addOnInputSchema,
+} from '@frameroom/shared';
 import { z } from 'zod';
 
-export const idSchema = z.string().uuid();
-
-export const genres = [
-  'portrait',
-  'fashion',
-  'wedding',
-  'family',
-  'product',
-  'food',
-  'event',
-  'cosplay',
-] as const;
-
-export const genreSchema = z.enum(genres);
-export const providerTypeSchema = z.enum(['photographer', 'studio']);
+export {
+  genreSchema,
+  idSchema,
+  paginationSchema,
+  portfolioInputSchema,
+  providerSchema,
+  providerTypeSchema,
+  provenanceSchema,
+  serviceInputSchema,
+  serviceSchema,
+  studioInputSchema,
+};
 
 const shortText = z.string().trim().min(1).max(120);
 const description = z.string().trim().max(2000).default('');
-const nonnegative = z.number().int().min(0);
 const optionalFilterText = z.string().trim().min(1).max(100).optional();
 
 /** Shared `:id` UUID path parameter for detail routes. */
 export const idParamsSchema = z.object({
   id: idSchema,
-});
-
-export const paginationSchema = z.object({
-  page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(50).default(20),
 });
 
 /** Query parameters for GET /v1/explore. */
@@ -46,51 +54,12 @@ export const providerListQuerySchema = paginationSchema.extend({
   district: optionalFilterText,
 });
 
-export const providerSchema = z.object({
-  id: idSchema,
-  type: providerTypeSchema,
-  displayName: z.string(),
-  bio: z.string(),
-  city: z.string(),
-  district: z.string(),
-  genres: z.array(genreSchema),
-  styles: z.array(z.string()),
-  priceFrom: z.number().nullable(),
-  ratingAvg: z.number().nullable(),
-  reviewCount: z.number(),
-});
-
 /** Provider card on the Explore page, with the cover URL of its first published portfolio image. */
 export const exploreProviderSchema = providerSchema.extend({
   coverUrl: z.string().nullable().optional(),
 });
 
-export const serviceInputSchema = z.object({
-  name: shortText,
-  description,
-  genre: genreSchema,
-  durationMinutes: z.number().int().min(15).max(1440),
-  price: nonnegative.max(1000000000),
-  photoCount: nonnegative.default(10),
-  retouchedCount: nonnegative.default(5),
-  isActive: z.boolean().default(true),
-});
-
-export const serviceSchema = serviceInputSchema.extend({
-  id: idSchema,
-  ownerType: providerTypeSchema,
-  photographerId: idSchema.nullable(),
-  studioId: idSchema.nullable(),
-});
-
 export const portfolioStatusSchema = z.enum(['draft', 'published', 'hidden']);
-
-export const portfolioInputSchema = z.object({
-  title: shortText,
-  description,
-  genre: genreSchema,
-  status: z.enum(['draft', 'published']).default('draft'),
-});
 
 /** Published portfolio shown on a public provider detail page. */
 export const publicPortfolioSchema = z.object({
@@ -153,15 +122,6 @@ export type ProviderDetail = z.infer<typeof providerDetailSchema>;
 
 export const studioMemberRoleSchema = z.enum(['manager', 'photographer']);
 
-export const studioInputSchema = z.object({
-  name: z.string().trim().min(1).max(80),
-  description,
-  city: z.string().trim().max(100).default(''),
-  district: z.string().trim().max(100).default(''),
-  address: z.string().trim().max(200).default(''),
-  genres: z.array(genreSchema).min(1).max(5),
-});
-
 export const studioSchema = studioInputSchema.extend({
   id: idSchema,
   createdBy: idSchema,
@@ -220,17 +180,8 @@ export const ownedPortfolioSchema = z.object({
   updatedAt: z.string(),
 });
 
-export const provenanceSchema = z.enum(['captured', 'manipulated', 'ai_generated']);
-
-export const portfolioImageInputSchema = z.object({
-  storagePath: z.string().trim().min(1).max(500),
-  width: z.number().int().min(1),
-  height: z.number().int().min(1),
-  caption: z.string().trim().max(500).default(''),
+export const portfolioImageInputSchema = sharedPortfolioImageInputSchema.extend({
   sortOrder: z.number().int().min(0).default(0),
-  provenance: provenanceSchema.default('captured'),
-  source: z.string().trim().max(300).nullable().optional(),
-  licenseNote: z.string().trim().max(500).nullable().optional(),
   tagIds: z.array(idSchema).max(20).default([]),
 });
 
@@ -251,7 +202,8 @@ export const portfolioImageSchema = z.object({
   tags: z.array(tagSchema),
 });
 
-export const portfolioDetailSchema = ownedPortfolioSchema.extend({
+export const portfolioDetailSchema = z.object({
+  portfolio: ownedPortfolioSchema,
   images: z.array(portfolioImageSchema),
 });
 
@@ -272,10 +224,7 @@ export const invitationStatusSchema = z.enum(['pending', 'accepted', 'declined',
 
 export const resourceTypeSchema = z.enum(['room', 'equipment']);
 
-export const studioInvitationInputSchema = z.object({
-  photographerId: idSchema,
-  role: studioMemberRoleSchema.default('photographer'),
-});
+export const studioInvitationInputSchema = invitationInputSchema;
 
 export const studioInvitationSchema = z.object({
   id: idSchema,
@@ -294,9 +243,7 @@ export const myInvitationSchema = studioInvitationSchema.extend({
   inviterName: z.string(),
 });
 
-export const respondInvitationInputSchema = z.object({
-  status: z.enum(['accepted', 'declined', 'revoked']),
-});
+export const respondInvitationInputSchema = invitationResponseSchema;
 
 export const studioMemberParamsSchema = z.object({
   id: idSchema,
@@ -307,12 +254,7 @@ export const updateStudioMemberRoleInputSchema = z.object({
   role: studioMemberRoleSchema,
 });
 
-export const studioResourceInputSchema = z.object({
-  name: z.string().trim().min(1).max(160),
-  type: resourceTypeSchema,
-  description: z.string().trim().max(1000).default(''),
-  isActive: z.boolean().default(true),
-});
+export const studioResourceInputSchema = resourceInputSchema;
 
 export const studioResourceSchema = studioResourceInputSchema.extend({
   id: idSchema,
@@ -321,12 +263,7 @@ export const studioResourceSchema = studioResourceInputSchema.extend({
   updatedAt: z.string(),
 });
 
-export const serviceAddOnInputSchema = z.object({
-  name: z.string().trim().min(1).max(160),
-  description: z.string().trim().max(1000).default(''),
-  price: z.number().int().min(0),
-  isActive: z.boolean().default(true),
-});
+export const serviceAddOnInputSchema = addOnInputSchema;
 
 export const serviceAddOnSchema = serviceAddOnInputSchema.extend({
   id: idSchema,

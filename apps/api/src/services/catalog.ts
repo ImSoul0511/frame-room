@@ -1,4 +1,5 @@
 import { ApiError } from '../lib/errors.js';
+import type { VerifyPortfolioUpload } from '../lib/portfolio-upload.js';
 import * as repo from '../repositories/catalog.js';
 import type { Transaction } from '../repositories/database.js';
 import type {
@@ -124,6 +125,7 @@ export async function createStudio(
   userId: string,
   input: StudioInput,
 ): Promise<Studio> {
+  await requirePhotographerId(tx, userId);
   const studio = await repo.insertStudio(tx, userId, input);
   await repo.insertStudioMember(tx, studio.id, userId, 'manager');
   return studio;
@@ -285,7 +287,7 @@ export async function getPortfolioDetail(
   }));
 
   return {
-    ...portfolio,
+    portfolio,
     images,
   };
 }
@@ -346,6 +348,7 @@ export async function addPortfolioImage(
   userId: string,
   portfolioId: string,
   input: PortfolioImageInput,
+  verifyUpload: VerifyPortfolioUpload,
   supabaseUrl?: string,
 ): Promise<PortfolioImage> {
   const existing = await repo.findPortfolioOwnership(tx, portfolioId);
@@ -353,6 +356,12 @@ export async function addPortfolioImage(
     throw new ApiError(404, 'NOT_FOUND', 'portfolio_not_found');
   }
   await assertProviderOwnership(tx, userId, existing);
+
+  const prefix = `${userId}/${portfolioId}/`;
+  const fileName = input.storagePath.slice(prefix.length);
+  if (!input.storagePath.startsWith(prefix) || !/^[a-zA-Z0-9-]+\.webp$/.test(fileName)) {
+    throw new ApiError(400, 'VALIDATION_ERROR', 'invalid_storage_path');
+  }
 
   const uniqueTagIds = [...new Set(input.tagIds)];
   if (uniqueTagIds.length > 0) {
@@ -362,7 +371,8 @@ export async function addPortfolioImage(
     }
   }
 
-  const image = await repo.insertPortfolioImage(tx, portfolioId, input);
+  const dimensions = await verifyUpload(input.storagePath);
+  const image = await repo.insertPortfolioImage(tx, portfolioId, { ...input, ...dimensions });
   if (uniqueTagIds.length > 0) {
     await repo.replacePortfolioImageTags(tx, image.id, uniqueTagIds);
   }
@@ -472,8 +482,8 @@ export async function updateStudioMemberRole(
   targetUserId: string,
   role: 'manager' | 'photographer',
 ): Promise<StudioTeamMember> {
-  await requireStudioManager(tx, studioId, callerUserId);
   await repo.lockStudioMembers(tx, studioId);
+  await requireStudioManager(tx, studioId, callerUserId);
 
   const currentRole = await repo.findStudioMemberRole(tx, studioId, targetUserId);
   if (!currentRole) {
@@ -497,8 +507,8 @@ export async function removeStudioMember(
   studioId: string,
   targetUserId: string,
 ): Promise<void> {
-  await requireStudioManager(tx, studioId, callerUserId);
   await repo.lockStudioMembers(tx, studioId);
+  await requireStudioManager(tx, studioId, callerUserId);
 
   const currentRole = await repo.findStudioMemberRole(tx, studioId, targetUserId);
   if (!currentRole) {

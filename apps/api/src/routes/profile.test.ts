@@ -33,6 +33,7 @@ describe('GET /v1/me', () => {
     const res = await app.inject({ method: 'GET', url: '/v1/me', headers: AUTH });
     expect(res.statusCode).toBe(200);
     expect(bodyData(res)).toMatchObject({ userName: 'khai' });
+    expect(res.json()).toEqual({ data: PROFILE });
     expect(repo.findProfile).toHaveBeenCalledWith(expect.anything(), 'user-1');
   });
 

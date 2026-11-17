@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { createPortfolioUploadVerifier } from '../lib/portfolio-upload.js';
 import { defineRoute, type ApiModule } from '../plugins/route.js';
 import {
   exploreProviderSchema,
@@ -40,6 +41,7 @@ import * as catalog from '../services/catalog.js';
 export const catalogModule: ApiModule = {
   name: 'catalog',
   register(app, deps) {
+    const verifyPortfolioUpload = createPortfolioUploadVerifier(deps.env);
     // ---------- 102a: Public discovery ----------
     defineRoute(app, deps, {
       method: 'GET',
@@ -301,7 +303,14 @@ export const catalogModule: ApiModule = {
       errors: [403],
       handler: ({ actor, params, body, transaction }) =>
         transaction((tx) =>
-          catalog.addPortfolioImage(tx, actor.id, params.id, body, deps.env.SUPABASE_URL),
+          catalog.addPortfolioImage(
+            tx,
+            actor.id,
+            params.id,
+            body,
+            verifyPortfolioUpload,
+            deps.env.SUPABASE_URL,
+          ),
         ),
     });
 

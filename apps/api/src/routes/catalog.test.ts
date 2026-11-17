@@ -19,6 +19,10 @@ import type {
 
 vi.mock('../repositories/catalog.js');
 vi.mock('../repositories/profiles.js');
+const verifyUpload = vi.hoisted(() => vi.fn());
+vi.mock('../lib/portfolio-upload.js', () => ({
+  createPortfolioUploadVerifier: () => verifyUpload,
+}));
 
 const PHOTOGRAPHER_ID = '22222222-2222-4222-8222-222222222222';
 const STUDIO_ID = '33333333-3333-4333-8333-333333333333';
@@ -103,7 +107,10 @@ const TAG: Tag = {
 
 const NONE = undefined as never;
 
-beforeEach(() => vi.resetAllMocks());
+beforeEach(() => {
+  vi.resetAllMocks();
+  verifyUpload.mockResolvedValue({ width: 1200, height: 800 });
+});
 afterEach(closeTestApps);
 
 describe('GET /v1/explore', () => {
@@ -295,6 +302,7 @@ describe('GET /v1/me/studios', () => {
 
 describe('POST /v1/studios', () => {
   it('creates a studio and adds the caller as initial manager (201)', async () => {
+    vi.mocked(repo.findPhotographerIdByUser).mockResolvedValue(PHOTOGRAPHER_ID);
     vi.mocked(repo.insertStudio).mockResolvedValue(STUDIO);
 
     const app = await buildTestApp();
@@ -313,6 +321,20 @@ describe('POST /v1/studios', () => {
       'user-1',
       'manager',
     );
+  });
+
+  it('rejects a client without a photographer profile before inserting a studio', async () => {
+    const app = await buildTestApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/studios',
+      payload: STUDIO_INPUT,
+      headers: AUTH,
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.body).toContain('photographer_profile_required');
+    expect(repo.insertStudio).not.toHaveBeenCalled();
+    expect(repo.insertStudioMember).not.toHaveBeenCalled();
   });
 });
 
@@ -668,7 +690,7 @@ describe('GET /v1/portfolios/:id', () => {
     expect(res.statusCode).toBe(200);
     expect(repo.listTagsForImages).toHaveBeenCalledWith(expect.anything(), [IMAGE_ID]);
     expect(bodyData(res)).toMatchObject({
-      id: PORTFOLIO_ID,
+      portfolio: { id: PORTFOLIO_ID },
       images: [
         expect.objectContaining({
           id: IMAGE_ID,
@@ -784,7 +806,7 @@ describe('POST /v1/portfolios/:id/images and PATCH /v1/portfolio-images/:id/tags
     vi.mocked(repo.countExistingTags).mockResolvedValue(1);
     vi.mocked(repo.insertPortfolioImage).mockResolvedValue({
       ...IMAGE_ROW,
-      storagePath: 'p/new.jpg',
+      storagePath: `user-1/${PORTFOLIO_ID}/new.webp`,
       caption: 'New frame',
       sortOrder: 1,
     });
@@ -795,9 +817,7 @@ describe('POST /v1/portfolios/:id/images and PATCH /v1/portfolio-images/:id/tags
       method: 'POST',
       url: `/v1/portfolios/${PORTFOLIO_ID}/images`,
       payload: {
-        storagePath: 'p/new.jpg',
-        width: 1200,
-        height: 800,
+        storagePath: `user-1/${PORTFOLIO_ID}/new.webp`,
         caption: 'New frame',
         sortOrder: 1,
         provenance: 'captured',
@@ -807,12 +827,66 @@ describe('POST /v1/portfolios/:id/images and PATCH /v1/portfolio-images/:id/tags
     });
 
     expect(res.statusCode).toBe(201);
+    expect(repo.insertPortfolioImage).toHaveBeenCalledWith(
+      expect.anything(),
+      PORTFOLIO_ID,
+      expect.objectContaining({ width: 1200, height: 800 }),
+    );
     expect(bodyData(res)).toMatchObject({
       id: IMAGE_ID,
-      url: 'p/new.jpg',
+      url: `user-1/${PORTFOLIO_ID}/new.webp`,
       provenance: 'captured',
       tags: [TAG],
     });
+  });
+
+  it.each([
+    'https://untrusted.example/image.webp',
+    `other-user/${PORTFOLIO_ID}/image.webp`,
+    `user-1/${STUDIO_ID}/image.webp`,
+    `user-1/${PORTFOLIO_ID}/../image.webp`,
+    `user-1/${PORTFOLIO_ID}/image_thumb.webp`,
+  ])('rejects an image path outside the upload scope: %s', async (storagePath) => {
+    vi.mocked(repo.findPortfolioOwnership).mockResolvedValue({
+      id: PORTFOLIO_ID,
+      photographerId: PHOTOGRAPHER_ID,
+      studioId: null,
+      status: 'published',
+      publishedAt: null,
+    });
+    vi.mocked(repo.findPhotographerIdByUser).mockResolvedValue(PHOTOGRAPHER_ID);
+    const app = await buildTestApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: `/v1/portfolios/${PORTFOLIO_ID}/images`,
+      payload: { storagePath, width: 1200, height: 800 },
+      headers: AUTH,
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toContain('invalid_storage_path');
+    expect(repo.insertPortfolioImage).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid stored bytes before associating the image', async () => {
+    vi.mocked(repo.findPortfolioOwnership).mockResolvedValue({
+      id: PORTFOLIO_ID,
+      photographerId: PHOTOGRAPHER_ID,
+      studioId: null,
+      status: 'published',
+      publishedAt: null,
+    });
+    vi.mocked(repo.findPhotographerIdByUser).mockResolvedValue(PHOTOGRAPHER_ID);
+    const { ApiError } = await import('../lib/errors.js');
+    verifyUpload.mockRejectedValue(new ApiError(400, 'VALIDATION_ERROR', 'invalid_image'));
+    const app = await buildTestApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: `/v1/portfolios/${PORTFOLIO_ID}/images`,
+      payload: { storagePath: `user-1/${PORTFOLIO_ID}/image.webp` },
+      headers: AUTH,
+    });
+    expect(res.statusCode).toBe(400);
+    expect(repo.insertPortfolioImage).not.toHaveBeenCalled();
   });
 
   it('replaces tags on an owned portfolio image (200)', async () => {
@@ -1027,6 +1101,29 @@ describe('Studio invitations (/v1/me/invitations, POST /v1/studios/:id/invitatio
 });
 
 describe('Studio member role updates and removal guards', () => {
+  it.each(['PATCH', 'DELETE'] as const)(
+    'rejects %s when the caller loses management rights while waiting for the member lock',
+    async (method) => {
+      let isManager = true;
+      vi.mocked(repo.isStudioManager).mockImplementation(async () => isManager);
+      vi.mocked(repo.lockStudioMembers).mockImplementation(async () => {
+        isManager = false;
+      });
+      vi.mocked(repo.findStudioMemberRole).mockResolvedValue('photographer');
+      const app = await buildTestApp();
+      const res = await app.inject({
+        method,
+        url: `/v1/studios/${STUDIO_ID}/members/${TARGET_USER_ID}`,
+        ...(method === 'PATCH' ? { payload: { role: 'manager' } } : {}),
+        headers: AUTH,
+      });
+      expect(res.statusCode).toBe(403);
+      expect(res.body).toContain('studio_manager_required');
+      expect(repo.updateStudioMemberRole).not.toHaveBeenCalled();
+      expect(repo.deleteStudioMember).not.toHaveBeenCalled();
+    },
+  );
+
   it('blocks demoting the last studio manager with 409 last_manager_protected', async () => {
     vi.mocked(repo.isStudioManager).mockResolvedValue(true);
     vi.mocked(repo.findStudioMemberRole).mockResolvedValue('manager');
