@@ -7,6 +7,7 @@ import { registerErrorHandling } from './plugins/error-handler.js';
 import { OpenApiRegistry } from './plugins/openapi.js';
 import type { ApiDependencies, ApiModule } from './plugins/route.js';
 import { PgDatabase, type Database } from './repositories/database.js';
+import { catalogModule } from './routes/catalog.js';
 import { profileModule } from './routes/profile.js';
 import { systemModule } from './routes/system.js';
 
@@ -50,7 +51,7 @@ export function buildApp(env: ApiEnv, options: BuildAppOptions = {}) {
     authenticate: options.authenticate ?? createAuthenticator(env),
     openApi: new OpenApiRegistry(),
   };
-  for (const module of [systemModule, profileModule, ...(options.modules ?? [])]) {
+  for (const module of [systemModule, profileModule, catalogModule, ...(options.modules ?? [])]) {
     module.register(app, dependencies);
   }
   // Only close a pool this function created.
