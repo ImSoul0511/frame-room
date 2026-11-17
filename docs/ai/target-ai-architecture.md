@@ -1,5 +1,11 @@
 # Target AI architecture
 
+**Ownership (user decision, 2026-11-18):** Quynh Anh owns the entire AI scope,
+including AIS-101 through AIS-105, BE-104 and BE-107: Python/model implementation,
+HTTP adapters, ranking, import/indexing, jobs/usage/actions and assistant/chat.
+Khoi Nguyen owns BE-103 media/projects only. AI work is separate and not implemented
+by the BE-103 change.
+
 **Recommendation for review:** a Python FastAPI AI service performs model-facing parsing, embedding, generation, image edit and culling. Fastify retains Auth, project access, public API, queue/job ledger, cost reservation, Storage writes and all business action confirmation. This gives the AI Developer a bounded service contract while preserving the MVP UI and business rules.
 
 ```mermaid

@@ -1,6 +1,6 @@
 # AI Search implementation, taxonomy and data work plan
 
-Prepared on 2026-11-12 for Khoi Nguyen and Quynh Anh. Target checkpoint is
+Prepared on 2026-11-12. Current AI owner: Quynh Anh (user decision, 2026-11-18). Target checkpoint is
 2026-11-15 at 23:59, Asia/Saigon, using the shared end-of-day planning assumption.
 
 ## 1. Priority and inspected evidence
@@ -53,35 +53,30 @@ results for the reconstructed service.
 Reserve the following local task IDs and create matching `plans/tasks/<ID>.md` before
 implementation. They sit under the existing AI-001 backlog epic.
 
-| Task    | Accountable owner | Reviewer/support                                          | Branch and output                                                                                                                                                                                                                   |
-| ------- | ----------------- | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| AIS-101 | Khoi Nguyen       | Quynh Anh, Khai, Ly for dimensions                        | `feature/AIS-101-search-service-contract`. Python service boundary, Pydantic schemas, service identity, model/pipeline decision and parser/embedding adapter skeleton.                                                              |
-| AIS-102 | Quynh Anh         | Nguyen for adapter compatibility, Ly for corpus import    | `feature/AIS-102-search-dataset-pipeline`. Source manifest, source-specific ingestion, normalization, bilingual descriptors and descriptor/embedding batch scripts. Implement the model-facing batch functions shared with AIS-101. |
-| AIS-103 | Quynh Anh         | Ly for schema, Khoa for UI labels                         | `feature/AIS-103-photography-taxonomy`. Versioned facets/aliases, nine-tag compatibility, label guide and human review. Start this alongside dataset sourcing.                                                                      |
-| AIS-104 | Khoi Nguyen       | Khai and Quynh Anh                                        | `feature/AIS-104-vector-search-integration`. BE-104 API adapter, Cloud vector import/index worker, filtering/ranking, query flow and visibility/error cases.                                                                        |
-| AIS-105 | Quynh Anh         | Nguyen for latency fixes, Khoa for UX, Khai for isolation | `feature/AIS-105-search-evaluation`. UTF-8 bilingual judgments, metric script, dataset audit and measured report. Nguyen fixes API/model integration failures.                                                                      |
+| Task    | Accountable owner | Reviewer/support                                     | Branch and output                                                                                                                                                                                                                   |
+| ------- | ----------------- | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AIS-101 | Quynh Anh         | Khai, Khoa; Ly for dimensions                        | `feature/AIS-101-search-service-contract`. Python service boundary, Pydantic schemas, service identity, model/pipeline decision and parser/embedding adapter skeleton.                                                              |
+| AIS-102 | Quynh Anh         | Khai for adapter compatibility, Ly for corpus import | `feature/AIS-102-search-dataset-pipeline`. Source manifest, source-specific ingestion, normalization, bilingual descriptors and descriptor/embedding batch scripts. Implement the model-facing batch functions shared with AIS-101. |
+| AIS-103 | Quynh Anh         | Ly for schema, Khoa for UI labels                    | `feature/AIS-103-photography-taxonomy`. Versioned facets/aliases, nine-tag compatibility, label guide and human review. Start this alongside dataset sourcing.                                                                      |
+| AIS-104 | Quynh Anh         | Khai and Khoa for API compatibility                  | `feature/AIS-104-vector-search-integration`. BE-104 API adapter, Cloud vector import/index worker, filtering/ranking, query flow and visibility/error cases.                                                                        |
+| AIS-105 | Quynh Anh         | Khai for API compatibility, Khoa for UX              | `feature/AIS-105-search-evaluation`. UTF-8 bilingual judgments, metric script, dataset audit and measured report. Quynh Anh fixes API/model integration failures.                                                                   |
 
-Nguyen owns online service composition, public Fastify integration, ranking and Cloud
-writes. Quynh Anh owns source/label quality, reusable model-facing data functions and
-offline evaluation. They agree module/function signatures in AIS-101 before editing
-the same Python modules. Ly owns migrations, taxonomy SQL seed and generated types.
-Quynh Anh mentors Ly at the short checkpoints in DB-101 through DB-105, reserving the
-rest of her time for AIS-102/103/105.
+Ownership corrected by the user on 2026-11-18: Quynh Anh owns all AI work,
+including AIS-101 through AIS-105, BE-104 and BE-107. This includes the Python
+service and models, Fastify AI HTTP adapters, search/ranking, corpus import/index
+workers, usage/jobs/actions and assistant/chat adapters. Khoi Nguyen implements
+BE-103 media/projects only; no AI runtime code is included in that task.
+Ly owns migrations, taxonomy SQL seed and generated types; Khai/Khoa review affected
+API/business contracts.
 
-### Daily plan and integration checkpoints
+### Implementation order and historical checkpoint
 
-| Date   | Khoi Nguyen                                                                                      | Quynh Anh                                                                                     | Exit evidence                                                                                             |
-| ------ | ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| 12 Nov | Finish minimum BE-103, agree AIS-101 boundary and model candidate, create service schemas        | Source audit, starter taxonomy, 20-image labeled pilot, DB-101/102 mentoring                  | Accepted vector fingerprint, sample parse/embedding payloads, source ledger and working pilot embeddings. |
-| 13 Nov | Python online adapters and BE-104 request path, start AIS-104 Cloud integration                  | AIS-102/103 scripts, 100-image target, DB-103 mentoring                                       | First 20 Cloud-indexed images and real UI search through Fastify. Human-reviewed taxonomy v0.1.           |
-| 14 Nov | Finish indexing/ranking, explicit-filter precedence, private image checks and timeout/cost paths | Grow to 100-200 unique images, balanced query judgments, evaluation dry run, DB-104 mentoring | Full corpus indexed, frozen holdout queries, first measured bilingual retrieval and exclusion results.    |
-| 15 Nov | Fix end-to-end search and performance, pair with Backend/Frontend on regressions                 | AIS-105 report, repeatability audit, mentor DB-105 handoff                                    | Reproducible benchmark, actual pass/fail evidence, integrated search demo and remaining tasks.            |
-
-Run text search first. Add image-reference search after the descriptor provider and
-search-upload authorization pass their checks. Record its actual support in config/UI
-with Khoa. Concept generation, editing, culling, assistant and chat follow search and
-remain assigned through BE-107. An unfinished image or generation path reports an
-explicit unavailable capability until its integration is accepted.
+The original 12-15 November dates above are historical planning targets. They are
+not new deadlines or implementation evidence. Quynh Anh owns the AI sequence:
+AIS-101 service/model contract, AIS-102/103 data/taxonomy, BE-104/AIS-104 Backend
+integration and indexing, AIS-105 evaluation, then BE-107 jobs/actions/assistant/chat.
+Khoi Nguyen hands off the BE-103 upload/project boundary only. No model, corpus,
+Cloud verification or paid-provider result is implied by this assignment.
 
 ## 3. Architecture and online search contract
 
@@ -92,7 +87,7 @@ flowchart LR
   AI -->|Typed output and usage| API
   API -->|Visibility filters and cosine ranking| DB[(Supabase Cloud)]
   Corpus[Permitted source manifest] --> Pipe[Quynh Anh batch pipeline]
-  Pipe -->|Reviewed normalized records| Index[Nguyen index worker]
+  Pipe -->|Reviewed normalized records| Index[Quynh Anh index worker]
   Index -->|Recheck eligibility and upsert| DB
 ```
 
@@ -108,13 +103,13 @@ request IDs, timeouts, payload caps and model fingerprint in AIS-101.
 These follow the [proposed internal contract](ai-service-contract.md), with explicit
 additions requiring the corresponding contract update during implementation.
 
-| Operation                        | Owner                                     | Contract and acceptance                                                                                                                                                                                 |
-| -------------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /health`                    | Nguyen                                    | Preserve the current liveness response.                                                                                                                                                                 |
-| `GET /ready`                     | Nguyen                                    | Proposed readiness operation. Reports selected model/parser availability with a stable response.                                                                                                        |
-| `POST /internal/search/parse`    | Nguyen, QA supplies aliases               | Bounded query/locale and optional authorized image descriptor. Return `description`, genres/styles and explicit city/district/price fields. Validate every output with Pydantic.                        |
-| `POST /internal/embeddings`      | Nguyen online, QA reusable batch function | Exact model/pipeline identity, input role `query` or `document`, and text. Return exactly 768 finite floats, normalization/version metadata and usage. The role/metadata fields are proposed additions. |
-| `POST /internal/images/describe` | Nguyen, QA validates descriptors          | Proposed addition for portfolio/image-reference description. Authorized normalized image only. Return visual descriptor and allowed taxonomy labels, preserving source/provenance.                      |
+| Operation                        | Owner                                 | Contract and acceptance                                                                                                                                                                                 |
+| -------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /health`                    | Quynh Anh                             | Preserve the current liveness response.                                                                                                                                                                 |
+| `GET /ready`                     | Quynh Anh                             | Proposed readiness operation. Reports selected model/parser availability with a stable response.                                                                                                        |
+| `POST /internal/search/parse`    | Quynh Anh                             | Bounded query/locale and optional authorized image descriptor. Return `description`, genres/styles and explicit city/district/price fields. Validate every output with Pydantic.                        |
+| `POST /internal/embeddings`      | Quynh Anh, online and batch functions | Exact model/pipeline identity, input role `query` or `document`, and text. Return exactly 768 finite floats, normalization/version metadata and usage. The role/metadata fields are proposed additions. |
+| `POST /internal/images/describe` | Quynh Anh                             | Proposed addition for portfolio/image-reference description. Authorized normalized image only. Return visual descriptor and allowed taxonomy labels, preserving source/provenance.                      |
 
 Maintain existing `POST /v1/search` wire compatibility. Request fields are `query`
 up to 300 characters, optional `imageStoragePath`, `filters`, `ignoreParsed`, `page`
@@ -174,7 +169,7 @@ unknown terms, retain the original query in embedding input under the agreed tem
 Integrate a structured model parser or visual descriptor provider once account access,
 cost and output-quality checks pass.
 
-On 12 November Nguyen and Quynh Anh record the chosen embedding model, descriptor/parser
+Quynh Anh records the chosen embedding model, descriptor/parser
 provider or rule version, hardware, credential owner and cost cap. The existing MVP
 Gateway model names require current provider compatibility checks if reused. The MVP
 $30 cap is a historical default. Set the team's actual approved budget before paid
@@ -222,7 +217,7 @@ documents can be indexed, while holdout judgments remain untouched during tuning
 If training/fine-tuning is later added, split training/evaluation identities and
 duplicate clusters before that training begins.
 
-Quynh Anh reviews the first 20 records with Nguyen, then Ly imports their approved
+Quynh Anh reviews the first 20 records with Khai, then Ly imports their approved
 provider/media relationships. For all later records, validate source fields and
 eligibility before an indexing job is queued. Keep binary media and model weights
 outside Git. Track a compact manifest/config/query set in source control when its
@@ -266,7 +261,7 @@ The MVP seeds exactly these nine tags.
 `window-light` is a lighting concept, while `cinematic` and `editorial` often function
 as styles. Preserve the current DB/API values during the first handoff and document
 cross-facet mappings in taxonomy metadata. Import extended facets after a reviewed
-enum/schema/shared/UI change, coordinated by Ly, Nguyen and Khoa.
+enum/schema/shared/UI change, coordinated by Ly, Quynh Anh and Khoa.
 
 ### Extended facets for labels, descriptors and future schema work
 
@@ -347,20 +342,20 @@ the agreed retention policy, including any cached/exported data references.
 These paths and flags are deliverables for the named tasks. Implement their help and
 tests before publishing executable handoff commands. The current scaffold lacks them.
 
-| Proposed path                                 | Owner                              | Input/output and essential behavior                                                                                                                                                     |
-| --------------------------------------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `apps/ai-service/scripts/collect_sources.py`  | Quynh Anh, AIS-102                 | Source manifest to candidate ledger. Explicit allowlisted connector, bounded requests, source-specific terms, retry/backoff and resume cursor. Start with contributor files/Commons.    |
-| `apps/ai-service/scripts/validate_dataset.py` | Quynh Anh, AIS-102                 | Check required rights fields, duplicates, corrupt files, taxonomy validity, genre/provider coverage and split leakage. Emit excluded records and reasons.                               |
-| `apps/ai-service/scripts/normalize_images.py` | Quynh Anh, AIS-102                 | Decode and normalize approved images, strip unnecessary metadata, preserve source credit in the ledger, align preview sizes/caps with BE-103. Keep originals outside the public corpus. |
-| `apps/ai-service/scripts/describe_images.py`  | Quynh Anh, AIS-102                 | Human descriptor import or approved vision provider to reviewed descriptor candidates. Store prompt/model version, provenance, confidence and usage.                                    |
-| `apps/ai-service/scripts/embed_dataset.py`    | Quynh Anh, AIS-102                 | Approved descriptors to vector batch plus fingerprint/checksums. Shared embedding function with online service, finite 768-d validation and batch resume.                               |
-| `apps/api/src/import-search-corpus.ts`        | Nguyen, AIS-104, Ly reviews import | Explicit Cloud ref plus approved manifest/vectors to synthetic catalog/Storage/index records. Parameterized writes, stable IDs, per-run ledger, dry run and scoped retry.               |
-| `apps/api/src/index-portfolios.ts`            | Nguyen, AIS-104                    | Cloud-aware online reindex command derived from the reference. Enqueue only eligible missing/stale images and avoid active/uncertain duplicate jobs.                                    |
-| `apps/ai-service/scripts/evaluate_search.py`  | Quynh Anh, AIS-105                 | Frozen queries/judgments plus authorized public API calls to reproducible metrics, per-query results and failure cases.                                                                 |
+| Proposed path                                 | Owner                                 | Input/output and essential behavior                                                                                                                                                     |
+| --------------------------------------------- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/ai-service/scripts/collect_sources.py`  | Quynh Anh, AIS-102                    | Source manifest to candidate ledger. Explicit allowlisted connector, bounded requests, source-specific terms, retry/backoff and resume cursor. Start with contributor files/Commons.    |
+| `apps/ai-service/scripts/validate_dataset.py` | Quynh Anh, AIS-102                    | Check required rights fields, duplicates, corrupt files, taxonomy validity, genre/provider coverage and split leakage. Emit excluded records and reasons.                               |
+| `apps/ai-service/scripts/normalize_images.py` | Quynh Anh, AIS-102                    | Decode and normalize approved images, strip unnecessary metadata, preserve source credit in the ledger, align preview sizes/caps with BE-103. Keep originals outside the public corpus. |
+| `apps/ai-service/scripts/describe_images.py`  | Quynh Anh, AIS-102                    | Human descriptor import or approved vision provider to reviewed descriptor candidates. Store prompt/model version, provenance, confidence and usage.                                    |
+| `apps/ai-service/scripts/embed_dataset.py`    | Quynh Anh, AIS-102                    | Approved descriptors to vector batch plus fingerprint/checksums. Shared embedding function with online service, finite 768-d validation and batch resume.                               |
+| `apps/api/src/import-search-corpus.ts`        | Quynh Anh, AIS-104, Ly reviews import | Explicit Cloud ref plus approved manifest/vectors to synthetic catalog/Storage/index records. Parameterized writes, stable IDs, per-run ledger, dry run and scoped retry.               |
+| `apps/api/src/index-portfolios.ts`            | Quynh Anh, AIS-104                    | Cloud-aware online reindex command derived from the reference. Enqueue only eligible missing/stale images and avoid active/uncertain duplicate jobs.                                    |
+| `apps/ai-service/scripts/evaluate_search.py`  | Quynh Anh, AIS-105                    | Frozen queries/judgments plus authorized public API calls to reproducible metrics, per-query results and failure cases.                                                                 |
 
 Every script supports `--help`, explicit input/output, validation-only or dry-run mode
 for mutations, bounded batch size, checkpoint/resume and a final success/failure summary.
-Nguyen defines the Cloud-write script's explicit project-ref requirement with Ly.
+Quynh Anh defines the Cloud-write script's explicit project-ref requirement with Ly.
 Quynh Anh's offline scripts can run against local corpus files with no privileged DB key.
 
 Cache descriptors/vectors by checksum plus full pipeline fingerprint. Retrying completed
@@ -381,22 +376,22 @@ when supported. Include multiple relevant providers for some queries. Use a 40-q
 development set and 20-query frozen holdout, with paired translations kept in the same
 split. Use a separate image-query slice when that capability is enabled.
 
-Nguyen and Quynh Anh judge provider relevance with grades 0/1/2 and supporting image IDs.
+Quynh Anh and Khai judge provider relevance with grades 0/1/2 and supporting image IDs.
 Double-label a pilot subset, resolve disagreements and document the rubric. A provider
 is relevant when its permitted indexed evidence and declared service metadata satisfy
 the query. Track source/genre coverage so the metric does not hide missing genres.
 
-| Metric/check           | Proposed milestone acceptance                                                                                        | Owner                |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------------- | -------------------- |
-| Corpus coverage        | 100-200 unique permitted indexed assets, genre/provider counts and exclusions reported, 160 target                   | Quynh Anh and Ly     |
-| Source integrity       | Every included asset has reviewed rights/use scope, source credit, checksum and provenance                           | Quynh Anh            |
-| Provider Recall@5      | At least 0.80 on the frozen judged set, report EN/VI and per-genre results                                           | Quynh Anh            |
-| HitRate@5              | Report fraction with at least one relevant top-five provider, distinguishing the MVP single-positive metric          | Quynh Anh            |
-| Precision@5 and nDCG@5 | Report actual values with relevance counts and ranking failures                                                      | Quynh Anh            |
-| Explicit constraints   | All labeled precedence/ignoreParsed and mandatory location/price tests pass                                          | Nguyen               |
-| Isolation/visibility   | All unrelated-upload, hidden/draft/deleted image/provider and incompatible-vector cases pass                         | Nguyen and Khai      |
-| Repeatability          | Same input/model fingerprint reproduces stable ranking within stated numeric tolerance, resume avoids duplicate rows | Nguyen and Quynh Anh |
-| Latency/cost           | Proposed warm text-search p95 at most 5 seconds on recorded hardware/corpus and within the agreed budget             | Nguyen               |
+| Metric/check           | Proposed milestone acceptance                                                                                        | Owner              |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| Corpus coverage        | 100-200 unique permitted indexed assets, genre/provider counts and exclusions reported, 160 target                   | Quynh Anh and Ly   |
+| Source integrity       | Every included asset has reviewed rights/use scope, source credit, checksum and provenance                           | Quynh Anh          |
+| Provider Recall@5      | At least 0.80 on the frozen judged set, report EN/VI and per-genre results                                           | Quynh Anh          |
+| HitRate@5              | Report fraction with at least one relevant top-five provider, distinguishing the MVP single-positive metric          | Quynh Anh          |
+| Precision@5 and nDCG@5 | Report actual values with relevance counts and ranking failures                                                      | Quynh Anh          |
+| Explicit constraints   | All labeled precedence/ignoreParsed and mandatory location/price tests pass                                          | Quynh Anh          |
+| Isolation/visibility   | All unrelated-upload, hidden/draft/deleted image/provider and incompatible-vector cases pass                         | Quynh Anh and Khai |
+| Repeatability          | Same input/model fingerprint reproduces stable ranking within stated numeric tolerance, resume avoids duplicate rows | Quynh Anh and Khai |
+| Latency/cost           | Proposed warm text-search p95 at most 5 seconds on recorded hardware/corpus and within the agreed budget             | Quynh Anh          |
 
 These thresholds are proposed planning targets, including the reference's 0.8 retrieval
 target. Confirm them in AIS-101 before tuning. Recall@5 is retrieved relevant providers
@@ -436,7 +431,7 @@ Own the assigned Python scripts and scoped dataset metadata only.
 Inspect MVP sources through git show at 66f3779.
 Require source/use-scope fields and exclude incompatible or unreviewed records.
 Verify corrupt files, duplicate clusters, vector dimension, resume and UTF-8 handling.
-Record commands, actual outcomes and the import handoff to Nguyen and Ly.
+Record commands, actual outcomes and the import handoff to Quynh Anh and Ly.
 ```
 
 Follow the [shared Git/hook guide](../backend/mvp-rebuild-work-plan.md). Examples follow.

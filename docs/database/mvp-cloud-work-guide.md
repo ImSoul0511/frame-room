@@ -9,7 +9,7 @@ Ly owns the revised ERD, versioned SQL, Supabase Cloud setup, environment handof
 seed execution, generated types and day-to-day Cloud operations. Quynh Anh explains
 design choices, reviews the search schema/data pipeline and pairs on access tests.
 Khai reviews transactional booking rules and provides the required independent DB
-review when Ly authors migrations. Nguyen integrates the API and indexing scripts.
+review when Ly authors migrations. Nguyen integrates media/projects; Quynh Anh owns all AI/index integration.
 
 By the checkpoint, a teammate should be able to connect local services to the shared
 Cloud development project, use approved synthetic accounts, query a permitted indexed
@@ -38,13 +38,13 @@ example to check the explanation before the first migration review.
 These are reserved local task IDs. Create `plans/tasks/<ID>.md` with acceptance and
 verification evidence as each task starts. Branch from the latest reviewed `dev`.
 
-| Task and branch                                 | Ly's deliverable                                                                                                      | Mentor/reviewer involvement                                                                                                                  | Target    |
-| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
-| DB-101 `chore/DB-101-erd-cloud-design`          | ERD corrections, dictionary, source-to-target migration map, Cloud project/region plan and open decisions             | Quynh Anh pairs for 45 minutes on keys/cardinality. Khai reviews identity/booking decisions.                                                 | 12 Nov    |
-| DB-102 `feature/DB-102-cloud-core-schema`       | Cloud test/dev projects, Auth setup, identity/provider/catalog/project schema, baseline RLS, core environment handoff | Quynh Anh pairs for 30 minutes on first replay. Khai reviews constraints and grants.                                                         | 12-13 Nov |
-| DB-103 `feature/DB-103-search-storage-schema`   | Buckets/policies, search vectors, compatible taxonomy seed, permitted corpus linkage and Cloud-generated types        | Quynh Anh pairs for 45 minutes on model/vector contract and direct Storage denial. Nguyen checks API/script compatibility. Khai reviews SQL. | 13 Nov    |
-| DB-104 `feature/DB-104-booking-workflow-schema` | Booking/schedule/brief/room/proofing schema, atomic functions, queue/usage substrate and concurrency evidence         | Khai co-designs locks/RPC signatures. Quynh Anh pairs on two-session tests for 45 minutes.                                                   | 13-14 Nov |
-| DB-105 `chore/DB-105-cloud-operations-handoff`  | Second fresh-project replay, verified promotion, type refresh, runbook/secret handoff and migration ledger            | Quynh Anh observes Ly performing the checklist independently. Khai reviews final DB PR.                                                      | 15 Nov    |
+| Task and branch                                 | Ly's deliverable                                                                                                      | Mentor/reviewer involvement                                                                                                                        | Target    |
+| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| DB-101 `chore/DB-101-erd-cloud-design`          | ERD corrections, dictionary, source-to-target migration map, Cloud project/region plan and open decisions             | Quynh Anh pairs for 45 minutes on keys/cardinality. Khai reviews identity/booking decisions.                                                       | 12 Nov    |
+| DB-102 `feature/DB-102-cloud-core-schema`       | Cloud test/dev projects, Auth setup, identity/provider/catalog/project schema, baseline RLS, core environment handoff | Quynh Anh pairs for 30 minutes on first replay. Khai reviews constraints and grants.                                                               | 12-13 Nov |
+| DB-103 `feature/DB-103-search-storage-schema`   | Buckets/policies, search vectors, compatible taxonomy seed, permitted corpus linkage and Cloud-generated types        | Quynh Anh pairs for 45 minutes on model/vector contract and direct Storage denial. Quynh Anh checks AI API/script compatibility. Khai reviews SQL. | 13 Nov    |
+| DB-104 `feature/DB-104-booking-workflow-schema` | Booking/schedule/brief/room/proofing schema, atomic functions, queue/usage substrate and concurrency evidence         | Khai co-designs locks/RPC signatures. Quynh Anh pairs on two-session tests for 45 minutes.                                                         | 13-14 Nov |
+| DB-105 `chore/DB-105-cloud-operations-handoff`  | Second fresh-project replay, verified promotion, type refresh, runbook/secret handoff and migration ledger            | Quynh Anh observes Ly performing the checklist independently. Khai reviews final DB PR.                                                            | 15 Nov    |
 
 Each session ends with Ly recording the reason for one constraint/policy in her task
 and one allowed/denied result. Quynh Anh reserves these short sessions around AIS-102/103
@@ -252,13 +252,13 @@ recipient, project ref, key purpose and handoff date without copying secret valu
 into task artifacts. The runtime loaders must read these names during the corresponding
 Backend/AI tasks. The foundation currently validates only basic API server settings.
 
-| Recipient                 | Variables to supply                                                                                                                   | Why                                                                                          |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| Khoa, frontend            | `VITE_API_URL`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`                                                                         | Browser can use public URL/key and the user's JWT.                                           |
-| Khai and Nguyen, backend  | `SUPABASE_URL`, `SUPABASE_ANON_KEY`, server credential agreed with adapter, `DATABASE_URL`, `WEB_ORIGIN`, `HOST`, `PORT`, `LOG_LEVEL` | API verifies identity, performs authorized DB/Storage work and matches CORS.                 |
-| Nguyen, API-to-AI adapter | `AI_SERVICE_URL`, proposed `AI_SERVICE_TOKEN`, agreed timeout/model/pipeline identifiers                                              | Private service authentication and compatible indexing/search.                               |
-| Quynh Anh, AI/data        | Model configuration and any chosen provider key, corpus paths and permitted service access                                            | Descriptor/embedding/evaluation work. Backend runs Cloud writes through the agreed pipeline. |
-| Ly, database operations   | CLI account/access token, project ref and migration connection credentials                                                            | Schema promotion and operation under a designated account.                                   |
+| Recipient                    | Variables to supply                                                                                                                   | Why                                                                                          |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Khoa, frontend               | `VITE_API_URL`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`                                                                         | Browser can use public URL/key and the user's JWT.                                           |
+| Khai and Nguyen, backend     | `SUPABASE_URL`, `SUPABASE_ANON_KEY`, server credential agreed with adapter, `DATABASE_URL`, `WEB_ORIGIN`, `HOST`, `PORT`, `LOG_LEVEL` | API verifies identity, performs authorized DB/Storage work and matches CORS.                 |
+| Quynh Anh, API-to-AI adapter | `AI_SERVICE_URL`, proposed `AI_SERVICE_TOKEN`, agreed timeout/model/pipeline identifiers                                              | Private service authentication and compatible indexing/search.                               |
+| Quynh Anh, AI/data           | Model configuration and any chosen provider key, corpus paths and permitted service access                                            | Descriptor/embedding/evaluation work. Backend runs Cloud writes through the agreed pipeline. |
+| Ly, database operations      | CLI account/access token, project ref and migration connection credentials                                                            | Schema promotion and operation under a designated account.                                   |
 
 The reference expects a JWT-based `SUPABASE_SERVICE_ROLE_KEY`. Modern Supabase also
 offers publishable and secret keys, with different token semantics. Choose the supported

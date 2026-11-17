@@ -70,10 +70,10 @@ Task search/indexing cần đọc thêm kế hoạch AI và internal service con
 | 7      | [Database agent guide](agents/database.md)                                                                                                    | Kiểm tra quy trình làm việc với migration, RLS và coding agent.                                     |
 
 Khi nhận task, Ly ghi lại project ref, migration liên quan và người review.
-Khi chạm vector/taxonomy, đối chiếu model fingerprint và schema với Quỳnh Anh, Khôi Nguyên.
+Khi chạm vector/taxonomy, đối chiếu model fingerprint và schema với Quỳnh Anh.
 Khi chạm booking/schedule, đối chiếu invariant và RPC với Khải.
 
-### AI Service và AI Search — Khôi Nguyên và Quỳnh Anh
+### AI Service và toàn bộ AI/Search — Quỳnh Anh
 
 | Thứ tự | File cần đọc                                                                                                                | Mục đích                                                                                         |
 | ------ | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
@@ -84,8 +84,21 @@ Khi chạm booking/schedule, đối chiếu invariant và RPC với Khải.
 | 5      | [Dataset requirements](docs/ai/dataset-requirements.md)                                                                     | Chuẩn bị source/license ledger, nhãn, split và tiêu chí đánh giá.                                |
 | 6      | [Backend work plan](docs/backend/mvp-rebuild-work-plan.md) và [Database Cloud guide](docs/database/mvp-cloud-work-guide.md) | Kiểm tra dependency của search adapter, Storage, vector schema và indexing.                      |
 
-Khôi Nguyên tập trung tích hợp service/API, ranking và Cloud writes.
-Quỳnh Anh tập trung nguồn dữ liệu, taxonomy, pipeline model/data và đánh giá search,
+**Cập nhật phân công ngày 18/11/2026 theo yêu cầu của nhóm:**
+
+- **Quỳnh Anh sở hữu toàn bộ phần AI**: `AIS-101` đến `AIS-105`, `BE-104` và `BE-107`.
+  Phạm vi gồm Python/FastAPI, xác thực service,
+  health/readiness, Pydantic schema, parser Việt/Anh, model và embedding 768 chiều,
+  fingerprint/pipeline, mô tả ảnh và test Python. Các chức năng model cho assistant,
+  chat, concept/edit/cull, HTTP client gọi AI-Service, filter/ranking, import/index worker,
+  jobs/usage/actions và adapter assistant/chat cũng thuộc Quỳnh Anh.
+- **Khôi Nguyên chỉ triển khai `BE-103`: upload/media và projects**, gồm kiểm tra quyền,
+  chuẩn hóa ảnh/thumbnail, project CRUD và đường dẫn tham chiếu theo contract.
+  Các task AI/Search và AI jobs không thuộc phần triển khai của Khôi Nguyên.
+- Kiểm chứng Supabase Cloud tạm hoãn theo yêu cầu; kết quả kiểm tra local phải được
+  tách riêng với bằng chứng tích hợp thật.
+
+Quỳnh Anh tiếp tục phụ trách nguồn dữ liệu, taxonomy, pipeline model/data và đánh giá search,
 đồng thời mentor Thảo Ly theo checkpoint đã phân công.
 
 ## 3. Khi làm cùng coding agent

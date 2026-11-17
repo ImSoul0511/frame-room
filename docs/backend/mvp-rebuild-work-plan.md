@@ -52,22 +52,24 @@ feature has a recorded task state and an explicit UI capability/loading/error st
 | BE-101 | Khai        | Khoi Nguyen, Khoa for wire shapes  | `feature/BE-101-api-contract-auth`  | 12 Nov. Freeze shared/OpenAPI shapes, errors, Auth/profile and route registration. Needs Khoa's shared handoff and DB-101 identity decision.                                                                    |
 | BE-102 | Khai        | Khoi Nguyen, Ly for DB interaction | `feature/BE-102-provider-catalog`   | 13 Nov. Providers, studios/team, resources, services/add-ons, portfolios/tags. Start public discovery and minimum seed-compatible catalog first. Needs DB-102.                                                  |
 | BE-103 | Khoi Nguyen | Khai, Ly for Storage               | `feature/BE-103-media-projects`     | 12-13 Nov. Upload boundary and project CRUD, references/artifacts projections. Needs DB-102/103.                                                                                                                |
-| BE-104 | Khoi Nguyen | Khai and Quynh Anh                 | `feature/BE-104-ai-search-adapter`  | 13-14 Nov. Search route, candidate filtering, DB ranking, index adapter and usage read. Needs BE-101/102, AIS-101/102/104, DB-103.                                                                              |
+| BE-104 | Quynh Anh   | Khai and Khoa                      | `feature/BE-104-ai-search-adapter`  | 13-14 Nov. Search route, candidate filtering, DB ranking, index adapter and usage read. Needs BE-101/102, AIS-101/102/104, DB-103.                                                                              |
 | BE-105 | Khai        | Khoi Nguyen, Ly                    | `feature/BE-105-booking-scheduling` | 13-14 Nov. Booking, schedule, brief approval and workspace. Needs BE-102/103, DB-104 RPCs.                                                                                                                      |
 | BE-106 | Khai        | Khoi Nguyen, Khoa for workflow     | `feature/BE-106-room-delivery`      | 14-15 Nov stretch after core. Room, proofing, deliveries, reviews and timeline. Needs BE-105, DB-104.                                                                                                           |
-| BE-107 | Khoi Nguyen | Khai and Quynh Anh                 | `feature/BE-107-ai-jobs-actions`    | Framework after search passes. Jobs, access/budget ledger, proposal confirmation and chat transport. Generation/edit/cull execution follows search. Needs queue/usage schema and accepted internal AI contract. |
+| BE-107 | Quynh Anh   | Khai and Khoa                      | `feature/BE-107-ai-jobs-actions`    | Framework after search passes. Jobs, access/budget ledger, proposal confirmation and chat transport. Generation/edit/cull execution follows search. Needs queue/usage schema and accepted internal AI contract. |
 | BE-108 | Khai        | Khoi Nguyen and Quynh Anh          | `feature/BE-108-moderation`         | Follow-up after core gates. Reports/admin moderation and aggregate dashboard completion. Needs derived admin role and catalog hiding.                                                                           |
 
 Khai owns auth/access helpers, SQL transaction adapter and route registration composition.
-Khoi Nguyen owns the HTTP AI client and media service. Each registers its module through
+Khoi Nguyen owns the BE-103 media/project service. Quynh Anh owns the HTTP AI client
+and every AI/search/job adapter. Each registers its module through
 a small agreed plugin interface. Khoa owns browser-consumed shared exports during the
 frontend handoff. Subsequent shared changes have a named owner in the task and Khoa's
 compatibility review. Ly owns migrations and generated DB types. Coordinate lockfile
 updates through the current dependency-changing PR.
 
-Khoi Nguyen's order is BE-103, AIS-101, BE-104/AIS-104, then BE-107. Quynh Anh's
-DB mentoring checkpoints are reserved in the Database guide. Avoid assigning both
-people a full day of unrelated work during search integration.
+Ownership corrected on 2026-11-18: all AI work belongs to Quynh Anh, including
+AIS-101 through AIS-105, BE-104 and BE-107 (both model service and Backend adapters).
+Khoi Nguyen implements BE-103 upload/media and creative projects only. AI runtime
+code written outside that scope was discarded at the user's request.
 
 ## 3. Complete endpoint allocation
 
@@ -113,7 +115,7 @@ for this milestone.
 | BE-108 | P2       | `POST /v1/reports`, `GET /v1/admin/reports`, `PATCH /v1/admin/reports/:id`, `POST /v1/admin/moderation`                          |
 
 BE-104 uses the queue/index substrate required for indexing ahead of BE-107's general
-AI jobs UI. Khai and Nguyen agree that shared boundary during BE-101. Public config
+AI jobs UI. Khai and Quynh Anh agree that shared boundary during BE-101. Public config
 and OpenAPI access must be reconciled with the actual reference route registration,
 because the current contract's public-route paragraph omits them. Register static
 `/photographers/me` before `/:id` and test both paths.
@@ -284,12 +286,12 @@ API changes require Khai and Khoa, plus Ly when schema changes. Keep each PR aro
 
 ## 7. Schedule, decisions and final acceptance
 
-| Date   | Khai                                                 | Khoi Nguyen                                  | Shared checkpoint                                                                                           |
-| ------ | ---------------------------------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| 12 Nov | BE-101 and public BE-102 skeleton                    | BE-103 minimum, AIS-101 contract/client      | Freeze identity, error/status/casing, search response, model choice and module ownership.                   |
-| 13 Nov | BE-102 catalog, start BE-105                         | Finish uploads/projects, wire BE-104         | Cloud catalog plus first 20 permitted images indexed. FE can fetch actual providers.                        |
-| 14 Nov | BE-105 race/brief tests, start BE-106 if core passes | BE-104/AIS-104 integration and failure cases | 100-200 unique indexed images, bilingual search and auth demo. Reassign spare capacity to failing P0 tasks. |
-| 15 Nov | Core fixes, room/delivery slice if ready             | AIS-105 evaluation and integration fixes     | Run whole-team acceptance with Khoa, Ly and Quynh Anh. Record incomplete P1/P2 tasks individually.          |
+| Date   | Khai                                                 | Khoi Nguyen                             | Shared checkpoint                                                                                           |
+| ------ | ---------------------------------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| 12 Nov | BE-101 and public BE-102 skeleton                    | BE-103 upload/projects                  | Freeze identity, error/status/casing, search response, model choice and module ownership.                   |
+| 13 Nov | BE-102 catalog, start BE-105                         | Finish uploads/projects and owner tests | Cloud catalog plus first 20 permitted images indexed. FE can fetch actual providers.                        |
+| 14 Nov | BE-105 race/brief tests, start BE-106 if core passes | BE-103 byte/permission/rollback tests   | 100-200 unique indexed images, bilingual search and auth demo. Reassign spare capacity to failing P0 tasks. |
+| 15 Nov | Core fixes, room/delivery slice if ready             | BE-103 integration handoff and fixes    | Run whole-team acceptance with Khoa, Ly and Quynh Anh. Record incomplete P1/P2 tasks individually.          |
 
 Before dependent code, record decisions in the task and affected existing documents.
 
@@ -297,7 +299,7 @@ Before dependent code, record decisions in the task and affected existing docume
 | -------------------------------------------------------------------------------- | ----------------------------- | ------------------------ |
 | Auth initialization, verified email and read-only GET, historical questions 1/2  | Khai, Ly, Khoa                | BE-101, DB-102           |
 | Existing casing, POST status exceptions, config/OpenAPI access and error mapping | Khai, Khoa, Nguyen            | BE-101                   |
-| Python boundary, model revision, 768 dimensions, preprocessing and cost owner    | Nguyen, Quynh Anh, Ly         | AIS-101, DB-103, BE-104  |
+| Python boundary, model revision, 768 dimensions, preprocessing and cost owner    | Quynh Anh, Ly, Khai           | AIS-101, DB-103, BE-104  |
 | Room participants, cancellation/completion gates, round history and retention    | Khai, Ly, Khoa, product owner | DB-104, BE-105/106       |
 | Image search availability and search-upload retention, historical question 16    | Quynh Anh, Khai, Khoa         | Image-search integration |
 

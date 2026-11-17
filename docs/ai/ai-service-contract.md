@@ -1,5 +1,11 @@
 # Replacement AI service contract
 
+**Ownership (user decision, 2026-11-18):** Quynh Anh owns the entire AI scope,
+including AIS-101 through AIS-105, BE-104 and BE-107: Python/model implementation,
+HTTP adapters, ranking, import/indexing, jobs/usage/actions and assistant/chat.
+Khoi Nguyen owns BE-103 media/projects only. AI work is separate and not implemented
+by the BE-103 change.
+
 **Proposed, not implemented.** The Python FastAPI scaffold has only `/health`. Preserve the browser's Fastify `/v1/search`, project assistant/chat/jobs/actions interface unless a reviewed API version changes it. Fastify remains the public authorization, quota, idempotency and business-write boundary. The AI service receives scoped inputs from Fastify and returns typed results; it should not decide studio membership, booking transitions or RLS.
 
 | Proposed internal operation              | Input                                                          | Output and failure                                                                                                                |
