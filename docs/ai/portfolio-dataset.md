@@ -2,7 +2,7 @@
 
 The collector downloads loose photographs by suggested genre. It deliberately does not infer albums, authorship, aesthetic tags, embeddings, or image similarity. Imported photographs are randomly assigned to synthetic photographers in the same suggested genre. This is demo data rather than a benchmark of photographer ability.
 
-Use the separate [local Dataset Studio](dataset-studio.md) to organize imported images into photographer albums, edit descriptions, and apply manual tags after collection.
+Use the separate [local Dataset Studio](dataset-studio.md) to organize imported images into shoots or themed sets, edit descriptions, and apply manual tags after collection.
 
 ## Install on Windows
 

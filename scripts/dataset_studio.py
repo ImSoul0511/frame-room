@@ -12,6 +12,7 @@ import subprocess
 import threading
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import quote, unquote, urlparse
@@ -20,6 +21,12 @@ from portfolio_dataset import CATEGORIES, GENRES, ROOT, DatasetError, Supabase
 
 DIST = ROOT / ".artifacts/dataset-studio/dist"
 MIGRATION = "supabase/migrations/202611160003_dataset_studio.sql"
+DELETE_MIGRATION = "supabase/migrations/202611180001_dataset_studio_delete_images.sql"
+DELETE_RPC = "/rest/v1/rpc/dataset_studio_delete_images"
+SETS_MIGRATION = "supabase/migrations/202611180002_dataset_studio_photo_sets.sql"
+SETS_RPC = "/rest/v1/rpc/dataset_studio_sets_apply"
+SETS_ACTIONS = {"set.save", "set.assign"}
+SET_AWARE_ACTIONS = {"album.archive", "images.move", "images.order"}
 ACTION_FIELDS = {
     "photographer.save": {"id", "display_name", "bio", "city"},
     "photographer.archive": {"id", "archived"},
@@ -27,10 +34,13 @@ ACTION_FIELDS = {
     "album.save": {"id", "photographer_id", "request_id", "title", "description", "genre", "status"},
     "album.archive": {"id", "archived"},
     "album.order": {"ids", "photographer_id"},
+    "set.save": {"id", "request_id", "title", "description", "genre", "ids"},
+    "set.assign": {"id", "photographer_id"},
     "image.save": {"id", "caption", "label_status", "tag_ids"},
     "images.move": {"ids", "portfolio_id"},
     "images.order": {"ids", "portfolio_id"},
     "images.archive": {"ids", "archived"},
+    "images.delete": {"ids"},
     "images.review": {"ids", "label_status"},
     "images.tags": {"ids", "tag_ids", "mode"},
     "tag.save": {"id", "slug", "name", "name_vi", "category", "definition_en", "definition_vi", "aliases"},
@@ -78,7 +88,14 @@ def validate_action(action: str, payload: dict) -> dict:
         raise StudioError("INVALID_INPUT", "Invalid tag operation.")
     if action == "album.save" and (payload.get("genre") not in GENRES or payload.get("status") not in ("draft", "published", "hidden")):
         raise StudioError("INVALID_INPUT", "Invalid album classification.")
-    required = {"album.save": ("title",), "photographer.save": ("display_name",), "tag.save": ("name", "name_vi", "slug")}
+    if action == "set.save" and (
+        payload.get("genre") not in GENRES or bool(payload.get("id")) == bool(payload.get("request_id"))
+        or ("ids" in payload and (payload.get("id") or not payload["ids"]))
+    ):
+        raise StudioError("INVALID_INPUT", "Invalid photo set.")
+    if action == "set.assign" and not (payload.get("id") and payload.get("photographer_id")):
+        raise StudioError("INVALID_INPUT", "Select a photo set and a photographer.")
+    required = {"album.save": ("title",), "set.save": ("title",), "photographer.save": ("display_name",), "tag.save": ("name", "name_vi", "slug")}
     for key in required.get(action, ()):
         if not isinstance(payload.get(key), str) or not payload[key].strip():
             raise StudioError("INVALID_INPUT", "A required field is empty.")
@@ -99,7 +116,8 @@ def validate_action(action: str, payload: dict) -> dict:
 def all_rows(db: Supabase, table: str, select="*", **params) -> list[dict]:
     result = []
     for offset in range(0, 100000, 500):
-        order = "portfolio_image_id.asc,tag_id.asc" if table == "image_tags" else "id.asc"
+        order = {"image_tags": "portfolio_image_id.asc,tag_id.asc",
+            "dataset_studio_set_images": "image_id.asc"}.get(table, "id.asc")
         batch = db.rows(table, select=select, order=order, limit=500, offset=offset, **params)
         result.extend(batch)
         if len(batch) < 500:
@@ -113,9 +131,12 @@ class StudioService:
         self.factory = factory
         self.local = threading.local()
         self.lock = threading.Lock()
+        self.snapshot_lock = threading.Lock()
+        self.generation = 0
         self.cached = None
         self.cached_at = 0.0
         self.rpc_ready = False
+        self.sets_ready = False
 
     @property
     def db(self):
@@ -123,34 +144,83 @@ class StudioService:
             self.local.db = self.factory()
         return self.local.db
 
-    def snapshot(self, force=False):
-        with self.lock:
-            if not force and self.cached is not None and time.monotonic() - self.cached_at < 5:
-                return self.cached
-            db = self.db
-            ready = False
+    def check_sets(self, db):
+        try:
+            return db.request("POST", SETS_RPC, payload={"p_action": "ping", "p_payload": {}},
+                retry_safe=True).get("version") == 1
+        except DatasetError as error:
+            if "HTTP 404" not in str(error):
+                raise
+            return False
+
+    def capabilities(self):
+        db = self.db
+        ready = False
+        try:
+            ready = db.request("POST", "/rest/v1/rpc/dataset_studio_apply", payload={"p_action": "ping", "p_payload": {}}, retry_safe=True).get("version") == 1
+        except DatasetError as error:
+            if "HTTP 404" not in str(error):
+                raise
+        sets_ready = ready and self.check_sets(db)
+        delete_ready = False
+        if ready and not self.read_only:
             try:
-                ready = db.request("POST", "/rest/v1/rpc/dataset_studio_apply", payload={"p_action": "ping", "p_payload": {}}, retry_safe=True).get("version") == 1
+                delete_ready = db.request("POST", DELETE_RPC, payload={"p_ids": []}, retry_safe=True).get("deleted") == 0
             except DatasetError as error:
                 if "HTTP 404" not in str(error):
                     raise
-            self.rpc_ready = ready
-            photographers = all_rows(db, "photographers", dataset_key="not.is.null")
+        return ready, sets_ready, delete_ready
+
+    def snapshot(self, force=False):
+        with self.snapshot_lock:
+            with self.lock:
+                if not force and self.cached is not None and time.monotonic() - self.cached_at < 5:
+                    return self.cached
+                generation = self.generation
+            db = self.db
             portfolios, images, assignments = [], [], []
-            for start in range(0, len(photographers), 50):
-                ids = ",".join(p["id"] for p in photographers[start:start + 50])
-                portfolios.extend(all_rows(db, "portfolios", photographer_id=f"in.({ids})"))
-            for start in range(0, len(portfolios), 50):
-                ids = ",".join(p["id"] for p in portfolios[start:start + 50])
-                images.extend(all_rows(db, "portfolio_images", select="*,image_tags(tag_id,source,confidence)", portfolio_id=f"in.({ids})"))
+            with ThreadPoolExecutor(max_workers=2) as readers:
+                capabilities = readers.submit(self.capabilities)
+                catalog = readers.submit(lambda: all_rows(self.db, "tags", category="neq.source"))
+                photographers = all_rows(db, "photographers", dataset_key="not.is.null")
+                for start in range(0, len(photographers), 50):
+                    ids = ",".join(p["id"] for p in photographers[start:start + 50])
+                    portfolios.extend(all_rows(db, "portfolios", photographer_id=f"in.({ids})"))
+                for start in range(0, len(portfolios), 50):
+                    ids = ",".join(p["id"] for p in portfolios[start:start + 50])
+                    images.extend(all_rows(db, "portfolio_images",
+                        select="*,image_tags(tag_id,source,confidence)", portfolio_id=f"in.({ids})"))
+                ready, sets_ready, delete_ready = capabilities.result()
+                members = {}
+                if sets_ready:
+                    links = readers.submit(lambda: all_rows(self.db, "dataset_studio_set_images"))
+                    groups = all_rows(db, "dataset_studio_sets", select="id,title,description,genre,created_at,deleted_at")
+                    group_ids = {group["id"] for group in groups}
+                    members = {link["image_id"]: link for link in links.result() if link["set_id"] in group_ids}
+                    portfolios.extend({**group, "photographer_id": None, "status": "draft", "dataset_key": None}
+                        for group in groups)
+                tags = catalog.result()
+            self.rpc_ready = ready
+            self.sets_ready = sets_ready
+            tag_ids = {tag["id"] for tag in tags}
             for image in images:
-                assignments.extend({"portfolio_image_id": image["id"], **link} for link in image.pop("image_tags", []))
+                membership = members.get(image["id"])
+                if membership:
+                    image["portfolio_id"] = membership["set_id"]
+                    image["sort_order"] = membership["sort_order"]
+                assignments.extend({"portfolio_image_id": image["id"], **link}
+                    for link in image.pop("image_tags", []) if link["tag_id"] in tag_ids)
                 image["url"] = db.url + "/storage/v1/object/public/portfolio-images/" + quote(image["storage_path"], safe="/")
-            self.cached = {"photographers": photographers, "portfolios": portfolios, "images": images,
-                "tags": all_rows(db, "tags"), "assignments": assignments,
-                "ready": ready, "read_only": self.read_only, "migration": MIGRATION}
-            self.cached_at = time.monotonic()
-            return self.cached
+            snapshot = {"photographers": photographers, "portfolios": portfolios, "images": images,
+                "tags": tags, "assignments": assignments,
+                "ready": ready, "delete_ready": delete_ready, "read_only": self.read_only,
+                "migration": MIGRATION, "delete_migration": DELETE_MIGRATION,
+                "sets_ready": sets_ready, "sets_migration": SETS_MIGRATION}
+            with self.lock:
+                if generation == self.generation:
+                    self.cached = snapshot
+                    self.cached_at = time.monotonic()
+            return snapshot
 
     def apply(self, action, payload):
         if self.read_only:
@@ -164,9 +234,32 @@ class StudioService:
                     raise
             if not self.rpc_ready:
                 raise StudioError("UNAVAILABLE", "Run the dataset studio migration first.", 503, "migration_required")
-        result = self.db.request("POST", "/rest/v1/rpc/dataset_studio_apply", payload={"p_action": action, "p_payload": payload})
+        if action in SETS_ACTIONS | SET_AWARE_ACTIONS and not self.sets_ready:
+            self.sets_ready = self.check_sets(self.db)
+        if action in SETS_ACTIONS and not self.sets_ready:
+            raise StudioError("UNAVAILABLE", "Run the photo-set migration first.", 503, "sets_migration_required")
+        if self.sets_ready and action in SETS_ACTIONS | SET_AWARE_ACTIONS:
+            result = self.db.request("POST", SETS_RPC, payload={"p_action": action, "p_payload": payload})
+        elif action == "images.delete":
+            try:
+                result = self.db.request("POST", DELETE_RPC, payload={"p_ids": payload["ids"]})
+            except DatasetError as error:
+                if "HTTP 404" in str(error):
+                    raise StudioError("UNAVAILABLE", "Run the permanent image deletion migration first.",
+                        503, "delete_migration_required") from error
+                raise
+        else:
+            if action in ("image.save", "images.tags") and payload.get("tag_ids"):
+                # Small chunks keep the PostgREST query URL within typical proxy limits.
+                values = [str(uuid.UUID(value)) for value in payload["tag_ids"]]
+                for start in range(0, len(values), 50):
+                    batch = ",".join(values[start:start + 50])
+                    if self.db.rows("tags", select="id", id=f"in.({batch})", category="eq.source", limit=1):
+                        raise StudioError("INVALID_INPUT", "Source tags are unavailable in Dataset Studio.")
+            result = self.db.request("POST", "/rest/v1/rpc/dataset_studio_apply", payload={"p_action": action, "p_payload": payload})
         with self.lock:
             self.cached = None
+            self.generation += 1
         return result
 
 

@@ -14,8 +14,14 @@ const bootstrapSchema = z.object({
       z.object({ portfolio_image_id: z.string().uuid(), tag_id: z.string().uuid() }).passthrough(),
     ),
     ready: z.boolean(),
+    delete_ready: z.boolean(),
     read_only: z.boolean(),
     migration: z.string(),
+    delete_migration: z.string(),
+    sets_ready: z.boolean().default(false),
+    sets_migration: z
+      .string()
+      .default('supabase/migrations/202611180002_dataset_studio_photo_sets.sql'),
   }),
 });
 let token = '';
@@ -49,16 +55,26 @@ export async function applyAction(
     const setup =
       error.success &&
       error.data.error.details.some((detail) => detail.reason === 'migration_required');
+    const deleteSetup =
+      error.success &&
+      error.data.error.details.some((detail) => detail.reason === 'delete_migration_required');
+    const setsSetup =
+      error.success &&
+      error.data.error.details.some((detail) => detail.reason === 'sets_migration_required');
     throw new Error(
-      setup
-        ? s.migrationNeeded
-        : code === 'CONFLICT'
-          ? s.conflict
-          : code === 'INVALID_INPUT'
-            ? s.invalidInput
-            : code === 'FORBIDDEN'
-              ? s.forbidden
-              : s.connectionLost,
+      setsSetup
+        ? s.setsMigrationNeeded
+        : deleteSetup
+          ? s.deleteMigrationNeeded
+          : setup
+            ? s.migrationNeeded
+            : code === 'CONFLICT'
+              ? s.conflict
+              : code === 'INVALID_INPUT'
+                ? s.invalidInput
+                : code === 'FORBIDDEN'
+                  ? s.forbidden
+                  : s.connectionLost,
     );
   }
   return z

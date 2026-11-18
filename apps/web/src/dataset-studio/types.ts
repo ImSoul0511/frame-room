@@ -9,7 +9,7 @@ export type Photographer = {
 };
 export type Album = {
   id: string;
-  photographer_id: string;
+  photographer_id: string | null;
   title: string;
   description: string;
   genre: string;
@@ -51,10 +51,17 @@ export type Dataset = {
   tags: Tag[];
   assignments: Assignment[];
   ready: boolean;
+  delete_ready: boolean;
   read_only: boolean;
   migration: string;
+  delete_migration: string;
+  sets_ready: boolean;
+  sets_migration: string;
 };
 export type Act = (action: string, payload: Record<string, unknown>) => Promise<{ id?: string }>;
+export function isInbox(album: Album) {
+  return /:inbox(?::rev:\d+)?$/.test(album.dataset_key ?? '');
+}
 export function ordered<T extends { id: string; sort_order?: number }>(items: T[]): T[] {
   return [...items].sort(
     (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.id.localeCompare(b.id),

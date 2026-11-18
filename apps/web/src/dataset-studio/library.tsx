@@ -1,26 +1,34 @@
+import type { ReactNode } from 'react';
 import { Button } from '@astryxdesign/core/Button';
 import { Empty, Icon } from './controls';
 import { categoryNames, genreNames, s } from './strings';
-import { moveId, ordered, type Album, type Dataset, type Photo, type Tag } from './types';
+import { isInbox, moveId, ordered, type Album, type Dataset, type Photo, type Tag } from './types';
 
 export function AlbumGrid({
   albums,
   images,
+  ownerNames,
   disabled,
   onOpen,
   onEdit,
+  onAssign,
   onArchive,
   onOrder,
+  emptyAction,
 }: {
   albums: Album[];
   images: Photo[];
+  ownerNames: ReadonlyMap<string, string>;
   disabled: boolean;
   onOpen: (id: string) => void;
   onEdit: (album: Album) => void;
+  onAssign?: (album: Album) => void;
   onArchive: (album: Album) => void;
   onOrder?: (ids: string[]) => void;
+  emptyAction?: ReactNode;
 }) {
-  if (!albums.length) return <Empty title={s.noAlbums} hint={s.noAlbumsHint} />;
+  if (!albums.length)
+    return <Empty title={s.noAlbums} hint={s.noAlbumsHint} action={emptyAction} />;
   const ids = albums.map((album) => album.id);
   return (
     <div className="album-grid">
@@ -62,18 +70,22 @@ export function AlbumGrid({
                 </div>
               )}
               <span className={`status-badge ${album.status}`}>
-                {album.status === 'published'
-                  ? s.published
-                  : album.status === 'hidden'
-                    ? s.hidden
-                    : s.draft}
+                {!album.photographer_id
+                  ? s.unassignedSet
+                  : album.status === 'published'
+                    ? s.published
+                    : album.status === 'hidden'
+                      ? s.hidden
+                      : s.draft}
               </span>
-              <span className="album-number">{String(index + 1).padStart(2, '0')}</span>
             </button>
             <div className="album-card-body">
               <div className="album-kicker">
                 {genreNames[album.genre] ?? album.genre}
-                {album.dataset_key?.includes(':inbox') && <span>{s.inbox}</span>}
+                {isInbox(album) && <span>{s.inbox}</span>}
+                {album.photographer_id && !isInbox(album) && (
+                  <span>{ownerNames.get(album.photographer_id)}</span>
+                )}
               </div>
               <button
                 type="button"
@@ -93,6 +105,16 @@ export function AlbumGrid({
                   {reviewed}/{photos.length} {s.reviewed.toLowerCase()}
                 </span>
               </div>
+              {onAssign && !album.photographer_id && !album.deleted_at && (
+                <Button
+                  label={s.assignSet}
+                  variant="secondary"
+                  size="sm"
+                  width="100%"
+                  isDisabled={disabled || !photos.length}
+                  onClick={() => onAssign(album)}
+                />
+              )}
               <div className="album-card-actions">
                 <div className="order-buttons">
                   {onOrder && (
@@ -156,6 +178,8 @@ export function PhotoGrid({
   onOpen,
   onOrder,
   onRestore,
+  onDelete,
+  showAlbum = false,
 }: {
   photos: Photo[];
   data: Dataset;
@@ -165,6 +189,8 @@ export function PhotoGrid({
   onOpen: (id: string) => void;
   onOrder?: (ids: string[]) => void;
   onRestore?: (id: string) => void;
+  onDelete?: (id: string) => void;
+  showAlbum?: boolean;
 }) {
   if (!photos.length)
     return (
@@ -175,6 +201,7 @@ export function PhotoGrid({
     );
   const ids = photos.map((image) => image.id);
   const byTag = new Map(data.tags.map((tag) => [tag.id, tag]));
+  const byAlbum = new Map(data.portfolios.map((album) => [album.id, album]));
   const tagMap = new Map<string, Tag[]>();
   for (const assignment of data.assignments) {
     const tag = byTag.get(assignment.tag_id);
@@ -189,6 +216,7 @@ export function PhotoGrid({
       {photos.map((photo, index) => {
         const chosen = selected.includes(photo.id);
         const tags = tagMap.get(photo.id) ?? [];
+        const album = byAlbum.get(photo.portfolio_id);
         return (
           <article
             key={photo.id}
@@ -251,6 +279,9 @@ export function PhotoGrid({
               <div className="photo-caption" title={photo.caption}>
                 {photo.caption || <span>{s.photoDescriptionEmpty}</span>}
               </div>
+              {showAlbum && album && (
+                <div className="photo-album">{isInbox(album) ? s.inbox : album.title}</div>
+              )}
               <div className="photo-tags">
                 {tags.slice(0, 3).map((tag) => (
                   <span key={tag.id}>{tag.name_vi || tag.name}</span>
@@ -262,14 +293,26 @@ export function PhotoGrid({
                   {photo.width} × {photo.height}
                 </small>
                 {onRestore ? (
-                  <Button
-                    label={s.restore}
-                    size="sm"
-                    variant="ghost"
-                    icon={<Icon name="refresh" size={14} />}
-                    isDisabled={disabled}
-                    onClick={() => onRestore(photo.id)}
-                  />
+                  <div className="order-buttons">
+                    <Button
+                      label={s.restore}
+                      size="sm"
+                      variant="ghost"
+                      isIconOnly
+                      icon={<Icon name="refresh" size={14} />}
+                      isDisabled={disabled}
+                      onClick={() => onRestore(photo.id)}
+                    />
+                    <Button
+                      label={s.deletePhoto}
+                      size="sm"
+                      variant="destructive"
+                      isIconOnly
+                      icon={<Icon name="trash" size={14} />}
+                      isDisabled={disabled || !onDelete}
+                      onClick={() => onDelete?.(photo.id)}
+                    />
+                  </div>
                 ) : onOrder ? (
                   <div className="order-buttons">
                     <Button

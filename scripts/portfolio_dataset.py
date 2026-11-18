@@ -32,7 +32,7 @@ ROOT = Path(__file__).resolve().parents[1]
 GENRES = ("portrait", "fashion", "wedding", "family", "product", "food", "event", "cosplay")
 CATEGORIES = {
     "genre", "subject", "setting", "lighting", "color_tone", "mood",
-    "composition", "style", "editing", "styling", "source",
+    "composition", "style", "editing", "styling",
 }
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36"
 MAX_BYTES = 20 * 1024 * 1024

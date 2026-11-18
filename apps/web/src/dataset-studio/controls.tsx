@@ -177,15 +177,35 @@ export function TagPicker({
   includeInactive?: boolean;
 }) {
   const [query, setQuery] = useState('');
-  const needle = query.toLocaleLowerCase();
-  const filtered = tags.filter(
+  const [category, setCategory] = useState('genre');
+  const list = useRef<HTMLDivElement>(null);
+  const needle = query.trim().toLocaleLowerCase();
+  useEffect(() => {
+    list.current?.scrollTo(0, 0);
+  }, [category, needle]);
+  const selectedIds = new Set(selected);
+  const options = tags.filter(
     (tag) =>
-      (tag.is_active || includeInactive || selected.includes(tag.id)) &&
-      [tag.name, tag.name_vi, tag.slug, tag.definition_vi, ...tag.aliases]
+      categoryNames[tag.category] && (tag.is_active || includeInactive || selectedIds.has(tag.id)),
+  );
+  const categories = Object.entries(categoryNames).filter(([key]) =>
+    options.some((tag) => tag.category === key),
+  );
+  const currentCategory =
+    category === 'selected' || categories.some(([key]) => key === category)
+      ? category
+      : (categories[0]?.[0] ?? 'selected');
+  const filtered = options.filter((tag) => {
+    if (needle) {
+      return [tag.name, tag.name_vi, tag.slug, ...tag.aliases]
         .join(' ')
         .toLocaleLowerCase()
-        .includes(needle),
-  );
+        .includes(needle);
+    }
+    return currentCategory === 'selected'
+      ? selectedIds.has(tag.id)
+      : tag.category === currentCategory;
+  });
   const toggle = (id: string) =>
     onChange(selected.includes(id) ? selected.filter((item) => item !== id) : [...selected, id]);
   return (
@@ -196,37 +216,49 @@ export function TagPicker({
         placeholder={s.searchTags}
         value={query}
         onChange={setQuery}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') event.preventDefault();
+        }}
         hasClear
       />
-      <p className="field-hint">{s.tagHelp}</p>
-      <div className="tag-picker-groups">
-        {Object.entries(categoryNames).map(([category, name]) => {
-          const items = filtered.filter((tag) => tag.category === category);
-          return items.length ? (
-            <section className="tag-group" key={category}>
-              <h4>
-                {name}
-                <span>{items.length}</span>
-              </h4>
-              <div className="tag-cloud">
-                {items.map((tag) => (
-                  <button
-                    type="button"
-                    key={tag.id}
-                    className={`tag-option ${selected.includes(tag.id) ? 'selected' : ''}`}
-                    title={tag.definition_vi || tag.definition_en || tag.name}
-                    aria-pressed={selected.includes(tag.id)}
-                    onClick={() => toggle(tag.id)}
-                  >
-                    {selected.includes(tag.id) && <Icon name="check" size={12} />}
-                    {tag.name_vi || tag.name}
-                    {!tag.is_active && <small>{s.inactive}</small>}
-                  </button>
-                ))}
-              </div>
-            </section>
-          ) : null;
-        })}
+      <Select
+        label={s.category}
+        value={needle ? 'search' : currentCategory}
+        onChange={(value) => {
+          setQuery('');
+          setCategory(value);
+        }}
+      >
+        {needle && (
+          <option value="search" disabled>
+            {s.tagSearchResults}
+          </option>
+        )}
+        {categories.map(([key, label]) => (
+          <option key={key} value={key}>
+            {label}
+          </option>
+        ))}
+        <option value="selected">
+          {s.selectedTags} ({selected.length})
+        </option>
+      </Select>
+      <div ref={list} className="tag-options" role="group" aria-label={s.tags}>
+        {filtered.map((tag) => (
+          <label
+            className="tag-option"
+            key={tag.id}
+            title={tag.definition_vi || tag.definition_en || tag.name}
+          >
+            <input
+              type="checkbox"
+              checked={selectedIds.has(tag.id)}
+              onChange={() => toggle(tag.id)}
+            />
+            <span>{tag.name_vi || tag.name}</span>
+            {!tag.is_active && <small>{s.inactive}</small>}
+          </label>
+        ))}
         {!filtered.length && <p className="field-hint">{s.noTags}</p>}
       </div>
     </div>

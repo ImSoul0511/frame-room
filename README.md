@@ -131,7 +131,7 @@ Clients discover, book, select photos, and review. Photographers work independen
 
 ## Demo media
 
-The separate [local Dataset Studio](docs/ai/dataset-studio.md) opens with `py -3 scripts/dataset_studio.py` and supports album organization, manual tags, ordering, and reversible archival for the imported demo dataset. It uses the existing root `.env` through a loopback-only Python backend and does not change the main application routes.
+The separate [local Dataset Studio](docs/ai/dataset-studio.md) opens with `py -3 scripts/dataset_studio.py`. Group imported photos into shoots or themed sets, then allocate each set to an existing demo photographer. The Studio also supports manual tags and permanent deletion of unwanted image records. It uses the existing root `.env` through a loopback-only Python backend and does not change the main application routes.
 
 Use synthetic accounts and permitted internal educational images. Record source, collected_at, and license_note; exclude personal contact information. The existing design accepts public portfolio-images URLs, even for drafts/demo images. API hiding cannot revoke direct Storage URLs; choose media compatible with that access.
 

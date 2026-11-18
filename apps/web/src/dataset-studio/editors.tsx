@@ -3,6 +3,7 @@ import { Button } from '@astryxdesign/core/Button';
 import { TextInput } from '@astryxdesign/core/TextInput';
 import { Area, Icon, Modal, Select, TagPicker } from './controls';
 import { categoryNames, genreNames, s } from './strings';
+import { isInbox } from './types';
 import type { Act, Album, Dataset, Photo, Photographer, Tag } from './types';
 
 type Shared = { act: Act; busy: boolean; onClose: () => void };
@@ -12,15 +13,22 @@ const discard = (dirty: boolean, close: () => void) => {
 
 export function AlbumEditor({
   album,
-  profile,
+  selectedIds,
+  defaultGenre,
   act,
   busy,
   onClose,
   onDone,
-}: Shared & { album?: Album; profile: Photographer; onDone: (id: string) => void }) {
+}: Shared & {
+  album?: Album;
+  selectedIds: string[];
+  defaultGenre: string;
+  onDone: (id: string) => void;
+}) {
   const [title, setTitle] = useState(album?.title ?? '');
   const [description, setDescription] = useState(album?.description ?? '');
-  const [genre, setGenre] = useState(album?.genre ?? profile.genres[0]);
+  const [genre, setGenre] = useState(album?.genre ?? defaultGenre);
+  const assigned = !!album?.photographer_id;
   const [status, setStatus] = useState(album?.status ?? 'draft');
   const [requestId] = useState(() => crypto.randomUUID());
   const [dirty, setDirty] = useState(false);
@@ -30,18 +38,20 @@ export function AlbumEditor({
       setError(s.required);
       return;
     }
-    const result = await act('album.save', {
-      ...(album ? { id: album.id } : { photographer_id: profile.id, request_id: requestId }),
+    const result = await act(assigned ? 'album.save' : 'set.save', {
+      ...(album ? { id: album.id } : { request_id: requestId }),
+      ...(!album && selectedIds.length ? { ids: selectedIds } : {}),
       title,
       description,
       genre,
-      status,
+      ...(assigned ? { status } : {}),
     });
-    onDone(result.id ?? album!.id);
+    const id = result.id ?? album?.id;
+    if (id) onDone(id);
   };
   return (
     <Modal
-      title={album ? s.editAlbum : s.newAlbum}
+      title={album ? s.editAlbum : selectedIds.length ? s.groupSelection : s.newAlbum}
       onClose={() => discard(dirty, onClose)}
       busy={busy}
     >
@@ -63,15 +73,17 @@ export function AlbumEditor({
                 </option>
               ))}
             </Select>
-            <Select
-              label={s.status}
-              value={status}
-              onChange={(value) => setStatus(value as Album['status'])}
-            >
-              <option value="draft">{s.draft}</option>
-              <option value="published">{s.published}</option>
-              <option value="hidden">{s.hidden}</option>
-            </Select>
+            {assigned && (
+              <Select
+                label={s.status}
+                value={status}
+                onChange={(value) => setStatus(value as Album['status'])}
+              >
+                <option value="draft">{s.draft}</option>
+                <option value="published">{s.published}</option>
+                <option value="hidden">{s.hidden}</option>
+              </Select>
+            )}
           </div>
           {error && (
             <p role="alert" className="field-error">
@@ -81,7 +93,150 @@ export function AlbumEditor({
         </fieldset>
         <footer className="modal-footer">
           <Button label={s.cancel} variant="ghost" isDisabled={busy} onClick={onClose} />
-          <Button label={s.save} variant="primary" type="submit" isLoading={busy} />
+          <Button
+            label={!album && selectedIds.length ? s.groupSelection : s.save}
+            variant="primary"
+            type="submit"
+            isLoading={busy}
+          />
+        </footer>
+      </form>
+    </Modal>
+  );
+}
+
+export function SetAssignmentEditor({
+  album,
+  profiles,
+  act,
+  busy,
+  onClose,
+}: Shared & { album: Album; profiles: Photographer[] }) {
+  const [owner, setOwner] = useState(album.photographer_id ?? '');
+  const label = album.photographer_id ? s.changeSetOwner : s.assignSet;
+  const canSubmit = !!owner && owner !== album.photographer_id;
+  return (
+    <Modal title={label} onClose={onClose} busy={busy}>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (canSubmit) {
+            void act('set.assign', { id: album.id, photographer_id: owner })
+              .then(onClose)
+              .catch(() => {});
+          }
+        }}
+      >
+        <fieldset className="form-content" disabled={busy}>
+          <strong>{album.title}</strong>
+          <Select label={s.owner} value={owner} onChange={setOwner}>
+            <option value="" disabled>
+              {s.chooseOwner}
+            </option>
+            {profiles.map((profile) => (
+              <option key={profile.id} value={profile.id}>
+                {profile.display_name}
+              </option>
+            ))}
+          </Select>
+        </fieldset>
+        <footer className="modal-footer">
+          <Button label={s.cancel} variant="ghost" isDisabled={busy} onClick={onClose} />
+          <Button
+            label={label}
+            variant="primary"
+            type="submit"
+            isDisabled={!canSubmit}
+            isLoading={busy}
+          />
+        </footer>
+      </form>
+    </Modal>
+  );
+}
+
+export function AssignProfileAlbums({
+  profile,
+  albums,
+  act,
+  busy,
+  onClose,
+}: Shared & { profile: Photographer; albums: Album[] }) {
+  const [query, setQuery] = useState('');
+  const [selected, setSelected] = useState<string[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const saving = busy || submitting;
+  const shown = albums.filter((album) =>
+    [album.title, genreNames[album.genre]]
+      .join(' ')
+      .toLowerCase()
+      .includes(query.trim().toLowerCase()),
+  );
+  const submit = async () => {
+    if (!selected.length || saving) return;
+    setSubmitting(true);
+    try {
+      for (const id of selected) {
+        await act('set.assign', { id, photographer_id: profile.id });
+        setSelected((remaining) => remaining.filter((value) => value !== id));
+      }
+      onClose();
+    } finally {
+      setSubmitting(false);
+    }
+  };
+  return (
+    <Modal title={s.assignProfileAlbums} onClose={onClose} busy={saving}>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          void submit().catch(() => {});
+        }}
+      >
+        <fieldset className="form-content" disabled={saving}>
+          <strong>{profile.display_name}</strong>
+          <TextInput
+            label={s.albumSearch}
+            isLabelHidden
+            placeholder={s.albumSearch}
+            value={query}
+            onChange={setQuery}
+            hasClear
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') event.preventDefault();
+            }}
+          />
+          <div className="tag-options" role="group" aria-label={s.allAlbums}>
+            {shown.map((album) => (
+              <label className="tag-option" key={album.id}>
+                <input
+                  type="checkbox"
+                  checked={selected.includes(album.id)}
+                  onChange={(event) => {
+                    const checked = event.target.checked;
+                    setSelected((ids) =>
+                      checked ? [...ids, album.id] : ids.filter((id) => id !== album.id),
+                    );
+                  }}
+                />
+                <span>{album.title}</span>
+                <small>{genreNames[album.genre] ?? album.genre}</small>
+              </label>
+            ))}
+            {!shown.length && (
+              <p className="field-hint">{albums.length ? s.noAlbums : s.noAssignableAlbums}</p>
+            )}
+          </div>
+        </fieldset>
+        <footer className="modal-footer">
+          <Button label={s.cancel} variant="ghost" isDisabled={saving} onClick={onClose} />
+          <Button
+            label={selected.length ? s.assignCount(selected.length) : s.assignSet}
+            variant="primary"
+            type="submit"
+            isDisabled={!selected.length}
+            isLoading={saving}
+          />
         </footer>
       </form>
     </Modal>
@@ -130,6 +285,7 @@ export function ImageEditor({
   previous,
   next,
   readOnly,
+  onDelete,
 }: Shared & {
   image: Photo;
   data: Dataset;
@@ -137,6 +293,7 @@ export function ImageEditor({
   previous?: string;
   next?: string;
   readOnly: boolean;
+  onDelete: () => void;
 }) {
   const originalTags = data.assignments
     .filter((a) => a.portfolio_image_id === image.id)
@@ -164,7 +321,7 @@ export function ImageEditor({
             <Button
               label={s.previous}
               icon={<Icon name="back" />}
-              variant="secondary"
+              variant="ghost"
               isDisabled={!previous || busy}
               onClick={() => navigate(previous)}
             />
@@ -174,6 +331,7 @@ export function ImageEditor({
             <Button
               label={s.next}
               icon={<Icon name="arrow" />}
+              variant="ghost"
               isDisabled={!next || busy}
               onClick={() => navigate(next)}
             />
@@ -187,7 +345,7 @@ export function ImageEditor({
           }}
         >
           <fieldset disabled={busy || readOnly}>
-            <Area label={s.caption} value={caption} onChange={setCaption} rows={3} />
+            <Area label={s.caption} value={caption} onChange={setCaption} rows={2} />
             <Select
               label={s.annotationState}
               value={state}
@@ -201,8 +359,16 @@ export function ImageEditor({
           </fieldset>
           <footer className="image-editor-footer">
             <Button
+              label={s.deletePhoto}
+              variant="destructive"
+              size="sm"
+              isDisabled={busy || readOnly || !data.delete_ready}
+              onClick={onDelete}
+            />
+            <Button
               label={s.save}
               variant="primary"
+              size="sm"
               type="submit"
               isLoading={busy}
               isDisabled={readOnly}
@@ -218,7 +384,6 @@ export function MoveEditor({
   data,
   selected,
   currentAlbum,
-  initialTarget,
   act,
   busy,
   onClose,
@@ -228,8 +393,7 @@ export function MoveEditor({
   data: Dataset;
   selected: string[];
   currentAlbum?: string | null;
-  initialTarget?: string;
-  onCreate: () => void;
+  onCreate?: () => void;
   onMoved: () => void;
 }) {
   const albums = data.portfolios.filter(
@@ -238,9 +402,22 @@ export function MoveEditor({
       !data.photographers.find((p) => p.id === a.photographer_id)?.is_hidden &&
       a.id !== currentAlbum,
   );
-  const [target, setTarget] = useState(initialTarget ?? albums[0]?.id ?? '');
+  const owners = new Map(data.photographers.map((profile) => [profile.id, profile.display_name]));
+  const groups = [
+    ...Object.entries(genreNames).map(([genre, label]) => ({
+      label,
+      albums: albums.filter((album) => album.genre === genre && !isInbox(album)),
+    })),
+    { label: s.inbox, albums: albums.filter(isInbox) },
+  ].filter((group) => group.albums.length);
+  const [target, setTarget] = useState(groups[0]?.albums[0].id ?? '');
+  const selectedIds = new Set(selected);
+  const movableIds = data.images
+    .filter((image) => selectedIds.has(image.id) && image.portfolio_id !== target)
+    .map((image) => image.id);
   const submit = async () => {
-    await act('images.move', { ids: selected, portfolio_id: target });
+    if (!target || !movableIds.length) return;
+    await act('images.move', { ids: movableIds, portfolio_id: target });
     onMoved();
   };
   return (
@@ -252,27 +429,25 @@ export function MoveEditor({
         }}
       >
         <fieldset disabled={busy} className="form-content">
-          <p className="field-hint">{s.destinationHint}</p>
           {albums.length ? (
             <Select label={s.destination} value={target} onChange={setTarget}>
-              {data.photographers
-                .filter((p) => !p.is_hidden)
-                .map((p) => (
-                  <optgroup key={p.id} label={p.display_name}>
-                    {albums
-                      .filter((a) => a.photographer_id === p.id)
-                      .map((a) => (
-                        <option value={a.id} key={a.id}>
-                          {a.title}
-                        </option>
-                      ))}
-                  </optgroup>
-                ))}
+              {groups.map((group) => (
+                <optgroup key={group.label} label={group.label}>
+                  {group.albums.map((album) => (
+                    <option value={album.id} key={album.id}>
+                      {album.title} ·{' '}
+                      {album.photographer_id ? owners.get(album.photographer_id) : s.unassignedSet}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
             </Select>
           ) : (
             <p>{s.destinationEmpty}</p>
           )}
-          <Button label={s.newAlbum} icon={<Icon name="plus" />} onClick={onCreate} />
+          {onCreate && (
+            <Button label={s.groupSelection} icon={<Icon name="plus" />} onClick={onCreate} />
+          )}
         </fieldset>
         <footer className="modal-footer">
           <Button label={s.cancel} variant="ghost" onClick={onClose} isDisabled={busy} />
@@ -280,7 +455,7 @@ export function MoveEditor({
             label={s.move}
             variant="primary"
             type="submit"
-            isDisabled={!target}
+            isDisabled={!target || !movableIds.length}
             isLoading={busy}
           />
         </footer>
