@@ -55,7 +55,7 @@ Set descriptions keep line breaks. Image previews show the whole frame, and set 
 
 ## Deletion and recovery
 
-The photo editor, selection toolbar and Trash offer **Xóa vĩnh viễn**. Confirming it deletes the selected `portfolio_images` rows, their tag assignments and embeddings in one database transaction. If any requested ID is missing or out of scope, the request rolls back. The Storage objects and local crawl files are retained, so a later import of the same files can create new image records.
+The photo editor, selection toolbar and Trash offer permanent deletion. Confirming it deletes the selected `portfolio_images` rows, their tag assignments and embeddings in one database transaction. If any requested ID is missing or out of scope, the request rolls back. With the [rejection migration](../../supabase/migrations/202611180003_dataset_image_rejections.sql), deletion also records fingerprints that block future crawl caches and imports. Storage objects and local crawl files are retained.
 
 Reversible archival is also available:
 

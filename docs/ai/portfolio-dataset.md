@@ -59,7 +59,9 @@ Files are written below `.artifacts/portfolio-dataset/`:
 - `images/`: oriented JPEGs with both dimensions at most 1280 pixels; EXIF is discarded.
 - `manifest.jsonl`: one successfully downloaded record per unique normalized image, including the weak genre hint and local checksum.
 
-Local files share one flat `images` directory and are named `<SHA256>.jpg`, not grouped into source/genre folders. The manifest records the source, suggested genre, query, source URLs, dimensions, checksum and download time. `crawl` never uploads to Supabase. Only `import --apply` uploads the normalized JPEG to `portfolio-images/<portfolio-id>/intake/<SHA256>.jpg` and inserts its `portfolio_images` record. Local files remain after import.
+Local files share a flat `images` directory and are named `<SHA256>.jpg`. The manifest records the source, suggested genre, query, source URLs, dimensions, checksum and download time. With Supabase credentials configured, `crawl` reads the rejected fingerprints and excludes deleted images from its local quota. Known manifest URLs are skipped before download, and new URLs are checked by fingerprint before writing a JPEG or manifest entry. Crawler requests to image sources use a separate client from the Supabase requests.
+
+Only `import --apply` uploads the normalized JPEG to `portfolio-images/<portfolio-id>/intake/<SHA256>.jpg` and inserts its `portfolio_images` record. The local files are retained as a cache for pending or interrupted uploads.
 
 ### Run one website at a time
 
@@ -115,12 +117,17 @@ Sign in yourself if Pinterest requests it, then press Enter in the terminal. Thi
 
 ```powershell
 py -3 scripts/portfolio_dataset.py import --photographers-per-genre 3
+py -3 scripts/portfolio_dataset.py import --check
 py -3 scripts/portfolio_dataset.py import --photographers-per-genre 3 --publish --apply
 ```
 
-Without `--apply`, this checks local files and prints assignments without loading keys or connecting to Supabase. With `--apply`, it creates only the photographer slots receiving images, through Auth Admin users, profiles, photographers and temporary inbox portfolios. It uploads JPEGs to the existing `portfolio-images` bucket and inserts `portfolio_images` rows. No email invitation is sent; account passwords are random and are not printed or stored in the manifest. These are synthetic identities, not replicas of source photographers. No services/bookings are created in this phase.
+The default preview checks local files and prints planned assignments. `--check` compares manifest fingerprints against Supabase and reports already imported, blocked, duplicate and pending counts. `--apply` reads JPEGs and prepares photographer inboxes only for pending records in the current batch.
 
-Assignment uses the image fingerprint, suggested genre, photographer count and seed. It behaves randomly while remaining repeatable across retries. Keep `--namespace`, `--seed` and `--photographers-per-genre` stable for a dataset. `--limit 10` supports a small first import. `--genres wedding,portrait` restricts which cached records are imported.
+Apply [202611180003_dataset_image_rejections.sql](../../supabase/migrations/202611180003_dataset_image_rejections.sql) before a connected crawl or an applied import. Permanent deletion records the pixel and file fingerprints in the same transaction. A database trigger checks them again on intake, including imports that started before the deletion.
+
+At migration time, older inbox Storage objects with no corresponding image row are held for review. This covers files retained by earlier deletions and files left by interrupted imports. The importer reports these separately from confirmed deletions. Release a `legacy_orphan` fingerprint only after confirming it belongs to an interrupted import. Earlier deletions with neither a remaining Storage object nor a known fingerprint cannot be reconstructed automatically.
+
+Assignment uses the image fingerprint, suggested genre, photographer count and seed. Keep `--namespace`, `--seed` and `--photographers-per-genre` stable for a dataset. `--limit 10` schedules at most ten pending records each time. `--genres wedding,portrait` restricts which cached records are imported.
 
 New inboxes are drafts by default. `--publish` publishes only newly created inboxes; it does not republish an existing draft or override a human's publication decision. Published inboxes have a publication timestamp and visible synthetic photographers. Website display still depends on application query/UI implementation. All Storage objects in the existing public portfolio bucket are directly readable regardless of portfolio publication status.
 
@@ -130,17 +137,17 @@ An inbox is a temporary existing `portfolios` record identified by a dataset key
 
 After an inbox is archived through Dataset Studio, new imports use an active replacement with a `:inbox:rev:NNN` dataset-key suffix. The original album remains archived and existing images remain in their manually selected albums. Retrying an incomplete import reuses the replacement instead of creating another album.
 
-Auth, Storage and REST inserts are separate operations. A failed import stops and returns nonzero; rerunning recovers existing users/providers/inboxes and retries stable object paths. A crash after an upload may leave an unreferenced object until the next run completes. Do not delete imported Auth users manually while a run is in progress. Concurrent imports can encounter uniqueness conflicts; run one importer at a time and rerun after a failure. No database-wide rollback or destructive cleanup is attempted.
+Auth, Storage and database inserts are separate operations. A crash after an upload can leave an unreferenced object. A subsequent run recovers existing users and inboxes and uses the same object path for the pending image. Database uniqueness and the rejection trigger protect image rows if jobs overlap.
 
 ### Network recovery during import
 
-Supabase requests reuse a persistent connection pool. Resume checks use bounded batches of image keys/checksums instead of one or two reads for every cached image. The importer reports the existing/pending counts before writing anything new.
+Supabase requests reuse a persistent connection pool. Resume checks query both image identities and the deletion list in batches of up to 500 manifest entries. Already imported and blocked records are skipped before local JPEGs are opened.
 
-Reads and stable-path Storage upserts automatically try up to four times on connection/timeouts or HTTP 429/500/502/503/504, with bounded backoff. Auth user creation and ordinary row inserts are not blindly replayed after an uncertain response, because the server may already have committed the write. Rerunning the complete import discovers those existing identities/images safely.
+Reads and stable-path Storage upserts automatically try up to four times on connection errors, timeouts or transient HTTP responses, including HTTP 520. Auth user creation and ordinary row inserts require a fresh identity check on resume after an uncertain write.
 
 Image uploads allow 60 seconds for socket operations while sending the body and 60 seconds while reading the response. Ordinary reads retain a 15-second connect timeout and 60-second read timeout. Requests can report a slow upload as `ConnectionError` wrapping a write `TimeoutError`; the diagnostic labels known upload write timeouts explicitly. A short connection timeout can otherwise interrupt a large upload even when preflight reads succeed.
 
-Image uploads use four workers by default. Each worker owns a separate HTTP session; account and inbox preparation remains sequential. Use `--workers 1` for sequential uploads or `--workers 6` for a larger bounded upload pool. On an unrecovered error, queued work is cancelled and in-flight writes finish before the command returns. Successful rows remain available for the next resume; there is no all-or-nothing rollback across images.
+Image uploads use four workers by default, with a separate HTTP session per worker. Use `--workers 1` for sequential uploads. If one image exhausts its retries, the importer continues with the other images and reports a nonzero exit status at the end. Authentication and authorization failures cancel queued uploads. Use `--check` to see what remains before resuming.
 
 Errors identify the method, endpoint and exception class without printing raw exceptions, keys, proxy URLs or request bodies. A passed preflight establishes that its initial checks worked; it does not guarantee that later network calls cannot fail. If retries still fail, retain the detailed error and rerun the same command after restoring connectivity; no SQL migration or dataset reset is needed.
 

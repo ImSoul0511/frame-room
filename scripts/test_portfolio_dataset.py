@@ -32,6 +32,9 @@ class FakeSupabase:
         self.uploads = []
         self.fail_image_insert = False
         self.reads = []
+        self.rejected = set()
+        self.legacy = set()
+        self.intake_ready = True
 
     def preflight(self):
         pass
@@ -62,6 +65,19 @@ class FakeSupabase:
         return row
 
     def request(self, method, path, **kwargs):
+        if path == dataset.INTAKE_STATUS_RPC:
+            if not self.intake_ready:
+                raise dataset.SupabaseError(404, path)
+            payload = kwargs["payload"]
+            keys, hashes = payload["p_keys"], payload["p_hashes"]
+            return {
+                "images": [row for row in self.tables["portfolio_images"] if
+                    row["dataset_key"] in keys or row["content_sha256"] in hashes],
+                "rejected": [{"fingerprint": item, "reason": "legacy_orphan" if item in self.legacy else "deleted"}
+                    for item in sorted((self.rejected | self.legacy).intersection(
+                    {"pixel:" + key.rsplit(":", 1)[-1] for key in keys}
+                    | {"sha256:" + sha for sha in hashes}))],
+            }
         if path == "/auth/v1/admin/users":
             user = {"id": f"user-{len(self.users) + 1}", **kwargs["payload"]}
             self.users[user["email"]] = user
@@ -192,6 +208,63 @@ class ImportTests(unittest.TestCase):
         self.assertEqual(image["caption"], "Human caption")
         self.assertEqual(len(self.db.users), 1)
 
+    def test_already_imported_and_deleted_records_do_not_read_local_files(self):
+        self.run_import()
+        image = self.db.tables["portfolio_images"].pop()
+        self.db.rejected.add("sha256:" + image["content_sha256"])
+        (self.output / "image.jpg").unlink()
+        self.assertEqual(self.run_import(), 0)
+        self.assertEqual(len(self.db.uploads), 1)
+        self.assertEqual(len(self.db.tables["portfolio_images"]), 0)
+        self.db.tables["portfolio_images"].append(image)
+        self.db.rejected.clear()
+        self.assertEqual(self.run_import(), 0)
+        self.assertEqual(len(self.db.uploads), 1)
+
+    def test_import_is_paused_without_rejection_migration(self):
+        self.db.intake_ready = False
+        with self.assertRaisesRegex(dataset.DatasetError, "before importing"):
+            self.run_import()
+        self.assertEqual(self.db.uploads, [])
+        self.args.apply = False
+        self.args.check = True
+        self.assertEqual(self.run_import(), 0)
+        self.assertEqual(self.db.uploads, [])
+
+    def test_storage_only_legacy_objects_are_held_for_review(self):
+        self.db.legacy.add("sha256:" + self.record["sha256"])
+        output = io.StringIO()
+        with patch.object(dataset, "Supabase", return_value=self.db), contextlib.redirect_stdout(output):
+            self.assertEqual(dataset.import_images(self.args), 0)
+        self.assertIn("1 older Storage objects need review", output.getvalue())
+        self.assertEqual(self.db.uploads, [])
+
+    def test_crawl_skips_old_urls_and_does_not_cache_rejected_variant(self):
+        config = self.output / "source.json"
+        config.write_text(json.dumps({"jobs": [{"genre": "portrait", "source": "pinterest",
+            "urls": ["https://www.pinterest.com/test"]}]}), encoding="utf-8")
+        self.addCleanup(config.unlink)
+        args = argparse.Namespace(output=self.output, config=config, source="pinterest", genres="portrait",
+            delay=0, browser=False, max_pages=1, per_genre=1, min_short=100)
+        old, variant, allowed = [dict(url=url, page_url="https://www.pinterest.com/test", title="") for url in
+            (self.record["image_url"], "https://i.pinimg.com/variant.jpg", "https://i.pinimg.com/allowed.jpg")]
+        http = Mock()
+        http.get.return_value = b"example"
+        fresh = b"allowed JPEG"
+        images_path = self.output / "images"
+        self.addCleanup(images_path.rmdir)
+        self.addCleanup((images_path / f"{dataset.digest(fresh)}.jpg").unlink, missing_ok=True)
+        with patch.object(dataset, "crawl_rejections", return_value={"pixel:" + self.record["pixel_sha256"]}), \
+            patch.object(dataset, "PublicHttp", return_value=http), \
+            patch.object(dataset, "parse_page", return_value=([old, variant, allowed], [])), \
+            patch.object(dataset, "normalize_image", side_effect=[
+                (b"blocked JPEG", 900, 650, self.record["pixel_sha256"]), (fresh, 900, 650, "b" * 64),
+            ]), contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(dataset.crawl(args), 0)
+        self.assertFalse(any(call.args[0] == old["url"] for call in http.get.call_args_list))
+        self.assertEqual(dataset.read_manifest(self.output)[1]["image_url"], allowed["url"])
+        self.assertEqual(len(list(images_path.glob("*.jpg"))), 1)
+
     def test_failed_row_insert_resumes_without_duplicate_auth_or_inbox(self):
         self.db.fail_image_insert = True
         with self.assertRaises(dataset.DatasetError):
@@ -267,11 +340,47 @@ class ImportTests(unittest.TestCase):
         def upload(client, directory, record, portfolio):
             seen.append((id(client), record["sha256"]))
             barrier.wait()
+            return "imported"
 
         with patch.object(dataset, "Supabase", side_effect=factory), patch.object(dataset, "upload_record", side_effect=upload), contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(dataset.import_images(self.args), 0)
         self.assertEqual(len(clients), 2)
         self.assertEqual(len({client for client, _ in seen}), 2)
+
+    def test_one_exhausted_upload_does_not_cancel_the_other_images(self):
+        data = b"another cached image"
+        second = {**self.record, "file": "second.jpg", "pixel_sha256": "d" * 64, "sha256": dataset.digest(data)}
+        path = self.output / "second.jpg"
+        path.write_bytes(data)
+        self.addCleanup(path.unlink)
+        (self.output / "manifest.jsonl").write_text(json.dumps(self.record) + "\n" + json.dumps(second) + "\n",
+            encoding="utf-8")
+        self.args.workers = 1
+        self.args.limit = 2
+        original_upload = dataset.upload_record
+
+        def upload(db, directory, record, portfolio):
+            if record == self.record:
+                raise dataset.SupabaseError(520, "POST storage fixture")
+            return original_upload(db, directory, record, portfolio)
+
+        with patch.object(dataset, "upload_record", side_effect=upload), contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaisesRegex(dataset.DatasetError, "1 image"):
+                self.run_import()
+        self.assertEqual([row["content_sha256"] for row in self.db.tables["portfolio_images"]], [second["sha256"]])
+
+    def test_limit_counts_pending_items_and_not_already_imported_items(self):
+        self.run_import()
+        data = b"next pending content"
+        second = {**self.record, "file": "second.jpg", "pixel_sha256": "e" * 64, "sha256": dataset.digest(data)}
+        path = self.output / "second.jpg"
+        path.write_bytes(data)
+        self.addCleanup(path.unlink)
+        (self.output / "manifest.jsonl").write_text(json.dumps(self.record) + "\n" + json.dumps(second) + "\n",
+            encoding="utf-8")
+        self.args.limit = 1
+        self.assertEqual(self.run_import(), 0)
+        self.assertEqual(len(self.db.tables["portfolio_images"]), 2)
 
 
 class CatalogTests(unittest.TestCase):
@@ -358,6 +467,14 @@ class TransportTests(unittest.TestCase):
         calls = db.session.request.call_args_list
         self.assertEqual(calls[0], calls[1])
         self.assertEqual(calls[0].kwargs["timeout"], (60, 60))
+
+    def test_stable_storage_upsert_retries_http_520(self):
+        db = self.client()
+        db.session.request.side_effect = [self.response(520), self.response(payload={"Key": "same-key"})]
+        with patch.object(dataset.time, "sleep") as sleep, contextlib.redirect_stderr(io.StringIO()):
+            db.request("POST", "/storage/v1/object/stable.jpg", data=b"same-data", retry_safe=True)
+        self.assertEqual(db.session.request.call_args_list[0], db.session.request.call_args_list[1])
+        sleep.assert_called_once_with(1)
 
     def test_upload_timeout_is_named_without_exposing_raw_exception(self):
         db = self.client()

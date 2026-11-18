@@ -20,6 +20,7 @@ import threading
 import time
 import warnings
 from collections import Counter
+from collections.abc import Container
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import parse_qs, quote, urlencode, urljoin, urlparse
@@ -36,14 +37,27 @@ CATEGORIES = {
 }
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36"
 MAX_BYTES = 20 * 1024 * 1024
+REJECTION_MIGRATION = "supabase/migrations/202611180003_dataset_image_rejections.sql"
+INTAKE_STATUS_RPC = "/rest/v1/rpc/dataset_image_intake_status"
+TRANSIENT_HTTP = {408, 429, 500, 502, 503, 504, 520, 521, 522, 523, 524}
 
 
 class DatasetError(Exception):
     """An error safe to display without request headers or secret-bearing bodies."""
 
 
+class SupabaseError(DatasetError):
+    def __init__(self, status: int, endpoint: str, code: str | None = None):
+        super().__init__(f"Supabase HTTP {status} on {endpoint}.")
+        self.status, self.code = status, code
+
+
 def digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def is_rejected(pixels: str, sha: str, blocked: Container[str]) -> bool:
+    return "pixel:" + pixels in blocked or "sha256:" + sha in blocked
 
 
 def load_env(path: Path = ROOT / ".env") -> None:
@@ -271,7 +285,9 @@ def crawl(args) -> int:
         raise DatasetError("No enabled jobs match --source/--genres. Check the job's enabled flag and URLs/queries in --config.")
     args.output.mkdir(parents=True, exist_ok=True)
     records = read_manifest(args.output)
-    counts = Counter(record["genre"] for record in records)
+    blocked = crawl_rejections()
+    counts = Counter(record["genre"] for record in records
+        if not is_rejected(record["pixel_sha256"], record["sha256"], blocked))
     seen_urls = {record["image_url"] for record in records}
     seen_pixels = {record["pixel_sha256"] for record in records}
     http = PublicHttp(args.delay)
@@ -308,10 +324,13 @@ def crawl(args) -> int:
                             seen_urls.add(candidate["url"])
                             try:
                                 data, width, height, pixels = normalize_image(http.get(candidate["url"], image=True), args.min_short)
+                                sha = digest(data)
+                                if is_rejected(pixels, sha, blocked):
+                                    stats["skipped_deleted"] += 1
+                                    continue
                                 if pixels in seen_pixels:
                                     stats["duplicate_pixels"] += 1
                                     continue
-                                sha = digest(data)
                                 relative = f"images/{sha}.jpg"
                                 target = local_image(args.output, relative)
                                 target.parent.mkdir(parents=True, exist_ok=True)
@@ -388,7 +407,7 @@ class Supabase:
                     continue
                 suffix = "No automatic write replay; rerun to resume safely." if not safe else "Retry limit reached; rerun to resume."
                 raise DatasetError(f"Supabase {detail}. {suffix}") from error
-            if safe and response.status_code in (429, 500, 502, 503, 504) and attempt + 1 < attempts:
+            if safe and response.status_code in TRANSIENT_HTTP and attempt + 1 < attempts:
                 retry_after = response.headers.get("Retry-After", "")
                 delay = min(30, int(retry_after) if retry_after.isdigit() else 2 ** attempt)
                 status = response.status_code
@@ -398,7 +417,12 @@ class Supabase:
                 continue
             try:
                 if not response.ok:
-                    raise DatasetError(f"Supabase HTTP {response.status_code} on {endpoint}.")
+                    try:
+                        body = response.json()
+                    except ValueError:
+                        body = None
+                    code = body.get("code") if isinstance(body, dict) else None
+                    raise SupabaseError(response.status_code, endpoint, code if code in ("FD001", "23505") else None)
                 if not response.content:
                     return None
                 try:
@@ -454,6 +478,51 @@ def existing_image_keys(db: Supabase, records: list[dict]) -> tuple[set, set]:
             keys.update(row["dataset_key"] for row in rows if row.get("dataset_key"))
             hashes.update(row["content_sha256"] for row in rows if row.get("content_sha256"))
     return keys, hashes
+
+
+def crawl_rejections() -> set[str]:
+    load_env()
+    if not (os.environ.get("SUPABASE_URL") and
+            (os.environ.get("SUPABASE_SECRET_KEY") or os.environ.get("SUPABASE_SERVICE_ROLE_KEY"))):
+        print("Local-only crawl. Set Supabase credentials to check previously deleted images.", file=sys.stderr)
+        return set()
+    db = Supabase()
+    blocked = set()
+    after = {}
+    try:
+        while True:
+            rows = db.rows("dataset_image_rejections", select="fingerprint", order="fingerprint.asc",
+                limit=500, **after)
+            blocked.update(row["fingerprint"] for row in rows)
+            if len(rows) < 500:
+                return blocked
+            after = {"fingerprint": "gt." + rows[-1]["fingerprint"]}
+    except SupabaseError as error:
+        if error.status != 404:
+            raise
+        raise DatasetError(f"Apply {REJECTION_MIGRATION} before crawling against this project.") from error
+
+
+def intake_status(db: Supabase, records: list[dict], *, require_protection=True):
+    existing_keys, existing_hashes, rejected = set(), set(), {}
+    for start in range(0, len(records), 500):
+        batch = records[start:start + 500]
+        try:
+            result = db.request("POST", INTAKE_STATUS_RPC, payload={
+                "p_keys": ["crawl:v1:" + record["pixel_sha256"] for record in batch],
+                "p_hashes": [record["sha256"] for record in batch],
+            }, retry_safe=True)
+        except SupabaseError as error:
+            if error.status != 404:
+                raise
+            if require_protection:
+                raise DatasetError(f"Apply {REJECTION_MIGRATION} before importing into this project.") from error
+            keys, hashes = existing_image_keys(db, records)
+            return keys, hashes, None
+        existing_keys.update(row["dataset_key"] for row in result["images"] if row["dataset_key"])
+        existing_hashes.update(row["content_sha256"] for row in result["images"] if row["content_sha256"])
+        rejected.update((row["fingerprint"], row["reason"]) for row in result["rejected"])
+    return existing_keys, existing_hashes, rejected
 
 
 def ensure_provider(db: Supabase, users: dict, namespace: str, genre: str, slot: int, publish: bool) -> dict:
@@ -516,20 +585,44 @@ def ensure_provider(db: Supabase, users: dict, namespace: str, genre: str, slot:
     return portfolio
 
 
-def upload_record(db: Supabase, directory: Path, record: dict, portfolio: dict) -> None:
+def read_import_file(directory: Path, record: dict) -> bytes:
+    path = local_image(directory, record["file"])
+    if not path.is_file():
+        raise DatasetError("Missing local image in the pending batch.")
+    data = path.read_bytes()
+    if digest(data) != record["sha256"]:
+        raise DatasetError("Modified local image in the pending batch.")
+    return data
+
+
+def upload_record(db: Supabase, directory: Path, record: dict, portfolio: dict) -> str:
     storage_path = f"{portfolio['id']}/intake/{record['sha256']}.jpg"
-    data = local_image(directory, record["file"]).read_bytes()
+    data = read_import_file(directory, record)
     db.request("POST", "/storage/v1/object/portfolio-images/" + quote(storage_path, safe="/"), data=data,
         headers={"Content-Type": "image/jpeg", "x-upsert": "true"}, retry_safe=True)
-    db.insert("portfolio_images", {
+    key = "crawl:v1:" + record["pixel_sha256"]
+    row = {
         "portfolio_id": portfolio["id"], "storage_path": storage_path,
         "width": record["width"], "height": record["height"],
-        "dataset_key": "crawl:v1:" + record["pixel_sha256"], "content_sha256": record["sha256"],
+        "dataset_key": key, "content_sha256": record["sha256"],
         "suggested_genre": record["genre"], "label_status": "unlabeled",
         "caption": "", "provenance": "captured", "sort_order": 0,
         "import_metadata": {"source": record["source"], "query": record["query"],
             "collected_at": record["collected_at"], "demo_assignment": True},
-    })
+    }
+    try:
+        db.insert("portfolio_images", row)
+    except SupabaseError as error:
+        if error.code == "FD001":
+            return "skipped_deleted"
+        if error.code == "23505":
+            keys, hashes, blocked = intake_status(db, [record])
+            if is_rejected(record["pixel_sha256"], record["sha256"], blocked):
+                return "skipped_deleted"
+            if key in keys or record["sha256"] in hashes:
+                return "already_imported"
+        raise
+    return "imported"
 
 
 def import_images(args) -> int:
@@ -541,35 +634,59 @@ def import_images(args) -> int:
         if not selected <= set(GENRES):
             raise DatasetError("Unknown genre in --genres.")
         records = [record for record in records if record["genre"] in selected]
-    if args.limit:
-        records = records[:args.limit]
     if not records:
         raise DatasetError("No manifest records to import. Run crawl first.")
-    assignments = Counter()
     for record in records:
         if record["genre"] not in GENRES:
             raise DatasetError("Invalid genre in manifest.")
-        path = local_image(args.output, record["file"])
-        if not path.is_file() or digest(path.read_bytes()) != record["sha256"]:
-            raise DatasetError("Missing or modified local image; repair the manifest before importing.")
-        assignments[(record["genre"], demo_slot(record["pixel_sha256"], record["genre"], args.photographers_per_genre, args.seed))] += 1
-    print(json.dumps({f"{g}:{slot:02d}": count for (g, slot), count in sorted(assignments.items())}, indent=2))
-    if not args.apply:
-        print("Preview only. Add --apply after running both new SQL migrations. No keys were loaded.")
+        if any(not re.fullmatch(r"[a-f0-9]{64}", record[key]) for key in ("sha256", "pixel_sha256")):
+            raise DatasetError("Invalid image fingerprint in manifest.")
+    check_only = getattr(args, "check", False)
+    if not args.apply and not check_only:
+        assignments = Counter()
+        for record in records[:args.limit]:
+            read_import_file(args.output, record)
+            pair = (record["genre"], demo_slot(record["pixel_sha256"], record["genre"], args.photographers_per_genre, args.seed))
+            assignments[pair] += 1
+        print(json.dumps({f"{g}:{slot:02d}": count for (g, slot), count in sorted(assignments.items())}, indent=2))
+        print("Local preview. Use --check to compare with Supabase or --apply to import pending images.")
         return 0
     db = Supabase()
-    db.preflight()
     print(f"Checking {len(records)} cached images against Supabase...", flush=True)
-    existing_keys, existing_hashes = existing_image_keys(db, records)
-    pending = sum("crawl:v1:" + record["pixel_sha256"] not in existing_keys and record["sha256"] not in existing_hashes for record in records)
-    print(f"Resume: {len(records) - pending} already imported; {pending} pending.", flush=True)
-    users, inboxes, tasks = None, {}, []
-    stats = Counter()
+    existing_keys, existing_hashes, rejected = intake_status(db, records, require_protection=not check_only)
+    if rejected is None:
+        print(f"Deleted-image protection unavailable. Apply {REJECTION_MIGRATION} before importing.", flush=True)
+    blocked = {fingerprint for fingerprint, reason in (rejected or {}).items() if reason == "deleted"}
+    legacy = set(rejected or {}) - blocked
+    stats = Counter(already_imported=0, skipped_deleted=0, needs_review=0, duplicate_manifest=0, imported=0, failed=0)
+    pending = []
+    seen_pixels, seen_hashes = set(), set()
     for record in records:
-        key = "crawl:v1:" + record["pixel_sha256"]
-        if key in existing_keys or record["sha256"] in existing_hashes:
+        pixels, sha = record["pixel_sha256"], record["sha256"]
+        if is_rejected(pixels, sha, blocked):
+            stats["skipped_deleted"] += 1
+        elif is_rejected(pixels, sha, legacy):
+            stats["needs_review"] += 1
+        elif "crawl:v1:" + pixels in existing_keys or sha in existing_hashes:
             stats["already_imported"] += 1
-            continue
+        elif pixels in seen_pixels or sha in seen_hashes:
+            stats["duplicate_manifest"] += 1
+        else:
+            pending.append(record)
+            seen_pixels.add(pixels)
+            seen_hashes.add(sha)
+    batch = pending[:args.limit]
+    print(f"Resume: {stats['already_imported']} already imported; {stats['skipped_deleted']} blocked; "
+          f"{stats['needs_review']} older Storage objects need review; "
+          f"{stats['duplicate_manifest']} duplicate manifest rows; {len(pending)} pending "
+          f"({len(batch)} in this batch).", flush=True)
+    if check_only or not batch:
+        return 0
+    for record in batch:
+        read_import_file(args.output, record)
+    db.preflight()
+    users, inboxes, tasks = None, {}, []
+    for record in batch:
         slot = demo_slot(record["pixel_sha256"], record["genre"], args.photographers_per_genre, args.seed)
         pair = (record["genre"], slot)
         if pair not in inboxes:
@@ -578,9 +695,6 @@ def import_images(args) -> int:
             inboxes[pair] = ensure_provider(db, users, args.namespace, *pair, args.publish)
             print(f"Ready: {pair[0]} demo {pair[1]:02d}", flush=True)
         tasks.append((record, pair, inboxes[pair]))
-        # Prevent repeated manifest entries from being scheduled twice in this run.
-        existing_keys.add(key)
-        existing_hashes.add(record["sha256"])
     if tasks:
         worker_state = threading.local()
 
@@ -591,34 +705,43 @@ def import_images(args) -> int:
                 if worker_state.db.url != db.url:
                     raise DatasetError("Supabase target changed during import; stopped.")
             record, _, portfolio = task
-            upload_record(worker_state.db, args.output, record, portfolio)
+            return upload_record(worker_state.db, args.output, record, portfolio)
 
         workers = min(getattr(args, "workers", 4), len(tasks))
         print(f"Uploading {len(tasks)} images with {workers} workers...", flush=True)
         pool = concurrent.futures.ThreadPoolExecutor(max_workers=workers)
         futures = {}
         first_error = None
+        finished = 0
         try:
             futures = {pool.submit(upload, task): task for task in tasks}
             for future in concurrent.futures.as_completed(futures):
                 if future.cancelled():
+                    stats["not_attempted"] += 1
                     continue
+                finished += 1
+                record, pair, _ = futures[future]
                 try:
-                    future.result()
-                    stats["imported"] += 1
-                    _, pair, _ = futures[future]
-                    print(f"Imported {pair[0]} -> demo {pair[1]:02d} ({stats['imported']}/{len(tasks)})", flush=True)
+                    outcome = future.result()
+                    stats[outcome] += 1
+                    print(f"{outcome.replace('_', ' ').capitalize()}: {pair[0]} -> demo {pair[1]:02d} "
+                          f"({finished}/{len(tasks)})", flush=True)
                 except (DatasetError, OSError) as error:
+                    stats["failed"] += 1
+                    detail = str(error) if isinstance(error, DatasetError) else type(error).__name__
+                    print(f"Failed image {record['sha256'][:12]} ({finished}/{len(tasks)}): {detail}",
+                          file=sys.stderr, flush=True)
                     if first_error is None:
                         first_error = error
+                    if isinstance(error, SupabaseError) and error.status in (401, 403):
                         for queued in futures:
                             queued.cancel()
         finally:
-            # Complete in-flight writes and cancel queued work on error/interruption.
+            # Complete in-flight writes and cancel queued work on interruption.
             pool.shutdown(wait=True, cancel_futures=True)
         if first_error is not None:
             print(json.dumps(dict(stats)), flush=True)
-            raise first_error
+            raise DatasetError(f"{stats['failed']} image(s) failed. Rerun the same import to resume.") from first_error
     print(json.dumps(dict(stats), indent=2))
     return 0
 
@@ -697,9 +820,11 @@ def main(argv=None) -> int:
     ingest.add_argument("--photographers-per-genre", type=positive, default=3)
     ingest.add_argument("--seed", type=int, default=42)
     ingest.add_argument("--workers", type=positive, default=4, help="Maximum concurrent image uploads; accounts/inboxes are prepared sequentially.")
-    ingest.add_argument("--limit", type=positive)
+    ingest.add_argument("--limit", type=positive, help="Maximum pending uploads when connected, or rows in a local preview.")
     ingest.add_argument("--publish", action="store_true", help="Publish newly created inboxes; preserve existing publication choices.")
-    ingest.add_argument("--apply", action="store_true", help="Create Auth/profile/provider/inbox records and upload images.")
+    mode = ingest.add_mutually_exclusive_group()
+    mode.add_argument("--apply", action="store_true", help="Create Auth/profile/provider/inbox records and upload images.")
+    mode.add_argument("--check", action="store_true", help="Show resume counts from Supabase without uploading or creating rows.")
     sub.add_parser("doctor", help="Read-only Supabase schema, key and bucket preflight.")
     catalog = sub.add_parser("tags-sql", help="Validate the editable CSV and generate the tag migration.")
     catalog.add_argument("--catalog", type=Path, default=ROOT / "data/photography-tags.csv")
