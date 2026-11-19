@@ -25,11 +25,19 @@ export const envSchema = z.object({
   HOST: z.string().min(1).default('127.0.0.1'),
   PORT: z.coerce.number().int().min(1).max(65535).default(4000),
   WEB_ORIGIN: originSchema.default('http://localhost:5173'),
+  API_PUBLIC_ORIGIN: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    originSchema.optional(),
+  ),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   DATABASE_URL: optionalUrl,
   SUPABASE_URL: optionalUrl,
   SUPABASE_ANON_KEY: optionalString,
   SUPABASE_SERVICE_ROLE_KEY: optionalString,
+  AI_SEARCH_ENABLED: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
   AI_GATEWAY_API_KEY: optionalString,
   AI_TEXT_MODEL: z.string().min(1).default('google/gemini-3.8-flash'),
   AI_EMBEDDING_MODEL: z.string().min(1).default('google/gemini-embedding-2'),
@@ -42,6 +50,10 @@ export function loadEnv() {
   config({ path: fileURLToPath(new URL('../../../../.env', import.meta.url)) });
   const result = envSchema.safeParse({
     ...process.env,
+    API_PUBLIC_ORIGIN:
+      process.env.API_PUBLIC_ORIGIN ||
+      process.env.VITE_API_URL ||
+      `http://localhost:${process.env.PORT || '4000'}`,
     SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_PUBLIC_KEY,
     SUPABASE_SERVICE_ROLE_KEY:
       process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY,

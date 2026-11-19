@@ -14,8 +14,8 @@ const db: Database = {
   close: async () => {},
 };
 const apps: ReturnType<typeof buildApp>[] = [];
-function app() {
-  const instance = buildApp(envSchema.parse({ LOG_LEVEL: 'silent' }), {
+function app(config: Record<string, string> = {}) {
+  const instance = buildApp(envSchema.parse({ LOG_LEVEL: 'silent', ...config }), {
     db,
     authenticate: async (header) => {
       if (!header) throw new ApiError(401, 'UNAUTHORIZED', 'authentication_required');
@@ -30,6 +30,32 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 const headers = { authorization: 'Bearer test' };
+describe('AI Search availability', () => {
+  it('disables search and indexing by default even with a Gateway key', async () => {
+    const instance = app({ AI_GATEWAY_API_KEY: 'test-key' });
+    for (const url of ['/v1/search', '/v1/portfolio-images/' + projectId + '/index']) {
+      const response = await instance.inject({ method: 'POST', url, headers });
+      expect(response.statusCode).toBe(404);
+    }
+    const authorize = vi.spyOn(MediaService.prototype, 'authorizeUpload');
+    const response = await instance.inject({
+      method: 'POST',
+      url: '/v1/uploads?bucket=search-uploads',
+      headers,
+    });
+    expect(response.statusCode).toBe(503);
+    expect(authorize).not.toHaveBeenCalled();
+    expect(instance.hasRoute({ method: 'GET', url: '/v1/explore' })).toBe(true);
+    expect(instance.hasRoute({ method: 'POST', url: '/v1/creative-projects/:id/chat' })).toBe(true);
+  });
+  it('registers search and indexing routes when explicitly enabled', async () => {
+    const instance = app({ AI_SEARCH_ENABLED: 'true' });
+    await instance.ready();
+    expect(instance.hasRoute({ method: 'POST', url: '/v1/search' })).toBe(true);
+    expect(instance.hasRoute({ method: 'POST', url: '/v1/portfolio-images/:id/index' })).toBe(true);
+  });
+});
+
 describe('media and project route integration', () => {
   it('publishes multipart upload and project operations', async () => {
     const document = (await app().inject({ url: '/v1/openapi.json' })).json();
@@ -67,6 +93,38 @@ describe('media and project route integration', () => {
       Buffer.from('example-bytes'),
       'image/png',
     );
+  });
+  it.each([
+    { bucket: 'portfolio-images', size: 50 * 1024 * 1024, status: 201 },
+    { bucket: 'room-files', size: 50 * 1024 * 1024 + 1, status: 413 },
+    { bucket: 'deliveries', size: 20 * 1024 * 1024 + 1, status: 413 },
+  ])('returns $status for a $size-byte upload to $bucket', async ({ bucket, size, status }) => {
+    vi.spyOn(MediaService.prototype, 'authorizeUpload').mockResolvedValue(actor);
+    const upload = vi.spyOn(MediaService.prototype, 'upload').mockResolvedValue({
+      storagePath: actor + '/image.webp',
+      mimeType: 'image/webp',
+      width: 100,
+      height: 100,
+    });
+    const start = Buffer.from(
+      '--test\r\nContent-Disposition: form-data; name="file"; filename="image.png"\r\nContent-Type: image/png\r\n\r\n',
+    );
+    const end = Buffer.from('\r\n--test--\r\n');
+    const payload = Buffer.alloc(start.length + size + end.length);
+    start.copy(payload);
+    end.copy(payload, start.length + size);
+    const response = await app().inject({
+      method: 'POST',
+      url: '/v1/uploads?bucket=' + bucket + '&scopeId=' + projectId,
+      headers: { ...headers, 'content-type': 'multipart/form-data; boundary=test' },
+      payload,
+    });
+    expect(response.statusCode).toBe(status);
+    if (status === 201) {
+      expect(upload.mock.calls[0]?.[2].length).toBe(size);
+    } else {
+      expect(upload).not.toHaveBeenCalled();
+    }
   });
   it('rejects an invalid upload bucket before receiving bytes', async () => {
     const authorize = vi.spyOn(MediaService.prototype, 'authorizeUpload');

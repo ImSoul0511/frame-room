@@ -154,9 +154,10 @@ because the current contract's public-route paragraph omits them. Register stati
 
 - Validate decoded bytes, supported MIME, owner-prefixed object path, allowed bucket and
   scope before association. Reject arbitrary remote URLs and cross-user search uploads.
-- Reference upload limits are 20 MB input, 40 million pixels, 1280px preview and 320px
-  thumbnail. Match Storage bucket caps in the Database guide. Retain original delivery
-  constraints and provenance labels.
+- Accept up to 50 MiB of input for portfolio images, brief references and Shoot
+  Room images, and 20 MiB for other uploads. Keep the 40 million pixel limit,
+  1280px previews, 320px thumbnails and Storage bucket caps in the Database
+  guide. Retain original delivery constraints and provenance labels.
 - Stage upload/registration so a DB failure leaves a retryable state and a scoped orphan
   cleanup path. A repeated association cannot duplicate an image.
 - Projects are owner-scoped with explicit version increments. Validate reference/artifact

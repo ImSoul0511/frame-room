@@ -4,24 +4,32 @@ import { post, patch, upload, dateTime } from '../../lib/api';
 import { useTask } from '../../lib/hooks';
 import { useStrings } from '../../lib/i18n';
 import { Action, Area, DateField, Feedback, Field, FilePicker, Form } from '../../components/ui';
+import { MessageAttachment } from './MessageAttachment';
 
 export function RoomPanel({ workspace: w }: { workspace: Workspace }) {
   const t = useStrings();
   const [text, setText] = useState('');
   const [attachment, setAttachment] = useState<string | null>(null);
+  const [submissionId, setSubmissionId] = useState(() => crypto.randomUUID());
   const [title, setTitle] = useState('');
   const [due, setDue] = useState('');
   const [decision, setDecision] = useState('');
   const room = w.room!;
   const closed = room.status === 'closed';
   const send = useTask(async () => {
-    await post(`/v1/shoot-rooms/${room.id}/messages`, { text, storagePath: attachment });
+    await post(
+      `/v1/shoot-rooms/${room.id}/messages`,
+      { text, storagePath: attachment },
+      submissionId,
+    );
     setText('');
     setAttachment(null);
+    setSubmissionId(crypto.randomUUID());
   });
   const file = useTask(async (image: File) => {
     const result = await upload(image, 'room-files', room.id);
     setAttachment(result.storagePath);
+    setSubmissionId(crypto.randomUUID());
   });
   const milestone = useTask(async () => {
     await post(`/v1/shoot-rooms/${room.id}/milestones`, {
@@ -51,34 +59,43 @@ export function RoomPanel({ workspace: w }: { workspace: Workspace }) {
                   ? (t.statuses[m.text as keyof typeof t.statuses] ?? m.text)
                   : m.text}
               </p>
-              {m.url ? (
-                <a href={m.url} target="_blank" rel="noreferrer">
-                  <img src={m.url} alt={m.text || t.project.reference} />
-                </a>
-              ) : null}
+              {m.storagePath ? <MessageAttachment messageId={m.id} /> : null}
             </article>
           ))}
         </div>
         {closed ? (
           <p>{t.booking.closed}</p>
         ) : (
-          <Form onSubmit={() => send.mutate()}>
-            <Area
-              label={t.booking.messages}
-              value={text}
-              onChange={setText}
-              placeholder={t.booking.messagePlaceholder}
-            />
-            <div className="row wrap">
-              <FilePicker
-                label={attachment ? t.explore.referenceReady : t.project.addReference}
-                onFile={(image) => file.mutate(image)}
-                disabled={file.isPending}
+          <Form
+            onSubmit={() => {
+              if (!send.isPending && !file.isPending) send.mutate();
+            }}
+          >
+            <fieldset disabled={send.isPending}>
+              <Area
+                label={t.booking.messages}
+                value={text}
+                onChange={(value) => {
+                  setText(value);
+                  setSubmissionId(crypto.randomUUID());
+                }}
+                placeholder={t.booking.messagePlaceholder}
               />
-              <Action type="submit" pending={send.isPending} disabled={!text.trim() && !attachment}>
-                {t.booking.send}
-              </Action>
-            </div>
+              <div className="row wrap">
+                <FilePicker
+                  label={attachment ? t.explore.referenceReady : t.project.addReference}
+                  onFile={(image) => file.mutate(image)}
+                  disabled={file.isPending}
+                />
+                <Action
+                  type="submit"
+                  pending={send.isPending}
+                  disabled={file.isPending || (!text.trim() && !attachment)}
+                >
+                  {t.booking.send}
+                </Action>
+              </div>
+            </fieldset>
           </Form>
         )}
         <Feedback error={send.error ?? file.error} />
@@ -151,6 +168,7 @@ export function RoomPanel({ workspace: w }: { workspace: Workspace }) {
               <span>
                 {m.title}
                 {m.dueAt ? <small>{dateTime(m.dueAt)}</small> : null}
+                {m.updatedAt ? <small>{dateTime(m.updatedAt)}</small> : null}
               </span>
             </label>
           ))}

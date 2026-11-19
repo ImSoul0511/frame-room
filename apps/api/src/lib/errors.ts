@@ -70,6 +70,10 @@ const KNOWN_CHECK_REASONS = new Set([
   'invalid_transition',
   'active_assignment',
   'last_manager',
+  'completion_hold_unavailable',
+  'portfolio_image_required',
+  'reason_required',
+  'mutual_cancellation_required',
 ]);
 
 /** Postgres codes that map to a stable public error. Unknown codes fall through to 500. */

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { Service } from '@frameroom/shared';
 import type { Portfolio, Image, Studio } from '../lib/types';
 import { api, post, patch, upload, currency } from '../lib/api';
@@ -32,6 +32,7 @@ export function PortfolioPage() {
   const studios = useApi<Studio[]>('/v1/me/studios');
   const services = useApi<Service[]>('/v1/me/services');
   const [open, setOpen] = useState<'portfolio' | 'service' | null>(null);
+  const [editingService, setEditingService] = useState<Service>();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [genre, setGenre] = useState('portrait');
@@ -73,7 +74,13 @@ export function PortfolioPage() {
       </div>
       <div className="section-header">
         <h2>{t.portfolio.services}</h2>
-        <Action secondary onClick={() => setOpen('service')}>
+        <Action
+          secondary
+          onClick={() => {
+            setEditingService(undefined);
+            setOpen('service');
+          }}
+        >
           {t.studio.newService}
         </Action>
       </div>
@@ -83,12 +90,21 @@ export function PortfolioPage() {
           <div className="list-row" key={s.id}>
             <h3>{s.name}</h3>
             <span>{currency(s.price)}</span>
+            <Action
+              secondary
+              onClick={() => {
+                setEditingService(s);
+                setOpen('service');
+              }}
+            >
+              {t.demo.edit}
+            </Action>
           </div>
         ))}
       <AddOnForm services={services.data?.filter((s) => s.ownerType === 'photographer') ?? []} />
       {open === 'service' ? (
         <Modal title={t.studio.newService} onClose={() => setOpen(null)}>
-          <ServiceForm onDone={() => setOpen(null)} />
+          <ServiceForm initial={editingService} onDone={() => setOpen(null)} />
         </Modal>
       ) : open === 'portfolio' ? (
         <Modal title={t.portfolio.new} onClose={() => setOpen(null)}>
@@ -120,8 +136,14 @@ export function PortfolioDetailPage() {
   const t = useStrings();
   const { id = '' } = useParams();
   const { profile } = useAuth();
-  const detail = useApi<{ portfolio: Portfolio; images: Image[] }>(`/v1/portfolios/${id}`);
-  const own = useApi<Portfolio[]>('/v1/me/portfolios', Boolean(profile));
+  const [params] = useSearchParams();
+  const canEdit = Boolean(profile && params.get('edit') === '1');
+  const detail = useApi<{ portfolio: Portfolio; images: Image[] }>(
+    `/v1/${canEdit ? 'me/' : ''}portfolios/${id}`,
+  );
+  const availableTags = useApi<{ id: string; name: string }[]>('/v1/tags', canEdit);
+  const [tagIds, setTagIds] = useState<string[]>([]);
+  const [credits, setCredits] = useState('');
   const [caption, setCaption] = useState('');
   const [provenance, setProvenance] = useState('captured');
   const [status, setStatus] = useState('');
@@ -132,6 +154,8 @@ export function PortfolioDetailPage() {
       storagePath: result.storagePath,
       caption: caption || file.name,
       provenance,
+      tagIds,
+      crewCredits: credits,
     });
   });
   const update = useTask(async () => {
@@ -147,16 +171,14 @@ export function PortfolioDetailPage() {
     await api(`/v1/portfolios/${id}`, { method: 'DELETE' });
     nav('/portfolio');
   });
-  const index = useTask(async (imageId: string) => post(`/v1/portfolio-images/${imageId}/index`));
   if (!detail.data) return <QueryState query={detail} />;
   const p = detail.data.portfolio;
-  const canEdit = own.data?.some((row) => row.id === id);
   return (
     <>
       <PageHeading
         title={p.title}
         subtitle={p.description}
-        action={<ReportButton targetType="portfolio" targetId={id} />}
+        action={canEdit ? null : <ReportButton targetType="portfolio" targetId={id} />}
       />
       {canEdit ? (
         <section className="panel">
@@ -168,6 +190,27 @@ export function PortfolioDetailPage() {
                 <option value="manipulated">{t.project.manipulated}</option>
                 <option value="ai_generated">{t.project.aiGenerated}</option>
               </Select>
+              <Field label={t.demo.credits} value={credits} onChange={setCredits} />
+              <fieldset>
+                <legend>{t.demo.tags}</legend>
+                {availableTags.data?.map((tag) => (
+                  <label key={tag.id} className="checkbox-row">
+                    <input
+                      type="checkbox"
+                      checked={tagIds.includes(tag.id)}
+                      disabled={tagIds.length >= 20 && !tagIds.includes(tag.id)}
+                      onChange={(event) =>
+                        setTagIds(
+                          event.target.checked
+                            ? [...tagIds, tag.id]
+                            : tagIds.filter((entry) => entry !== tag.id),
+                        )
+                      }
+                    />
+                    {tag.name}
+                  </label>
+                ))}
+              </fieldset>
               <FilePicker
                 label={t.portfolio.upload}
                 onFile={(file) => uploadTask.mutate(file)}
@@ -189,7 +232,7 @@ export function PortfolioDetailPage() {
               </div>
             </div>
           </div>
-          <Feedback error={uploadTask.error ?? update.error ?? remove.error ?? index.error} />
+          <Feedback error={uploadTask.error ?? update.error ?? remove.error} />
         </section>
       ) : null}
       <div className="gallery-heading">
@@ -208,15 +251,12 @@ export function PortfolioDetailPage() {
               <figcaption>
                 <Provenance value={i.provenance} />
                 <p>{i.caption}</p>
-                {canEdit ? (
-                  <button
-                    className="text-button"
-                    disabled={index.isPending}
-                    onClick={() => index.mutate(i.id)}
-                  >
-                    ✧ {t.portfolio.index}
-                  </button>
+                {i.crewCredits ? (
+                  <p>
+                    {t.demo.credits} · {i.crewCredits}
+                  </p>
                 ) : null}
+                {i.tags?.length ? <p>{i.tags.map((tag) => tag.name).join(' · ')}</p> : null}
               </figcaption>
             </figure>
           ))}

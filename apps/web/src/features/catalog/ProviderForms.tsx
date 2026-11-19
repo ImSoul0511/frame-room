@@ -1,9 +1,16 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import type { Profile, Service } from '@frameroom/shared';
+import {
+  genres,
+  photographerInputSchema,
+  serviceInputSchema,
+  type OwnPhotographer,
+  type Profile,
+  type Service,
+} from '@frameroom/shared';
 import { patch, post } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
-import { useTask } from '../../lib/hooks';
+import { useApi, useTask } from '../../lib/hooks';
 import { useStrings } from '../../lib/i18n';
 import {
   Action,
@@ -13,45 +20,107 @@ import {
   Form,
   GenreSelect,
   NumberField,
+  QueryState,
   Select,
 } from '../../components/ui';
 
 export function PhotographerForm() {
+  const own = useApi<OwnPhotographer | null>('/v1/photographers/me');
+  if (own.data === undefined) return <QueryState query={own} />;
+  return <PhotographerEditor initial={own.data} />;
+}
+
+function PhotographerEditor({ initial }: { initial: OwnPhotographer | null }) {
   const t = useStrings();
   const { profile } = useAuth();
   const client = useQueryClient();
-  const [name, setName] = useState(profile?.displayName ?? '');
-  const [bio, setBio] = useState('');
-  const [city, setCity] = useState('');
-  const [district, setDistrict] = useState('');
-  const [genre, setGenre] = useState('portrait');
-  const [styles, setStyles] = useState('');
+  const [name, setName] = useState(initial?.displayName ?? profile?.displayName ?? '');
+  const [bio, setBio] = useState(initial?.bio ?? '');
+  const [city, setCity] = useState(initial?.city ?? '');
+  const [district, setDistrict] = useState(initial?.district ?? '');
+  const [selectedGenres, setGenres] = useState<OwnPhotographer['genres']>(
+    initial?.genres ?? ['portrait'],
+  );
+  const [styles, setStyles] = useState(initial?.styles.join(', ') ?? '');
+  const [contact, setContact] = useState(initial?.contactEmail ?? '');
+  const [roles, setRoles] = useState(initial?.professionalRoles ?? []);
   const task = useTask(async () => {
-    await post('/v1/photographers/me', {
+    const input = photographerInputSchema.parse({
       displayName: name,
       bio,
       city,
       district,
-      genres: [genre],
+      genres: selectedGenres,
+      contactEmail: contact || null,
+      professionalRoles: roles,
       styles: styles
         .split(',')
         .map((s) => s.trim())
         .filter(Boolean),
     });
+    if (initial) await patch('/v1/photographers/me', input);
+    else await post('/v1/photographers/me', input);
     await client.invalidateQueries({ queryKey: ['profile'] });
   });
   return (
     <Form onSubmit={() => task.mutate()}>
-      <Field label={t.displayName} value={name} onChange={setName} />
+      <Field label={t.displayName} value={name} onChange={setName} required />
       <Area label={t.bio} value={bio} onChange={setBio} />
       <div className="two-col">
-        <Field label={t.city} value={city} onChange={setCity} />
+        <Field label={t.city} value={city} onChange={setCity} required />
         <Field label={t.district} value={district} onChange={setDistrict} />
       </div>
-      <GenreSelect value={genre} onChange={setGenre} />
+      <Field
+        label={t.demo.contactInfo}
+        type="email"
+        value={contact}
+        onChange={setContact}
+        required
+      />
+      <fieldset>
+        <legend>{t.portfolio.genre}</legend>
+        {genres.map((genre) => (
+          <label className="checkbox-row" key={genre}>
+            <input
+              type="checkbox"
+              checked={selectedGenres.includes(genre)}
+              disabled={!selectedGenres.includes(genre) && selectedGenres.length >= 5}
+              onChange={(event) =>
+                setGenres(
+                  event.target.checked
+                    ? [...selectedGenres, genre]
+                    : selectedGenres.filter((item) => item !== genre),
+                )
+              }
+            />
+            {t.genreLabels[genre]}
+          </label>
+        ))}
+      </fieldset>
+      <fieldset>
+        <legend>{t.demo.professionalRoles}</legend>
+        {(['photographer', 'retoucher', 'art_director'] as const).map((role) => (
+          <label className="checkbox-row" key={role}>
+            <input
+              type="checkbox"
+              checked={roles.includes(role)}
+              onChange={(event) =>
+                setRoles(
+                  event.target.checked ? [...roles, role] : roles.filter((item) => item !== role),
+                )
+              }
+            />
+            {role === 'art_director'
+              ? t.demo.artDirector
+              : role === 'retoucher'
+                ? t.demo.retoucher
+                : t.photographer}
+          </label>
+        ))}
+      </fieldset>
       <Field label={t.portfolio.styles} value={styles} onChange={setStyles} />
-      <Feedback error={task.error} />
-      <Action type="submit" pending={task.isPending}>
+      <Feedback error={task.error} success={task.isSuccess ? t.saved : null} />
+      <Action type="submit" pending={task.isPending} disabled={!selectedGenres.length}>
         {t.save}
       </Action>
     </Form>
@@ -75,8 +144,12 @@ export function ServiceForm({
   const [photos, setPhotos] = useState(initial?.photoCount ?? 20);
   const [retouched, setRetouched] = useState(initial?.retouchedCount ?? 5);
   const [active, setActive] = useState(initial?.isActive ?? true);
+  const [quota, setQuota] = useState(
+    initial?.selectionQuota ?? Math.max(1, Math.min(200, initial?.retouchedCount ?? 5)),
+  );
+  const [revisions, setRevisions] = useState(initial?.revisionLimit ?? 2);
   const task = useTask(async () => {
-    const input = {
+    const input = serviceInputSchema.parse({
       name,
       description,
       genre,
@@ -85,7 +158,9 @@ export function ServiceForm({
       photoCount: photos,
       retouchedCount: retouched,
       isActive: active,
-    };
+      selectionQuota: quota,
+      revisionLimit: revisions,
+    });
     if (initial) await patch(`/v1/services/${initial.id}`, input);
     else await post(studioId ? `/v1/studios/${studioId}/services` : '/v1/services', input);
     onDone?.();
@@ -100,6 +175,8 @@ export function ServiceForm({
         <NumberField label={t.studio.duration} value={duration} onChange={setDuration} min={15} />
         <NumberField label={t.studio.photos} value={photos} onChange={setPhotos} />
         <NumberField label={t.studio.retouched} value={retouched} onChange={setRetouched} />
+        <NumberField label={t.demo.quota} value={quota} onChange={setQuota} min={1} />
+        <NumberField label={t.demo.revisions} value={revisions} onChange={setRevisions} />
       </div>
       <Select
         label={t.portfolio.status}

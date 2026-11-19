@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { safeReturnPath, authErrorReason } from './auth-navigation';
+import { accountDestination, safeReturnPath, authErrorReason } from './auth-navigation';
 
 describe('authentication return navigation', () => {
   it('retains an intended provider route and query after sign-in', () => {
@@ -23,8 +23,19 @@ describe('authentication return navigation', () => {
     '/auth/callback',
     '/onboarding?next=/auth',
     '/reset-password',
+    '/projects/../auth#login',
+    '/%61uth',
   ])('avoids redirecting back into authentication: %s', (destination) => {
     expect(safeReturnPath(destination)).toBe('/explore');
+  });
+  it.each([
+    [[], '/projects'],
+    [['client'], '/projects'],
+    [['client', 'photographer'], '/bookings'],
+    [['client', 'photographer', 'studio_manager'], '/studio'],
+    [['client', 'system_admin'], '/admin'],
+  ] as const)('uses derived account roles %j for the default destination', (roles, destination) => {
+    expect(safeReturnPath(null, accountDestination(roles))).toBe(destination);
   });
   it('keeps authentication errors generic and distinguishes confirmation and throttling', () => {
     expect(authErrorReason('invalid_credentials')).toBe('auth_invalid_credentials');

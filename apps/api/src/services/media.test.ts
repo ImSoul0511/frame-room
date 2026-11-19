@@ -27,17 +27,19 @@ describe('media boundary', () => {
     ).rejects.toMatchObject({ status: 403 });
     expect(download).not.toHaveBeenCalled();
   });
-  it('normalizes decoded pixels and produces a paired WebP thumbnail', async () => {
+  it('normalizes a reference input over 20 MiB and produces a paired WebP thumbnail', async () => {
     const input = await sharp({
-      create: { width: 1800, height: 900, channels: 3, background: 'white' },
+      create: { width: 4000, height: 2000, channels: 3, background: 'white' },
     })
-      .png()
+      .png({ compressionLevel: 0 })
       .toBuffer();
+    expect(input.length).toBeGreaterThan(20 * 1024 * 1024);
     const put = vi.spyOn(media, 'put').mockResolvedValue();
     const result = await media.upload('brief-references', 'user', input, 'image/png');
     expect(result.width).toBe(1280);
     expect(result.height).toBe(640);
     expect(put).toHaveBeenCalledTimes(2);
+    expect(put.mock.calls.every((call) => call[2].length <= 2 * 1024 * 1024)).toBe(true);
     expect(put.mock.calls[1][1]).toBe(thumbnailPath(result.storagePath));
     const main = await sharp(put.mock.calls[0][2]).metadata();
     const thumb = await sharp(put.mock.calls[1][2]).metadata();

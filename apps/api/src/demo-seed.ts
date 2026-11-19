@@ -167,7 +167,7 @@ try {
       return (
         existing ??
         tx.one<{ id: string }>(
-          "insert into portfolios(owner_type,photographer_id,title,description,genre,status,published_at) values('photographer',$1,$2,'Licensed educational reference images; this provider is fictional.',$3,'published',now()) returning id",
+          "insert into portfolios(owner_type,photographer_id,title,description,genre,status) values('photographer',$1,$2,'Licensed educational reference images; this provider is fictional.',$3,'draft') returning id",
           [photographer.id, `${person.name} — Selected references`, person.genre],
         )
       );
@@ -214,6 +214,12 @@ try {
         ),
       );
     }
+    await db.run(uid, (tx) =>
+      tx.execute(
+        "update portfolios set status='published',published_at=now() where id=$1 and status='draft'",
+        [portfolio.id],
+      ),
+    );
   }
   await db.run(null, (tx) =>
     tx.execute(
@@ -229,7 +235,7 @@ try {
     const p =
       existing ??
       (await tx.one<{ id: string }>(
-        "insert into portfolios(owner_type,studio_id,title,description,genre,status,published_at) values('studio',$1,'Still Studio / Visual references','Licensed educational references, not work by this fictional studio.','portrait','published',now()) returning id",
+        "insert into portfolios(owner_type,studio_id,title,description,genre,status) values('studio',$1,'Still Studio / Visual references','Licensed educational references, not work by this fictional studio.','portrait','draft') returning id",
         [studio.id],
       ));
     await tx.execute(
@@ -275,6 +281,12 @@ try {
       );
     });
   }
+  await db.run(managerId, (tx) =>
+    tx.execute(
+      "update portfolios set status='published',published_at=now() where id=$1 and status='draft'",
+      [studioPortfolio.id],
+    ),
+  );
   process.stdout.write(
     'Local demo accounts, studio, services, resources and licensed reference images seeded. No AI calls were made.\n',
   );

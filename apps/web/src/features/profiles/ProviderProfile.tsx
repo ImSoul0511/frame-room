@@ -23,9 +23,11 @@ export function ProviderProfile({
   const demo = useDemo();
   const { provider, services } = detail;
   const portfolios = detail.portfolios.filter(
-    (value) => !demo.state.hiddenTargets.includes(value.id),
+    (value) => demo.choice === 'account' || !demo.state.hiddenTargets.includes(value.id),
   );
-  const reviews = detail.reviews.filter((value) => !demo.state.hiddenTargets.includes(value.id));
+  const reviews = detail.reviews.filter(
+    (value) => demo.choice === 'account' || !demo.state.hiddenTargets.includes(value.id),
+  );
   const [tab, setTab] = useState('works');
   const cover = portfolios.find((portfolio) => portfolio.coverUrl)?.coverUrl;
   return (

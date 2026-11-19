@@ -199,6 +199,22 @@ export async function findProviderById(
   return row ? coerceProvider(row) : undefined;
 }
 
+/** Up to two matches distinguish an exact public name match from an ambiguous name. */
+export async function findPhotographersByDisplayName(
+  tx: Transaction,
+  displayName: string,
+): Promise<Provider[]> {
+  const rows = await tx.rows<Provider>(
+    `select p.id, p.type, p.display_name, p.bio, p.city, p.district,
+            p.genres, p.styles, p.price_from, p.rating_avg, p.review_count
+     from providers p
+     where p.type = 'photographer' and p.display_name = $1 and ${VISIBLE_PROVIDER_SQL}
+     limit 2`,
+    [displayName],
+  );
+  return rows.map(coerceProvider);
+}
+
 /** Lists active, non-deleted services offered by a provider. */
 export async function listActiveServicesByProvider(
   tx: Transaction,
@@ -208,7 +224,7 @@ export async function listActiveServicesByProvider(
   const column = type === 'photographer' ? 'photographer_id' : 'studio_id';
   const rows = await tx.rows<Service>(
     `select id, name, description, genre, duration_minutes, price,
-            photo_count, retouched_count, is_active,
+            photo_count, retouched_count, is_active, selection_quota, revision_limit,
             owner_type, photographer_id, studio_id
      from services
      where ${column} = $1 and is_active = true and deleted_at is null
@@ -294,7 +310,7 @@ export async function isStudioManager(
 export async function listStudiosForUser(tx: Transaction, userId: string): Promise<MyStudio[]> {
   return tx.rows<MyStudio>(
     `select s.id, s.name, s.description, s.city, s.district, s.address,
-            s.genres, s.created_by, s.is_hidden, s.created_at, s.updated_at,
+            s.genres, s.created_by, s.is_hidden, s.created_at, s.updated_at, s.contact_email,
             m.role
      from studios s
      join studio_members m on m.studio_id = s.id
@@ -311,10 +327,10 @@ export async function insertStudio(
   input: StudioInput,
 ): Promise<Studio> {
   return tx.one<Studio>(
-    `insert into studios (name, description, city, district, address, genres, created_by)
-     values ($1, $2, $3, $4, $5, $6::genre[], $7)
+    `insert into studios (name, description, city, district, address, genres, created_by, contact_email)
+     values ($1, $2, $3, $4, $5, $6::genre[], $7, $8)
      returning id, name, description, city, district, address,
-               genres, created_by, is_hidden, created_at, updated_at`,
+               genres, created_by, is_hidden, created_at, updated_at, contact_email`,
     [
       input.name,
       input.description,
@@ -323,6 +339,7 @@ export async function insertStudio(
       input.address,
       input.genres,
       userId,
+      input.contactEmail ?? null,
     ],
   );
 }
@@ -351,10 +368,10 @@ export async function updateStudio(
   return tx.one<Studio>(
     `update studios
      set name = $2, description = $3, city = $4, district = $5,
-         address = $6, genres = $7::genre[], updated_at = now()
+         address = $6, genres = $7::genre[], contact_email = coalesce($8, contact_email), updated_at = now()
      where id = $1 and deleted_at is null
      returning id, name, description, city, district, address,
-               genres, created_by, is_hidden, created_at, updated_at`,
+               genres, created_by, is_hidden, created_at, updated_at, contact_email`,
     [
       studioId,
       input.name,
@@ -363,6 +380,7 @@ export async function updateStudio(
       input.district,
       input.address,
       input.genres,
+      input.contactEmail ?? null,
     ],
   );
 }
@@ -409,7 +427,7 @@ export async function findPhotographerIdByUser(
 export async function listOwnedServices(tx: Transaction, userId: string): Promise<OwnedService[]> {
   const rows = await tx.rows<OwnedService>(
     `select s.id, s.name, s.description, s.genre, s.duration_minutes, s.price,
-            s.photo_count, s.retouched_count, s.is_active,
+            s.photo_count, s.retouched_count, s.is_active, s.selection_quota, s.revision_limit,
             s.owner_type, s.photographer_id, s.studio_id,
             s.created_at, s.updated_at
      from services s
@@ -438,11 +456,11 @@ export async function insertPersonalService(
   const row = await tx.one<OwnedService>(
     `insert into services (
        owner_type, photographer_id, studio_id, name, description, genre,
-       duration_minutes, price, photo_count, retouched_count, is_active
+       duration_minutes, price, photo_count, retouched_count, is_active, selection_quota, revision_limit
      )
-     values ('photographer', $1, null, $2, $3, $4::genre, $5, $6, $7, $8, $9)
+     values ('photographer', $1, null, $2, $3, $4::genre, $5, $6, $7, $8, $9, $10, $11)
      returning id, name, description, genre, duration_minutes, price,
-               photo_count, retouched_count, is_active,
+               photo_count, retouched_count, is_active, selection_quota, revision_limit,
                owner_type, photographer_id, studio_id,
                created_at, updated_at`,
     [
@@ -455,6 +473,8 @@ export async function insertPersonalService(
       input.photoCount,
       input.retouchedCount,
       input.isActive,
+      input.selectionQuota ?? null,
+      input.revisionLimit ?? null,
     ],
   );
   return coerceOwnedService(row);
@@ -469,11 +489,11 @@ export async function insertStudioService(
   const row = await tx.one<OwnedService>(
     `insert into services (
        owner_type, photographer_id, studio_id, name, description, genre,
-       duration_minutes, price, photo_count, retouched_count, is_active
+       duration_minutes, price, photo_count, retouched_count, is_active, selection_quota, revision_limit
      )
-     values ('studio', null, $1, $2, $3, $4::genre, $5, $6, $7, $8, $9)
+     values ('studio', null, $1, $2, $3, $4::genre, $5, $6, $7, $8, $9, $10, $11)
      returning id, name, description, genre, duration_minutes, price,
-               photo_count, retouched_count, is_active,
+               photo_count, retouched_count, is_active, selection_quota, revision_limit,
                owner_type, photographer_id, studio_id,
                created_at, updated_at`,
     [
@@ -486,6 +506,8 @@ export async function insertStudioService(
       input.photoCount,
       input.retouchedCount,
       input.isActive,
+      input.selectionQuota ?? null,
+      input.revisionLimit ?? null,
     ],
   );
   return coerceOwnedService(row);
@@ -512,10 +534,11 @@ export async function updateService(
     `update services
      set name = $2, description = $3, genre = $4::genre, duration_minutes = $5,
          price = $6, photo_count = $7, retouched_count = $8, is_active = $9,
+         selection_quota = coalesce($10, selection_quota), revision_limit = coalesce($11, revision_limit),
          updated_at = now()
      where id = $1 and deleted_at is null
      returning id, name, description, genre, duration_minutes, price,
-               photo_count, retouched_count, is_active,
+               photo_count, retouched_count, is_active, selection_quota, revision_limit,
                owner_type, photographer_id, studio_id,
                created_at, updated_at`,
     [
@@ -528,6 +551,8 @@ export async function updateService(
       input.photoCount,
       input.retouchedCount,
       input.isActive,
+      input.selectionQuota ?? null,
+      input.revisionLimit ?? null,
     ],
   );
   return coerceOwnedService(row);
@@ -677,7 +702,7 @@ export async function listPortfolioImages(
 ): Promise<PortfolioImageRow[]> {
   const rows = await tx.rows<PortfolioImageRow>(
     `select id, portfolio_id, storage_path, width, height, caption, sort_order,
-            provenance, source, license_note, is_hidden, created_at
+            provenance, source, license_note, crew_credits, is_hidden, created_at
      from portfolio_images
      where portfolio_id = $1 and is_hidden = false
      order by sort_order asc, created_at asc`,
@@ -816,11 +841,11 @@ export async function insertPortfolioImage(
   const row = await tx.one<PortfolioImageRow>(
     `insert into portfolio_images (
        portfolio_id, storage_path, width, height, caption, sort_order,
-       provenance, source, license_note
+       provenance, source, license_note, crew_credits
      )
-     values ($1, $2, $3, $4, $5, $6, $7::provenance, $8, $9)
+     values ($1, $2, $3, $4, $5, $6, $7::provenance, $8, $9, $10)
      returning id, portfolio_id, storage_path, width, height, caption, sort_order,
-               provenance, source, license_note, is_hidden, created_at`,
+               provenance, source, license_note, crew_credits, is_hidden, created_at`,
     [
       portfolioId,
       input.storagePath,
@@ -831,6 +856,7 @@ export async function insertPortfolioImage(
       input.provenance,
       input.source ?? null,
       input.licenseNote ?? null,
+      input.crewCredits ?? '',
     ],
   );
   return {
@@ -919,7 +945,7 @@ export async function findPhotographerUserId(
   photographerId: string,
 ): Promise<string | undefined> {
   const row = await tx.optional<{ userId: string }>(
-    'select user_id from photographers where id = $1',
+    'select user_id from photographers where id = $1 and not is_hidden',
     [photographerId],
   );
   return row?.userId;

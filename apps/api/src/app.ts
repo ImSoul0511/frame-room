@@ -14,6 +14,7 @@ import { profileModule } from './routes/profile.js';
 import { systemModule } from './routes/system.js';
 import { projectsModule } from './routes/projects.js';
 import { uploadsModule } from './routes/uploads.js';
+import { defaultUploadInputLimit } from './services/media.js';
 
 export interface BuildAppOptions {
   /** Replace the Postgres adapter, mainly in tests. */
@@ -45,7 +46,7 @@ export function buildApp(env: ApiEnv, options: BuildAppOptions = {}) {
   });
   registerErrorHandling(app);
   void app.register(multipart, {
-    limits: { fileSize: 20 * 1024 * 1024, files: 1, fields: 0, parts: 1 },
+    limits: { fileSize: defaultUploadInputLimit, files: 1, fields: 0, parts: 1 },
   });
   void app.register(cors, {
     origin: (origin, callback) => callback(null, origin === env.WEB_ORIGIN),

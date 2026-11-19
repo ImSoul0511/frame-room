@@ -63,6 +63,7 @@ export function Field({
   placeholder,
   autoComplete,
   description,
+  error,
 }: {
   label: string;
   value: string;
@@ -72,6 +73,7 @@ export function Field({
   placeholder?: string;
   autoComplete?: string;
   description?: string;
+  error?: string;
 }) {
   return (
     <TextInput
@@ -82,6 +84,7 @@ export function Field({
       isRequired={required}
       placeholder={placeholder}
       description={description}
+      status={error ? { type: 'error', message: error } : undefined}
       autoComplete={
         autoComplete ??
         (type === 'email' ? 'email' : type === 'password' ? 'current-password' : undefined)
@@ -109,20 +112,34 @@ export function Select({
   onChange,
   children,
   required = false,
+  error,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   children: ReactNode;
   required?: boolean;
+  error?: string;
 }) {
   const id = useId();
   return (
     <div className="native-field">
       <label htmlFor={id}>{label}</label>
-      <select id={id} value={value} onChange={(e) => onChange(e.target.value)} required={required}>
+      <select
+        id={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        required={required}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? `${id}-error` : undefined}
+      >
         {children}
       </select>
+      {error ? (
+        <small id={`${id}-error`} role="alert">
+          {error}
+        </small>
+      ) : null}
     </div>
   );
 }
@@ -131,11 +148,13 @@ export function NumberField({
   value,
   onChange,
   min = 0,
+  max,
 }: {
   label: string;
   value: number;
   onChange: (v: number) => void;
   min?: number;
+  max?: number;
 }) {
   const id = useId();
   return (
@@ -145,6 +164,7 @@ export function NumberField({
         id={id}
         type="number"
         min={min}
+        max={max}
         value={value}
         onChange={(e) => onChange(e.target.valueAsNumber || 0)}
       />
@@ -156,11 +176,13 @@ export function DateField({
   value,
   onChange,
   required = true,
+  error,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   required?: boolean;
+  error?: string;
 }) {
   const id = useId();
   return (
@@ -172,7 +194,14 @@ export function DateField({
         required={required}
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? `${id}-error` : undefined}
       />
+      {error ? (
+        <small id={`${id}-error`} role="alert">
+          {error}
+        </small>
+      ) : null}
     </div>
   );
 }

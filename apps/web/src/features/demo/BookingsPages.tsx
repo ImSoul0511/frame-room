@@ -38,6 +38,11 @@ export function WorkspaceBookingsPage() {
           <p className="eyebrow">{t.demo[demo.role]}</p>
           <h1>{t.demo.bookings}</h1>
         </div>
+        {demo.choice === 'account' ? (
+          <Link className="button-link" to="/bookings/live">
+            {t.booking.liveBookings}
+          </Link>
+        ) : null}
         {demo.role === 'client' ? (
           <Link className="button-link dark" to="/explore">
             {t.demo.newBooking}

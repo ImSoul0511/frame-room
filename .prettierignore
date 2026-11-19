@@ -5,6 +5,8 @@ build/
 coverage/
 .artifacts/
 report/
+# Supplied Word export with original section numbering and embedded images.
+rup_ucspec-v2.docx.md
 pnpm-lock.yaml
 *.pdf
 supabase/.temp/

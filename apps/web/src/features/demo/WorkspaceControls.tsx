@@ -15,10 +15,12 @@ export function WorkspaceControls() {
   ).length;
   return (
     <div className="workspace-controls">
-      <span className="workspace-demo-label">
-        {t.demo.demo}
-        <small>{t.demo.demoNote}</small>
-      </span>
+      {demo.choice !== 'account' ? (
+        <span className="workspace-demo-label">
+          {t.demo.demo}
+          <small>{t.demo.demoNote}</small>
+        </span>
+      ) : null}
       <label className="workspace-role-picker">
         <span>{t.demo.role}</span>
         <select
@@ -49,7 +51,9 @@ export function WorkspaceControls() {
         <Link
           className="workspace-notification-link"
           to="/notifications"
-          aria-label={`${t.demo.notifications}: ${unread}`}
+          aria-label={
+            demo.choice === 'account' ? t.demo.notifications : `${t.demo.notifications}: ${unread}`
+          }
         >
           <svg
             width="20"
@@ -62,12 +66,14 @@ export function WorkspaceControls() {
           >
             <path d="M5 17h14l-2-3V9A5 5 0 0 0 7 9v5l-2 3ZM10 21h4" />
           </svg>
-          {unread ? <span>{unread}</span> : null}
+          {demo.choice !== 'account' && unread ? <span>{unread}</span> : null}
         </Link>
       ) : null}
-      <button className="text-button workspace-reset" onClick={() => setReset(true)}>
-        {t.demo.reset}
-      </button>
+      {demo.choice !== 'account' ? (
+        <button className="text-button workspace-reset" onClick={() => setReset(true)}>
+          {t.demo.reset}
+        </button>
+      ) : null}
       {reset ? (
         <Modal title={t.demo.reset} onClose={() => setReset(false)}>
           <p>{t.demo.resetNote}</p>

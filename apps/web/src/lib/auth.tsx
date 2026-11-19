@@ -13,6 +13,7 @@ type AuthState = {
   loading: boolean;
   profileLoading: boolean;
   profileError: Error | null;
+  onboardingRequired: boolean;
 };
 const AuthContext = hotSingleton(import.meta.hot?.data, 'auth-context', () =>
   createContext<AuthState>({
@@ -21,6 +22,7 @@ const AuthContext = hotSingleton(import.meta.hot?.data, 'auth-context', () =>
     loading: true,
     profileLoading: false,
     profileError: null,
+    onboardingRequired: false,
   }),
 );
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -52,6 +54,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
         profileLoading: profile.isPending && Boolean(session),
         profileError: profile.error,
+        onboardingRequired:
+          (profile.error instanceof RequestError && profile.error.reason === 'profile_required') ||
+          Boolean(
+            profile.data &&
+            session?.user.user_metadata.registration_role === 'photographer' &&
+            !profile.data.roles.includes('photographer'),
+          ),
       }}
     >
       {children}
@@ -59,7 +68,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 export const useAuth = () => useContext(AuthContext);
-export function RequireAuth({ children }: { children: ReactNode }) {
+export function RequireAuth({
+  children,
+  roles,
+}: {
+  children: ReactNode;
+  roles?: readonly string[];
+}) {
   const strings = useStrings();
 
   const auth = useAuth();
@@ -72,7 +87,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
         replace
       />
     );
-  if (auth.profileError instanceof RequestError && auth.profileError.reason === 'profile_required')
+  if (auth.onboardingRequired)
     return (
       <Navigate
         to={`/onboarding?next=${encodeURIComponent(location.pathname + location.search)}`}
@@ -80,5 +95,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
       />
     );
   if (auth.profileError) return <div role="alert">{auth.profileError.message}</div>;
+  if (roles && !roles.some((role) => auth.profile?.roles.includes(role)))
+    return <p role="alert">{strings.errors.forbidden}</p>;
   return children;
 }

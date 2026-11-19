@@ -24,9 +24,20 @@ export interface Image {
   storagePath: string;
   url: string;
   caption: string;
+  crewCredits?: string;
+  tags?: { id: string; name: string }[];
   provenance: 'captured' | 'manipulated' | 'ai_generated';
 }
+export interface PhotoFeedback {
+  id: string;
+  imageId: string;
+  round: number;
+  note: string;
+  x: number | null;
+  y: number | null;
+}
 export interface Brief {
+  status?: 'open' | 'closed';
   id: string;
   version: number;
   content: BriefContent;
@@ -38,7 +49,7 @@ export interface Message {
   senderId: string | null;
   text: string;
   type: 'text' | 'image' | 'system';
-  url: string | null;
+  storagePath: string | null;
   createdAt: string;
 }
 export interface Milestone {
@@ -46,6 +57,8 @@ export interface Milestone {
   title: string;
   dueAt: string | null;
   status: 'todo' | 'done';
+  updatedAt?: string | null;
+  updatedBy?: string | null;
 }
 export interface Decision {
   id: string;
@@ -82,15 +95,25 @@ export interface Workspace {
   canManage: boolean;
   isClient: boolean;
   briefs: Brief[];
+  cancellation: { id: string; isClientProposal: boolean; reason: string } | null;
   messages: Message[];
   decisions: Decision[];
   milestones: Milestone[];
-  gallery: { id: string; status: string; round: number } | null;
+  gallery: { id: string; status: string; round: number; revisionRequestedAt: string | null } | null;
+  proofing: { quota: number; revisions: number };
+  photoFeedback: PhotoFeedback[];
   images: Image[];
   selections: { imageId: string }[];
   deliveries: { id: string; fileName: string; url: string }[];
   resources: { resourceId: string; name: string }[];
-  review: { rating: number; comment: string } | null;
+  review: {
+    rating: number;
+    comment: string;
+    isHidden?: boolean;
+    moderationReason?: string;
+    reassessmentRequestedAt?: string;
+    deletedAt?: string;
+  } | null;
 }
 export interface ProviderDetail {
   provider: Provider;

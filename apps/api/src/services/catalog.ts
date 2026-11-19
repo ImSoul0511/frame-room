@@ -17,6 +17,7 @@ import type {
   Provider,
   ProviderDetail,
   ProviderListQuery,
+  ProviderLookup,
   PublicPortfolio,
   ServiceAddOn,
   ServiceAddOnInput,
@@ -31,13 +32,16 @@ import type {
   Tag,
 } from '../schemas/catalog.js';
 
-/** Builds a public URL for the `portfolio-images` bucket when SUPABASE_URL is configured. */
+/** Public media routes recheck current portfolio visibility on every request. */
 export function buildPublicPortfolioImageUrl(
   supabaseUrl: string | undefined,
   storagePath: string | null | undefined,
+  apiOrigin?: string,
 ): string | null {
   if (!storagePath) return null;
   if (/^https?:\/\//i.test(storagePath)) return storagePath;
+  if (apiOrigin)
+    return `${apiOrigin}/v1/portfolio-media?${new URLSearchParams({ path: storagePath })}`;
   if (!supabaseUrl) return storagePath;
   const base = supabaseUrl.replace(/\/+$/, '');
   const path = storagePath.replace(/^\/+/, '');
@@ -49,11 +53,12 @@ export async function exploreProviders(
   tx: Transaction,
   query: ExploreQuery,
   supabaseUrl?: string,
+  apiOrigin?: string,
 ): Promise<ExploreProvider[]> {
   const rows = await repo.discoverProviders(tx, query);
   return rows.map((row) => ({
     ...row,
-    coverUrl: buildPublicPortfolioImageUrl(supabaseUrl, row.coverUrl),
+    coverUrl: buildPublicPortfolioImageUrl(supabaseUrl, row.coverUrl, apiOrigin),
   }));
 }
 
@@ -70,14 +75,19 @@ export async function listProviders(
 export async function getProviderDetail(
   tx: Transaction,
   type: 'photographer' | 'studio',
-  id: string,
+  lookup: ProviderLookup,
   supabaseUrl?: string,
+  apiOrigin?: string,
 ): Promise<ProviderDetail> {
-  const provider = await repo.findProviderById(tx, type, id);
+  const provider =
+    'id' in lookup
+      ? await repo.findProviderById(tx, type, lookup.id)
+      : singleDisplayNameMatch(await repo.findPhotographersByDisplayName(tx, lookup.displayName));
   if (!provider) {
     throw new ApiError(404, 'NOT_FOUND', `${type}_not_found`);
   }
 
+  const { id } = provider;
   const [services, portfolios, reviews] = await Promise.all([
     repo.listActiveServicesByProvider(tx, type, id),
     repo.listPublishedPortfoliosByProvider(tx, type, id),
@@ -89,10 +99,16 @@ export async function getProviderDetail(
     services,
     portfolios: portfolios.map((pf) => ({
       ...pf,
-      coverUrl: buildPublicPortfolioImageUrl(supabaseUrl, pf.coverUrl),
+      coverUrl: buildPublicPortfolioImageUrl(supabaseUrl, pf.coverUrl, apiOrigin),
     })),
     reviews,
   };
+}
+
+export function singleDisplayNameMatch<T>(matches: T[]): T | undefined {
+  if (matches.length > 1)
+    throw new ApiError(409, 'CONFLICT', 'photographer_display_name_ambiguous');
+  return matches[0];
 }
 
 /** Lists all taxonomy tags ordered by kind and name. */
@@ -256,11 +272,12 @@ export async function listPublicPortfolios(
   tx: Transaction,
   query: PortfolioListQuery,
   supabaseUrl?: string,
+  apiOrigin?: string,
 ): Promise<PublicPortfolio[]> {
   const rows = await repo.listPublicPortfolios(tx, query);
   return rows.map((row) => ({
     ...row,
-    coverUrl: buildPublicPortfolioImageUrl(supabaseUrl, row.coverUrl),
+    coverUrl: buildPublicPortfolioImageUrl(supabaseUrl, row.coverUrl, apiOrigin),
   }));
 }
 
@@ -269,13 +286,20 @@ export async function getPortfolioDetail(
   tx: Transaction,
   portfolioId: string,
   supabaseUrl?: string,
+  options: {
+    ownerId?: string;
+    apiOrigin?: string;
+    ownerUrl?: (path: string) => Promise<string>;
+  } = {},
 ): Promise<PortfolioDetail> {
+  const { ownerId, apiOrigin, ownerUrl } = options;
   const portfolio = await repo.findPortfolioById(tx, portfolioId);
-  if (!portfolio || portfolio.status !== 'published') {
+  if (!portfolio || (!ownerId && portfolio.status !== 'published')) {
     throw new ApiError(404, 'NOT_FOUND', 'portfolio_not_found');
   }
 
-  const visible = await repo.isPortfolioProviderVisible(tx, portfolio);
+  if (ownerId) await assertProviderOwnership(tx, ownerId, portfolio);
+  const visible = ownerId || (await repo.isPortfolioProviderVisible(tx, portfolio));
   if (!visible) {
     throw new ApiError(404, 'NOT_FOUND', 'portfolio_not_found');
   }
@@ -286,11 +310,16 @@ export async function getPortfolioDetail(
     imageRows.map((img) => img.id),
   );
 
-  const images: PortfolioImage[] = imageRows.map((img) => ({
-    ...img,
-    url: buildPublicPortfolioImageUrl(supabaseUrl, img.storagePath),
-    tags: tagsByImage.get(img.id) ?? [],
-  }));
+  const images: PortfolioImage[] = await Promise.all(
+    imageRows.map(async (img) => ({
+      ...img,
+      url:
+        ownerUrl && !/^https?:\/\//i.test(img.storagePath)
+          ? await ownerUrl(img.storagePath)
+          : buildPublicPortfolioImageUrl(supabaseUrl, img.storagePath, apiOrigin),
+      tags: tagsByImage.get(img.id) ?? [],
+    })),
+  );
 
   return {
     portfolio,
@@ -331,6 +360,7 @@ export async function updatePortfolio(
     throw new ApiError(404, 'NOT_FOUND', 'portfolio_not_found');
   }
   await assertProviderOwnership(tx, userId, existing);
+  if (existing.status === 'hidden') throw new ApiError(409, 'CONFLICT', 'portfolio_moderated');
   return repo.updatePortfolio(tx, portfolioId, input);
 }
 

@@ -3,7 +3,7 @@ import { idSchema } from '@frameroom/shared';
 import { authenticateVerified } from '../lib/auth.js';
 import { ApiError, requireCondition } from '../lib/errors.js';
 import type { ApiModule } from '../plugins/route.js';
-import { MediaService, uploadBuckets } from '../services/media.js';
+import { MediaService, uploadBuckets, uploadInputLimit } from '../services/media.js';
 
 const querySchema = z.object({ bucket: z.enum(uploadBuckets), scopeId: idSchema.optional() });
 const outputSchema = z.object({
@@ -19,7 +19,8 @@ export const uploadsModule: ApiModule = {
     deps.openApi.add({
       method: 'POST',
       url: '/v1/uploads',
-      summary: 'Upload one scoped image as multipart/form-data; 20 MiB / 40 million pixels.',
+      summary:
+        'Upload one scoped image. Input limit: 50 MiB for portfolio, brief reference and room images, 20 MiB otherwise. Maximum 40 million pixels.',
       isPublic: false,
       status: 201,
       successStatuses: [],
@@ -33,10 +34,14 @@ export const uploadsModule: ApiModule = {
     app.post('/v1/uploads', async (request, reply) => {
       const actor = await authenticateVerified(deps.authenticate, request.headers.authorization);
       const query = querySchema.parse(request.query);
+      if (query.bucket === 'search-uploads')
+        requireCondition(deps.env.AI_SEARCH_ENABLED, 503, 'ai_search_disabled');
       const prefix = await deps.db.run(actor.id, (tx) =>
         media.authorizeUpload(tx, actor.id, query.bucket, query.scopeId),
       );
-      const parts = request.parts();
+      const inputLimit = uploadInputLimit(query.bucket);
+      // Give the parser one byte of headroom so it can accept a file at the exact cap.
+      const parts = request.parts({ limits: { fileSize: inputLimit + 1 } });
       let file: Buffer | undefined;
       let mime = '';
       try {
@@ -54,6 +59,7 @@ export const uploadsModule: ApiModule = {
         throw new ApiError(400, 'VALIDATION_ERROR', 'invalid_multipart');
       }
       requireCondition(file, 400, 'file_required');
+      requireCondition(file.length <= inputLimit, 413, 'request_too_large');
       const result = await media.upload(query.bucket, prefix, file, mime);
       return reply.code(201).send({ data: outputSchema.parse(result) });
     });

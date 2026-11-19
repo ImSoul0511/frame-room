@@ -61,17 +61,31 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   if (!envelope.success) throw new RequestError(502, 'invalid_response');
   return envelope.data.data as T;
 }
-export function post<T>(path: string, body: unknown = {}) {
+export function post<T>(
+  path: string,
+  body: unknown = {},
+  submissionId: string = crypto.randomUUID(),
+) {
   return api<T>(path, {
     method: 'POST',
     body: JSON.stringify(body),
-    headers: { 'idempotency-key': crypto.randomUUID() },
+    headers: { 'idempotency-key': submissionId },
   });
 }
 export function patch<T>(path: string, body: unknown) {
   return api<T>(path, { method: 'PATCH', body: JSON.stringify(body) });
 }
 export async function upload(file: File, bucket: string, scopeId?: string) {
+  const largeImageBuckets = [
+    'portfolio-images',
+    'brief-references',
+    'room-files',
+    'conversation-files',
+  ];
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type))
+    throw new RequestError(400, 'unsupported_image');
+  if (file.size > (largeImageBuckets.includes(bucket) ? 50 : 20) * 1024 * 1024)
+    throw new RequestError(413, 'file_too_large');
   const form = new FormData();
   form.append('file', file);
   return api<{ storagePath: string; mimeType: string }>(

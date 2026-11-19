@@ -72,6 +72,57 @@ beforeEach(() => {
   executedSql.length = 0;
 });
 
+describe('booking completion holds', () => {
+  const path = `/v1/admin/bookings/${TARGET_ID}/completion-hold`;
+  const payload = { hold: true, reason: 'Dispute under review', version: 2 };
+  const heldBooking = {
+    id: TARGET_ID,
+    serviceName: 'Portrait',
+    version: 3,
+    completionDueAt: null,
+    completionHoldAt: '2026-11-20T00:00:00.000Z',
+    completionRemainingMs: 518400000,
+  };
+
+  it('requires a verified admin before reading or changing completion data', async () => {
+    const app = createTestApp();
+    expect((await app.inject({ url: '/v1/admin/booking-completions' })).statusCode).toBe(401);
+    queue.push({ kind: 'one', value: { allowed: false } });
+    const denied = await app.inject({
+      method: 'PATCH',
+      url: path,
+      headers: { authorization: 'Bearer manager' },
+      payload,
+    });
+    expect(denied.statusCode).toBe(403);
+    expect(executedSql).toEqual([
+      { sql: 'select private.is_admin() as allowed', params: undefined },
+    ]);
+  });
+
+  it('returns completion summaries and applies a versioned hold with the admin reason', async () => {
+    const app = createTestApp();
+    queue.push(
+      { kind: 'one', value: { allowed: true } },
+      { kind: 'rows', value: [heldBooking] },
+      { kind: 'one', value: { allowed: true } },
+      { kind: 'one', value: heldBooking },
+    );
+    const headers = { authorization: 'Bearer admin' };
+    const list = await app.inject({ url: '/v1/admin/booking-completions?page=2', headers });
+    expect(list.statusCode).toBe(200);
+    expect(list.json().data).toEqual({ items: [heldBooking], hasNext: false });
+    expect(executedSql[1]?.params).toEqual([50]);
+    const updated = await app.inject({ method: 'PATCH', url: path, headers, payload });
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json().data).toEqual(heldBooking);
+    expect(executedSql[3]).toEqual({
+      sql: expect.stringContaining('frameroom_set_completion_hold'),
+      params: [TARGET_ID, true, 2, 'Dispute under review'],
+    });
+  });
+});
+
 afterEach(async () => {
   await Promise.all(apps.splice(0).map((app) => app.close()));
 });
@@ -153,18 +204,21 @@ describe('content reports and admin moderation (108b)', () => {
   it('allows any verified user to submit a content report and validates target/reason', async () => {
     const app = createTestApp();
 
-    queue.push({
-      kind: 'one',
-      value: {
-        id: REPORT_ID,
-        reporterId: USER_ID,
-        targetType: 'portfolio_image',
-        targetId: TARGET_ID,
-        reason: 'copyright',
-        description: 'Uncredited commercial image',
-        status: 'open',
+    queue.push(
+      { kind: 'optional', value: { id: TARGET_ID } },
+      {
+        kind: 'one',
+        value: {
+          id: REPORT_ID,
+          reporterId: USER_ID,
+          targetType: 'portfolio_image',
+          targetId: TARGET_ID,
+          reason: 'copyright',
+          description: 'Uncredited commercial image',
+          status: 'open',
+        },
       },
-    });
+    );
 
     const okRes = await app.inject({
       method: 'POST',
@@ -193,6 +247,52 @@ describe('content reports and admin moderation (108b)', () => {
       },
     });
     expect(badRes.statusCode).toBe(400);
+  });
+
+  it('rejects a report on unavailable content without writing a report', async () => {
+    const app = createTestApp();
+    queue.push({ kind: 'optional', value: undefined });
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/reports',
+      headers: { authorization: 'Bearer user' },
+      payload: { targetType: 'portfolio', targetId: TARGET_ID, reason: 'other' },
+    });
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error.details).toEqual([{ reason: 'report_target_unavailable' }]);
+    expect(executedSql.some(({ sql }) => sql.includes('insert into content_reports'))).toBe(false);
+  });
+
+  it('records the visibility action, audit event and report outcome for the same target', async () => {
+    const app = createTestApp();
+    queue.push(
+      { kind: 'one', value: { allowed: true } },
+      {
+        kind: 'one',
+        value: { id: REPORT_ID, targetType: 'review', targetId: TARGET_ID, status: 'open' },
+      },
+      { kind: 'one', value: { id: TARGET_ID } },
+      { kind: 'execute' },
+      { kind: 'one', value: { id: REPORT_ID, status: 'resolved', outcome: 'actioned' } },
+    );
+    const response = await app.inject({
+      method: 'POST',
+      url: `/v1/admin/reports/${REPORT_ID}/decisions`,
+      headers: { authorization: 'Bearer admin' },
+      payload: { decision: 'actioned', reason: 'Contains personal information' },
+    });
+    expect(response.statusCode).toBe(201);
+    expect(response.json().data.outcome).toBe('actioned');
+    expect(executedSql[2].params).toEqual([TARGET_ID, 'Contains personal information']);
+    expect(executedSql[3].params).toEqual([
+      REPORT_ID,
+      'review',
+      TARGET_ID,
+      ADMIN_ID,
+      'actioned',
+      'Contains personal information',
+      null,
+    ]);
   });
 
   it('blocks non-admin callers from admin report and moderation routes (403 forbidden)', async () => {

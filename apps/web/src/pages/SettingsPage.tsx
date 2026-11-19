@@ -5,7 +5,7 @@ import { useAuth } from '../lib/auth';
 import { api, post, patch } from '../lib/api';
 import { useApi, useTask } from '../lib/hooks';
 import { useStrings } from '../lib/i18n';
-import { ProfileForm } from '../features/catalog/ProviderForms';
+import { PhotographerForm, ProfileForm } from '../features/catalog/ProviderForms';
 import { LanguageSwitcher } from '../components/LanguageSwitcher';
 import {
   Action,
@@ -46,6 +46,10 @@ export function SettingsPage() {
           </Link>
         </section>
       </div>
+      <section className="panel">
+        <h2>{t.portfolio.profile}</h2>
+        <PhotographerForm />
+      </section>
       {profile?.roles.includes('photographer') ? <ScheduleBlocks /> : null}
     </>
   );
@@ -133,17 +137,23 @@ function ScheduleBlocks() {
 }
 export function ReportButton({ targetType, targetId }: { targetType: string; targetId: string }) {
   const t = useStrings();
-  const { session } = useAuth();
+  const { profile, onboardingRequired } = useAuth();
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState('other');
   const [description, setDescription] = useState('');
   const task = useTask(async () =>
     post('/v1/reports', { targetType, targetId, reason, description }),
   );
-  if (!session) return null;
+  if (!profile || onboardingRequired) return null;
   return (
     <>
-      <button className="text-button" onClick={() => setOpen(true)}>
+      <button
+        className="text-button"
+        onClick={() => {
+          setOpen(true);
+          task.reset();
+        }}
+      >
         {t.admin.report}
       </button>
       {open ? (
@@ -158,7 +168,7 @@ export function ReportButton({ targetType, targetId }: { targetType: string; tar
             </Select>
             <Area label={t.admin.description} value={description} onChange={setDescription} />
             <Feedback error={task.error} success={task.isSuccess ? t.admin.reported : null} />
-            <Action type="submit" pending={task.isPending}>
+            <Action type="submit" pending={task.isPending} disabled={task.isSuccess}>
               {t.admin.submit}
             </Action>
           </Form>

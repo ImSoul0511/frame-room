@@ -4,7 +4,7 @@ import type { Booking } from '@frameroom/shared';
 import type { Workspace } from '../lib/types';
 import { useApi, useTask } from '../lib/hooks';
 import { useStrings } from '../lib/i18n';
-import { currency, dateTime, post, supabase, upload } from '../lib/api';
+import { api, currency, dateTime, patch, post, supabase, upload } from '../lib/api';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   Action,
@@ -22,13 +22,14 @@ import { ChatPanel } from '../features/projects/ChatPanel';
 import { BookingControls } from '../features/booking/BookingControls';
 import { RoomPanel } from '../features/booking/RoomPanel';
 import { GalleryPanel } from '../features/booking/GalleryPanel';
+import { CompletionStatus } from '../features/booking/CompletionStatus';
 
 export function BookingsPage() {
   const t = useStrings();
   const list = useApi<Booking[]>('/v1/bookings');
   return (
     <>
-      <PageHeading title={t.booking.title} subtitle={t.booking.subtitle} />
+      <PageHeading title={t.booking.liveBookings} />
       <QueryState query={list} empty={list.data?.length === 0} />
       <div className="booking-list">
         {list.data?.map((b) => (
@@ -83,6 +84,12 @@ export function BookingPage() {
   if (!data.data) return <QueryState query={data} />;
   const w = data.data;
   const b = w.booking;
+  const hasRoom = Boolean(w.room) && ['confirmed', 'in_progress'].includes(b.status);
+  const canProof = ['in_progress', 'proofing', 'delivered', 'completed'].includes(b.status);
+  const tabs = (['brief', 'room', 'gallery', 'delivery', 'assistant'] as const).filter((key) =>
+    key === 'room' ? hasRoom : key === 'gallery' || key === 'delivery' ? canProof : true,
+  );
+  const selected = tabs.find((key) => key === tab) ?? 'brief';
   return (
     <>
       <PageHeading
@@ -90,25 +97,27 @@ export function BookingPage() {
         subtitle={`${dateTime(b.scheduledStart)} — ${currency(b.totalPrice)}`}
         action={<Status status={b.status} />}
       />
+      {b.status === 'delivered' ? <CompletionStatus booking={b} /> : null}
       <BookingControls key={b.version} workspace={w} />
       <div className="tabs" role="tablist">
-        {(['brief', 'room', 'gallery', 'delivery', 'assistant'] as const)
-          .filter((k) => k === 'brief' || k === 'assistant' || Boolean(w.room))
-          .map((k) => (
-            <button role="tab" key={k} aria-selected={tab === k} onClick={() => setTab(k)}>
-              {k === 'assistant' ? t.project.assistant : t.booking[k]}
-            </button>
-          ))}
+        {tabs.map((k) => (
+          <button role="tab" key={k} aria-selected={selected === k} onClick={() => setTab(k)}>
+            {k === 'assistant' ? t.project.assistant : t.booking[k]}
+          </button>
+        ))}
       </div>
-      {tab === 'brief' ? (
+      {selected === 'brief' ? (
         <BriefPanel workspace={w} />
-      ) : tab === 'room' && w.room ? (
+      ) : selected === 'room' && w.room ? (
         <RoomPanel workspace={w} />
-      ) : tab === 'gallery' ? (
+      ) : selected === 'gallery' ? (
         <GalleryPanel key={`${w.gallery?.round}-${w.gallery?.status}`} workspace={w} />
-      ) : tab === 'delivery' ? (
-        <DeliveryPanel workspace={w} />
-      ) : tab === 'assistant' ? (
+      ) : selected === 'delivery' ? (
+        <DeliveryPanel
+          key={w.review?.reassessmentRequestedAt ?? String(w.review?.isHidden)}
+          workspace={w}
+        />
+      ) : selected === 'assistant' ? (
         <ChatPanel projectId={b.projectId} />
       ) : null}
     </>
@@ -122,7 +131,23 @@ function BriefPanel({ workspace: w }: { workspace: Workspace }) {
   const approve = useTask(async (id: string) =>
     post(`/v1/bookings/${w.booking.id}/brief-versions/${id}/approve`),
   );
-  const editable = ['pending', 'confirmed', 'in_progress'].includes(w.booking.status);
+  const [reason, setReason] = useState('');
+  const request = useTask(async (id: string) =>
+    post(`/v1/bookings/${w.booking.id}/brief-versions/${id}/revision`, { reason }),
+  );
+  const editable =
+    ['confirmed', 'in_progress'].includes(w.booking.status) ||
+    (w.booking.status === 'pending' && (w.isClient || w.canManage));
+  const latest = w.briefs[0];
+  const baseline = latest?.content ??
+    w.project.brief ?? {
+      title: w.project.title,
+      concept: w.project.idea,
+      shotList: [],
+      lighting: [],
+      checklist: [],
+      milestones: [],
+    };
   return (
     <div className="two-col">
       <section>
@@ -138,6 +163,9 @@ function BriefPanel({ workspace: w }: { workspace: Workspace }) {
               </span>
             </div>
             <p>{v.content.concept}</p>
+            {v.content.requirements ? (
+              <BriefRequirements bookingId={w.booking.id} brief={v} />
+            ) : null}
             {(['shotList', 'lighting', 'checklist', 'milestones'] as const).map((k) =>
               v.content[k].length ? (
                 <div key={k}>
@@ -150,30 +178,65 @@ function BriefPanel({ workspace: w }: { workspace: Workspace }) {
                 </div>
               ) : null,
             )}
-            {editable && !(w.isClient ? v.clientApproved : v.providerApproved) ? (
-              <Action secondary pending={approve.isPending} onClick={() => approve.mutate(v.id)}>
-                {t.booking.approveBrief}
-              </Action>
+            {editable &&
+            latest.id === v.id &&
+            v.status !== 'closed' &&
+            (!(w.isClient ? v.clientApproved : v.providerApproved) ||
+              (w.booking.status === 'pending' && w.canManage)) ? (
+              <>
+                {!(w.isClient ? v.clientApproved : v.providerApproved) ? (
+                  <Action
+                    secondary
+                    pending={approve.isPending}
+                    onClick={() => approve.mutate(v.id)}
+                  >
+                    {t.booking.approveBrief}
+                  </Action>
+                ) : null}
+                <Area label={t.booking.reason} value={reason} onChange={setReason} />
+                <Action
+                  secondary
+                  pending={request.isPending}
+                  disabled={!reason.trim()}
+                  onClick={() => request.mutate(v.id)}
+                >
+                  {t.booking.requestBriefRevision}
+                </Action>
+              </>
             ) : null}
           </article>
         ))}
         {!w.briefs.length ? <p>{t.booking.noBrief}</p> : null}
-        <Feedback error={approve.error} />
+        <Feedback
+          error={approve.error ?? request.error}
+          success={request.isSuccess ? t.saved : null}
+        />
       </section>
       {editable ? (
         <section className="panel">
           <h2>{t.booking.proposeBrief}</h2>
           <BriefEditor
-            initial={
-              w.project.brief ?? {
-                title: w.project.title,
-                concept: w.project.idea,
-                shotList: [],
-                lighting: [],
-                checklist: [],
-                milestones: [],
-              }
-            }
+            key={latest?.id ?? w.booking.id}
+            initial={{
+              ...baseline,
+              requirements: {
+                ...(baseline.requirements ?? {
+                  genre: 'portrait',
+                  locationType: 'studio',
+                  location: '',
+                  people: 1,
+                  photoCount: Math.max(10, w.proofing.quota),
+                  retouchedCount: w.proofing.quota,
+                  revisionLimit: w.proofing.revisions,
+                  budget: w.booking.totalPrice,
+                  crew: '',
+                  notes: '',
+                  referencePaths: w.project.referencePaths,
+                }),
+                scheduledStart: baseline.requirements?.scheduledStart ?? w.booking.scheduledStart,
+                scheduledEnd: baseline.requirements?.scheduledEnd ?? w.booking.scheduledEnd,
+              },
+            }}
             onSave={(value) => create.mutate(value)}
             pending={create.isPending}
             error={create.error}
@@ -183,10 +246,72 @@ function BriefPanel({ workspace: w }: { workspace: Workspace }) {
     </div>
   );
 }
+
+function BriefRequirements({
+  bookingId,
+  brief,
+}: {
+  bookingId: string;
+  brief: Workspace['briefs'][number];
+}) {
+  const t = useStrings();
+  const scope = brief.content.requirements!;
+  return (
+    <>
+      <p>
+        {t.genreLabels[scope.genre]} · {t.demo.people} {scope.people}
+      </p>
+      <p>
+        {scope.location} · {scope.scheduledStart ? dateTime(scope.scheduledStart) : ''}
+        {scope.scheduledEnd ? ` – ${dateTime(scope.scheduledEnd)}` : ''}
+      </p>
+      <p>
+        {t.demo.photos} {scope.photoCount} · {t.demo.retouched} {scope.retouchedCount} ·{' '}
+        {t.demo.revisions} {scope.revisionLimit} · {currency(scope.budget)}
+      </p>
+      {scope.crew ? <p>{scope.crew}</p> : null}
+      {scope.notes ? <p>{scope.notes}</p> : null}
+      {scope.referencePaths.map((path, index) => (
+        <BriefReference
+          key={path}
+          url={`/v1/bookings/${bookingId}/brief-versions/${brief.id}/reference?index=${index}`}
+          index={index}
+        />
+      ))}
+    </>
+  );
+}
+
+function BriefReference({ url, index }: { url: string; index: number }) {
+  const t = useStrings();
+  const load = useTask(async () => api<{ url: string }>(url));
+  return (
+    <div>
+      {load.data ? (
+        <a href={load.data.url} target="_blank" rel="noreferrer">
+          {t.project.reference} {index + 1}
+        </a>
+      ) : (
+        <Action
+          secondary
+          pending={load.isPending}
+          onClick={() => load.mutate()}
+        >{`${t.project.reference} ${index + 1}`}</Action>
+      )}
+      <Feedback error={load.error} />
+    </div>
+  );
+}
 function DeliveryPanel({ workspace: w }: { workspace: Workspace }) {
   const t = useStrings();
-  const [rating, setRating] = useState(5);
-  const [comment, setComment] = useState('');
+  const [rating, setRating] = useState(w.review?.rating ?? 5);
+  const [comment, setComment] = useState(w.review?.comment ?? '');
+  const canResubmit = Boolean(
+    w.review?.isHidden &&
+    w.review.moderationReason &&
+    !w.review.reassessmentRequestedAt &&
+    !w.review.deletedAt,
+  );
   const add = useTask(async (file: File) => {
     const result = await upload(file, 'deliveries', w.booking.id);
     return post(`/v1/bookings/${w.booking.id}/deliveries`, {
@@ -195,12 +320,17 @@ function DeliveryPanel({ workspace: w }: { workspace: Workspace }) {
     });
   });
   const review = useTask(async () =>
-    post(`/v1/bookings/${w.booking.id}/reviews`, { rating, comment }),
+    canResubmit
+      ? patch(`/v1/bookings/${w.booking.id}/review`, { rating, comment })
+      : post(`/v1/bookings/${w.booking.id}/reviews`, { rating, comment }),
   );
   return (
     <section className="panel">
       <h2>{t.booking.delivery}</h2>
-      {w.isProvider && w.booking.status === 'proofing' ? (
+      {w.isProvider &&
+      w.booking.status === 'proofing' &&
+      w.gallery?.status === 'selection_submitted' &&
+      !w.gallery.revisionRequestedAt ? (
         <FilePicker
           label={t.booking.addDelivery}
           onFile={(file) => add.mutate(file)}
@@ -214,17 +344,28 @@ function DeliveryPanel({ workspace: w }: { workspace: Workspace }) {
         </a>
       ))}
       <Feedback error={add.error} />
-      {w.isClient && w.booking.status === 'completed' && !w.review ? (
+      {w.isClient && w.review?.moderationReason ? (
+        <p>
+          {t.demo.reviewHidden} · {w.review.moderationReason}
+        </p>
+      ) : null}
+      {w.isClient && w.booking.status === 'completed' && (!w.review || canResubmit) ? (
         <Form onSubmit={() => review.mutate()}>
           <h2>{t.booking.review}</h2>
-          <NumberField label={t.booking.rating} value={rating} onChange={setRating} min={1} />
+          <NumberField
+            label={t.booking.rating}
+            value={rating}
+            onChange={setRating}
+            min={1}
+            max={5}
+          />
           <Area label={t.booking.comment} value={comment} onChange={setComment} />
           <Feedback error={review.error} />
           <Action type="submit" pending={review.isPending}>
-            {t.booking.submitReview}
+            {canResubmit ? t.demo.resubmitReview : t.booking.submitReview}
           </Action>
         </Form>
-      ) : w.review ? (
+      ) : w.review && !w.review.deletedAt ? (
         <blockquote className="review">
           {'★'.repeat(w.review.rating)}
           <p>{w.review.comment}</p>

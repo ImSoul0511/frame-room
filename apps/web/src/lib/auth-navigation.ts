@@ -1,4 +1,4 @@
-export function safeReturnPath(value: string | null) {
+export function safeReturnPath(value: string | null, fallback = '/explore') {
   if (
     !value ||
     !value.startsWith('/') ||
@@ -8,9 +8,27 @@ export function safeReturnPath(value: string | null) {
         character === '\\' || character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127,
     )
   )
-    return '/explore';
-  if (/^\/(auth|onboarding|reset-password)(\/|\?|$)/i.test(value)) return '/explore';
+    return fallback;
+  const path = new URL(value, 'https://frameroom.invalid').pathname;
+  try {
+    const decoded = decodeURIComponent(path);
+    if (
+      decoded.startsWith('//') ||
+      decoded.includes('\\') ||
+      /^\/(auth|onboarding|reset-password)(\/|$)/i.test(decoded)
+    )
+      return fallback;
+  } catch {
+    return fallback;
+  }
   return value;
+}
+
+export function accountDestination(roles: readonly string[]) {
+  if (roles.includes('system_admin')) return '/admin';
+  if (roles.includes('studio_manager')) return '/studio';
+  if (roles.includes('photographer')) return '/bookings';
+  return '/projects';
 }
 
 export function authErrorReason(code?: string) {

@@ -1,8 +1,9 @@
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import type { Provider, Service, Booking } from '@frameroom/shared';
+import type { Service, Booking } from '@frameroom/shared';
 import type { Studio, Invitation, Member, Resource } from '../lib/types';
-import { api, post, patch, currency, dateTime } from '../lib/api';
+import { api, post, patch, currency, dateTime, RequestError } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useApi, useTask } from '../lib/hooks';
 import { useStrings } from '../lib/i18n';
@@ -30,10 +31,23 @@ export function StudioPage() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [city, setCity] = useState('');
+  const [address, setAddress] = useState('');
+  const [contactEmail, setContactEmail] = useState('');
+  const [discard, setDiscard] = useState(false);
   const [genre, setGenre] = useState('portrait');
   const nav = useNavigate();
+  const client = useQueryClient();
   const create = useTask(async () => {
-    const studio = await post<Studio>('/v1/studios', { name, description, city, genres: [genre] });
+    const studio = await post<Studio>('/v1/studios', {
+      name,
+      description,
+      city,
+      address,
+      contactEmail,
+      genres: [genre],
+    });
+    await client.invalidateQueries({ queryKey: ['api'] });
+    await client.invalidateQueries({ queryKey: ['profile'] });
     nav(`/studio/${studio.id}`);
   });
   const respond = useTask(async (v: { id: string; status: string }) =>
@@ -87,17 +101,56 @@ export function StudioPage() {
         ))}
       <Feedback error={respond.error} />
       {open ? (
-        <Modal title={t.studio.new} onClose={() => setOpen(false)}>
-          <Form onSubmit={() => create.mutate()}>
-            <Field label={t.studio.name} value={name} onChange={setName} />
-            <Area label={t.studio.description} value={description} onChange={setDescription} />
-            <Field label={t.city} value={city} onChange={setCity} />
-            <GenreSelect value={genre} onChange={setGenre} />
-            <Feedback error={create.error} />
-            <Action type="submit" pending={create.isPending}>
-              {t.studio.new}
-            </Action>
-          </Form>
+        <Modal
+          title={t.studio.new}
+          onClose={() => {
+            if (create.isPending) return;
+            if (name || description || city || address || contactEmail || genre !== 'portrait')
+              setDiscard(true);
+            else setOpen(false);
+          }}
+        >
+          {discard ? (
+            <div>
+              <p>{t.demo.discardedDraft}</p>
+              <Action
+                onClick={() => {
+                  setName('');
+                  setDescription('');
+                  setCity('');
+                  setAddress('');
+                  setContactEmail('');
+                  setGenre('portrait');
+                  setDiscard(false);
+                  setOpen(false);
+                }}
+              >
+                {t.delete}
+              </Action>
+              <Action secondary onClick={() => setDiscard(false)}>
+                {t.continue}
+              </Action>
+            </div>
+          ) : (
+            <Form onSubmit={() => create.mutate()}>
+              <Field label={t.studio.name} value={name} onChange={setName} required />
+              <Area label={t.studio.description} value={description} onChange={setDescription} />
+              <Field label={t.city} value={city} onChange={setCity} required />
+              <Field label={t.demo.address} value={address} onChange={setAddress} required />
+              <Field
+                label={t.demo.contactInfo}
+                type="email"
+                value={contactEmail}
+                onChange={setContactEmail}
+                required
+              />
+              <GenreSelect value={genre} onChange={setGenre} />
+              <Feedback error={create.error} />
+              <Action type="submit" pending={create.isPending}>
+                {t.studio.new}
+              </Action>
+            </Form>
+          )}
         </Modal>
       ) : null}
     </>
@@ -131,13 +184,18 @@ function StudioManager({ studio }: { studio: Studio }) {
   const [modal, setModal] = useState<'service' | 'resource' | null>(null);
   const [editing, setEditing] = useState<Service | undefined>();
   const [inviteId, setInviteId] = useState('');
+  const [search, setSearch] = useState('');
+  const [memberToRemove, setMemberToRemove] = useState<Member>();
   const [role, setRole] = useState('photographer');
   const [resourceName, setResourceName] = useState('');
   const [resourceType, setResourceType] = useState('room');
   const team = useApi<Member[]>(`/v1/studios/${studio.id}/team`);
   const resources = useApi<Resource[]>(`/v1/studios/${studio.id}/resources`);
   const services = useApi<Service[]>('/v1/me/services');
-  const photographers = useApi<Provider[]>('/v1/photographers');
+  const photographers = useApi<{ id: string; displayName: string; userName: string }[]>(
+    `/v1/studios/${studio.id}/invitable-photographers?${new URLSearchParams({ term: search.trim() })}`,
+    tab === 'team' && search.trim().length >= 2,
+  );
   const dashboard = useApi<{
     stats: { bookings: number; completed: number; completedValue: string };
     upcoming: Booking[];
@@ -163,6 +221,13 @@ function StudioManager({ studio }: { studio: Studio }) {
     await api(`/v1/studios/${studio.id}/members/${session!.user.id}`, { method: 'DELETE' });
     nav('/studio');
   });
+  const removalBlocked =
+    change.error instanceof RequestError &&
+    ['active_booking_assignments', 'active_assignment'].includes(change.error.reason);
+  const affected = useApi<{ id: string; serviceName: string; scheduledStart: string }[]>(
+    `/v1/studios/${studio.id}/members/${memberToRemove?.userId}/active-bookings`,
+    Boolean(memberToRemove && removalBlocked),
+  );
   return (
     <>
       <div className="tabs">
@@ -225,7 +290,13 @@ function StudioManager({ studio }: { studio: Studio }) {
                   >
                     {m.role === 'manager' ? t.studio.demote : t.studio.promote}
                   </button>
-                  <button className="text-button" onClick={() => change.mutate({ id: m.userId })}>
+                  <button
+                    className="text-button"
+                    onClick={() => {
+                      change.reset();
+                      setMemberToRemove(m);
+                    }}
+                  >
                     {t.studio.remove}
                   </button>
                 </div>
@@ -238,11 +309,19 @@ function StudioManager({ studio }: { studio: Studio }) {
           <section className="panel">
             <h2>{t.studio.invite}</h2>
             <Form onSubmit={() => invite.mutate()}>
+              <Field
+                label={t.photographer}
+                value={search}
+                onChange={(value) => {
+                  setSearch(value);
+                  setInviteId('');
+                }}
+              />
               <Select label={t.photographer} value={inviteId} onChange={setInviteId}>
                 <option value="">—</option>
                 {photographers.data?.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.displayName}
+                    {p.displayName} · @{p.userName}
                   </option>
                 ))}
               </Select>
@@ -250,13 +329,44 @@ function StudioManager({ studio }: { studio: Studio }) {
                 <option value="photographer">{t.studio.member}</option>
                 <option value="manager">{t.studio.manager}</option>
               </Select>
-              <Feedback error={invite.error} success={invite.isSuccess ? t.saved : null} />
+              <Feedback
+                error={invite.error ?? photographers.error}
+                success={invite.isSuccess ? t.saved : null}
+              />
               <Action type="submit" pending={invite.isPending} disabled={!inviteId}>
                 {t.studio.invite}
               </Action>
             </Form>
           </section>
         </div>
+      ) : null}
+      {memberToRemove ? (
+        <Modal title={t.demo.removeMember} onClose={() => setMemberToRemove(undefined)}>
+          <p>
+            {memberToRemove.displayName} · @{memberToRemove.userName}
+          </p>
+          <p>{t.demo.removeMemberNote}</p>
+          <Feedback error={change.error} />
+          {removalBlocked ? <QueryState query={affected} /> : null}
+          {removalBlocked
+            ? affected.data?.map((booking) => (
+                <Link key={booking.id} className="list-row" to={`/bookings/${booking.id}`}>
+                  {booking.serviceName} · {dateTime(booking.scheduledStart)}
+                </Link>
+              ))
+            : null}
+          <Action
+            pending={change.isPending}
+            onClick={() =>
+              change.mutate(
+                { id: memberToRemove.userId },
+                { onSuccess: () => setMemberToRemove(undefined) },
+              )
+            }
+          >
+            {t.demo.removeMember}
+          </Action>
+        </Modal>
       ) : null}
       {tab === 'services' ? (
         <>

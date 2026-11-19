@@ -17,6 +17,41 @@ const settings = envSchema.parse({
 afterEach(() => vi.unstubAllGlobals());
 
 describe('Cloud catalog without a direct Postgres connection', () => {
+  it('uses public credentials and exact name matching in Cloud', async () => {
+    const displayName = 'Nguyễn _ 100% *';
+    const fetch = vi.fn(async (url: string, init: RequestInit) => {
+      const request = new URL(url);
+      expect(new Headers(init.headers).get('apikey')).toBe('public-test-key');
+      if (request.pathname.endsWith('/providers')) {
+        expect(request.searchParams.get('type')).toBe('eq.photographer');
+        expect(request.searchParams.get('display_name')).toBe(`eq.${displayName}`);
+        expect(request.searchParams.get('limit')).toBe('2');
+        return Response.json([
+          {
+            id: USER,
+            type: 'photographer',
+            display_name: displayName,
+            bio: '',
+            city: '',
+            district: '',
+            genres: [],
+            styles: [],
+            price_from: null,
+            rating_avg: null,
+            review_count: 0,
+          },
+        ]);
+      }
+      expect(request.searchParams.get('photographer_id')).toBe(`eq.${USER}`);
+      return Response.json([]);
+    });
+    vi.stubGlobal('fetch', fetch);
+    await expect(
+      createCloudCatalog(settings)!.detail('photographer', { displayName }),
+    ).resolves.toMatchObject({ provider: { id: USER, displayName }, services: [] });
+    expect(fetch).toHaveBeenCalledTimes(4);
+  });
+
   it('never reads gallery images for an unpublished or deleted portfolio', async () => {
     const fetch = vi.fn(async (url: string, init: RequestInit) => {
       const query = new URL(url);

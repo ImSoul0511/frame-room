@@ -4,11 +4,11 @@ import { useSearchParams } from 'react-router-dom';
 import { genres } from '@frameroom/shared';
 import { api } from '../lib/api';
 import { useApi } from '../lib/hooks';
-import { Action, FilePicker, Feedback, QueryState, Select } from '../components/ui';
+import { Action, Feedback, QueryState, Select } from '../components/ui';
 import { Botanical } from '../components/Botanical';
 import { ProviderCard, type CardProvider } from '../features/catalog/ProviderCard';
 import { useLanguage, useStrings } from '../lib/i18n';
-import { useDemo, useDemoTask } from '../features/demo/DemoContext';
+import { useDemo } from '../features/demo/DemoContext';
 import { getDemoProviderCards } from '../features/demo/public-catalog';
 
 type Tag = {
@@ -28,10 +28,8 @@ export function ExplorePage() {
   const [sort, setSort] = useState('recommended');
   const [providerType, setProviderType] = useState('');
   const [submitted, setSubmitted] = useState<string | null>(null);
-  const [reference, setReference] = useState<string | null>(null);
   const [params] = useSearchParams();
   const demo = useDemo();
-  const referenceTask = useDemoTask();
   const providers = useQuery({
     queryKey: ['api', 'discovery-cards'],
     queryFn: async ({ signal }) => {
@@ -48,7 +46,7 @@ export function ExplorePage() {
   const tags = useApi<Tag[]>('/v1/tags');
   const source = [
     ...(providers.data ?? []),
-    ...getDemoProviderCards(demo.state, demo.text, demo.image),
+    ...(demo.choice === 'account' ? [] : getDemoProviderCards(demo.state, demo.text, demo.image)),
   ];
   const normalize = (value: string) =>
     value
@@ -105,10 +103,8 @@ export function ExplorePage() {
     setPrice('');
     setSort('recommended');
     setQuery('');
-    setReference(null);
     setSubmitted(null);
     setProviderType('');
-    referenceTask.clear();
   };
   const chooseGenre = (value: string) => {
     setGenre(value);
@@ -130,10 +126,10 @@ export function ExplorePage() {
           </a>
         </div>
       </section>
-      <section className="discovery-search" aria-labelledby="idea-heading">
+      <section className="discovery-search" aria-labelledby="provider-search-heading">
         <div className="search-introduction">
           <p className="eyebrow">{t.discovery.searchKicker}</p>
-          <h2 id="idea-heading">{t.discovery.searchTitle}</h2>
+          <h2 id="provider-search-heading">{t.discovery.searchTitle}</h2>
           <p>{t.discovery.searchDescription}</p>
         </div>
         <div className="search-workspace">
@@ -141,36 +137,25 @@ export function ExplorePage() {
             className="search-composer"
             onSubmit={(event) => {
               event.preventDefault();
-              setSubmitted(query.trim());
+              setSubmitted(query.trim() || null);
             }}
           >
-            <label htmlFor="ai-search" className="sr-only">
+            <label htmlFor="provider-search" className="sr-only">
               {t.explore.search}
             </label>
             <textarea
-              id="ai-search"
+              id="provider-search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder={t.explore.placeholder}
               maxLength={300}
             />
-            <div className="row between wrap">
-              <FilePicker
-                label={reference ? t.explore.referenceReady : t.explore.reference}
-                onFile={(file) =>
-                  referenceTask.attempt(() => {
-                    const value = demo.file(file);
-                    setReference(value.name);
-                  })
-                }
-              />
-              <Action type="submit" disabled={!query.trim() && !reference}>
+            <div className="row">
+              <Action type="submit" disabled={!query.trim() && submitted === null}>
                 {t.explore.search}
               </Action>
             </div>
           </form>
-          {reference ? <p className="muted">{reference}</p> : null}
-          <Feedback error={referenceTask.error} />
         </div>
       </section>
       <section

@@ -204,9 +204,64 @@ describe('GET /v1/photographers and GET /v1/photographers/:id', () => {
     expect(res.body).toContain('photographer_not_found');
   });
 
-  it('returns 400 when :id is not a valid UUID', async () => {
+  it('returns 404 when there is no exact display name match', async () => {
+    vi.mocked(repo.findPhotographersByDisplayName).mockResolvedValue([]);
     const app = await buildTestApp();
-    const res = await app.inject({ method: 'GET', url: '/v1/photographers/not-a-uuid' });
+    const res = await app.inject({ method: 'GET', url: '/v1/photographers/Unknown%20Name' });
+    expect(res.statusCode).toBe(404);
+    expect(res.body).toContain('photographer_not_found');
+  });
+
+  it('resolves an encoded Vietnamese display name and loads detail for the matched UUID', async () => {
+    const displayName = 'Nguyễn Minh Anh';
+    vi.mocked(repo.findPhotographersByDisplayName).mockResolvedValue([
+      { ...PHOTOGRAPHER_PROVIDER, displayName },
+    ]);
+    vi.mocked(repo.listActiveServicesByProvider).mockResolvedValue([SERVICE]);
+    vi.mocked(repo.listPublishedPortfoliosByProvider).mockResolvedValue([]);
+    vi.mocked(repo.listVisibleReviewsByProvider).mockResolvedValue([]);
+    const app = await buildTestApp();
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/photographers/${encodeURIComponent(displayName)}`,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(bodyData(res)).toMatchObject({
+      provider: { id: PHOTOGRAPHER_ID, displayName },
+      services: [{ id: SERVICE_ID }],
+    });
+    expect(repo.findPhotographersByDisplayName).toHaveBeenCalledWith(
+      expect.anything(),
+      displayName,
+    );
+    expect(repo.listActiveServicesByProvider).toHaveBeenCalledWith(
+      expect.anything(),
+      'photographer',
+      PHOTOGRAPHER_ID,
+    );
+  });
+
+  it('returns 409 for a duplicate public name without loading an arbitrary profile', async () => {
+    vi.mocked(repo.findPhotographersByDisplayName).mockResolvedValue([
+      { ...PHOTOGRAPHER_PROVIDER, displayName: 'me' },
+      { ...PHOTOGRAPHER_PROVIDER, id: STUDIO_ID, displayName: 'me' },
+    ]);
+    const app = await buildTestApp();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/photographers/by-name?displayName=me',
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.body).toContain('photographer_display_name_ambiguous');
+    expect(repo.listActiveServicesByProvider).not.toHaveBeenCalled();
+  });
+
+  it('rejects a blank display name', async () => {
+    const app = await buildTestApp();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/photographers/by-name?displayName=%20',
+    });
     expect(res.statusCode).toBe(400);
   });
 
@@ -270,6 +325,7 @@ const STUDIO_INPUT = {
   city: 'Ho Chi Minh',
   district: 'District 1',
   address: '123 Le Loi',
+  contactEmail: 'studio@example.test',
   genres: ['portrait', 'fashion'] as const,
 };
 

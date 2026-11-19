@@ -11,7 +11,9 @@ import type { ApiDependencies, ApiModule, RouteMethod } from '../plugins/route.j
 import { assertProviderOwnership, requirePortfolioOwnership } from '../services/catalog.js';
 import * as bookings from '../services/bookings.js';
 import * as room from '../services/collaboration.js';
-import { admin, booking, manager, project, providerSide } from '../services/access.js';
+import * as conversations from '../services/conversations.js';
+import * as moderation from '../services/moderation.js';
+import { access, admin, booking, manager, project, providerSide } from '../services/access.js';
 import { MediaService } from '../services/media.js';
 import { AiService } from '../services/ai.js';
 import { enqueue, enqueueIndex } from '../services/ai-jobs.js';
@@ -109,21 +111,23 @@ function registerBusiness(app: FastifyInstance, deps: ApiDependencies) {
       ),
     };
   });
-  route(
-    'POST',
-    '/v1/portfolio-images/:id/index',
-    empty,
-    async (c, tx) => {
-      ai.ready();
-      const image = await tx.one<{ portfolioId: string }>(
-        'select portfolio_id from portfolio_images where id=$1',
-        [c.params.id],
-      );
-      await requirePortfolioOwnership(tx, c.userId, image.portfolioId);
-      return enqueueIndex(tx, c.userId, c.params.id, env, uuidv7());
-    },
-    { status: 202 },
-  );
+  if (env.AI_SEARCH_ENABLED) {
+    route(
+      'POST',
+      '/v1/portfolio-images/:id/index',
+      empty,
+      async (c, tx) => {
+        ai.ready();
+        const image = await tx.one<{ portfolioId: string }>(
+          'select portfolio_id from portfolio_images where id=$1',
+          [c.params.id],
+        );
+        await requirePortfolioOwnership(tx, c.userId, image.portfolioId);
+        return enqueueIndex(tx, c.userId, c.params.id, env, uuidv7());
+      },
+      { status: 202 },
+    );
+  }
   route('GET', '/v1/creative-projects/:id/messages', empty, async (c, tx) => {
     await project(tx, c.params.id);
     return tx.rows(
@@ -202,7 +206,95 @@ function registerBusiness(app: FastifyInstance, deps: ApiDependencies) {
   route('POST', '/v1/bookings', schemas.bookingInputSchema, (c, tx, i) =>
     bookings.createBooking(tx, c.userId, i),
   );
+  route('POST', '/v1/booking-requests', schemas.initialBookingInputSchema, async (c, tx, i) => {
+    for (const path of i.brief.requirements.referencePaths)
+      await media.verifyReference(c.userId, 'brief-references', path);
+    return bookings.requestBooking(tx, c.userId, i, c.requestKey);
+  });
+  route('GET', '/v1/bookings/:id/available-photographers', empty, (c, tx) =>
+    bookings.availablePhotographers(tx, c.params.id),
+  );
+  route('POST', '/v1/bookings/:id/assignment', schemas.assignmentInputSchema, (c, tx, i) =>
+    bookings.assignPhotographer(tx, c.params.id, c.userId, i),
+  );
+  route('POST', '/v1/bookings/:id/reassignment', schemas.reassignmentInputSchema, (c, tx, i) =>
+    bookings.assignPhotographer(tx, c.params.id, c.userId, i),
+  );
+  route('POST', '/v1/bookings/:id/cancellation', schemas.bookingReasonSchema, (c, tx, i) =>
+    bookings.proposeCancellation(tx, c.params.id, c.userId, i.reason),
+  );
+  route('PATCH', '/v1/bookings/:id/cancellation', schemas.cancellationResponseSchema, (c, tx, i) =>
+    bookings.decideCancellation(tx, c.params.id, c.userId, i.accept),
+  );
+  route('GET', '/v1/me/notifications', empty, (c, tx) =>
+    tx.rows(
+      'select * from notifications where recipient_id=$1 order by created_at desc,id desc limit 100',
+      [c.userId],
+    ),
+  );
+  route('PATCH', '/v1/me/notifications/:id', empty, (c, tx) =>
+    tx.one(
+      'update notifications set read_at=coalesce(read_at,now()) where id=$1 and recipient_id=$2 returning *',
+      [c.params.id, c.userId],
+    ),
+  );
+  route('GET', '/v1/conversations', empty, (_c, tx) => conversations.listConversations(tx));
+  route('POST', '/v1/conversations', schemas.conversationInputSchema, (c, tx, i) =>
+    conversations.contact(tx, {
+      clientId: c.userId,
+      photographerId: i.providerType === 'photographer' ? i.providerId : null,
+      studioId: i.providerType === 'studio' ? i.providerId : null,
+    }),
+  );
+  route('GET', '/v1/conversations/:id/messages', empty, (c, tx) =>
+    conversations.listMessages(
+      tx,
+      c.params.id,
+      c.query.before ? schemas.idSchema.parse(c.query.before) : null,
+    ),
+  );
+  route(
+    'POST',
+    '/v1/conversations/:id/messages',
+    schemas.conversationMessageInputSchema,
+    async (c, tx, i) => {
+      await conversations.readConversation(tx, c.params.id);
+      if (i.storagePath)
+        await media.verify('conversation-files', i.storagePath, `${c.userId}/${c.params.id}`);
+      return conversations.persistMessage(tx, c.userId, c.params.id, null, i);
+    },
+  );
+  route('GET', '/v1/conversation-messages/:id/file', empty, async (c, tx) => {
+    const message = await tx.one<conversations.ConversationMessage>(
+      'select * from room_messages where id=$1 and private.can_read_conversation_message(id)',
+      [c.params.id],
+    );
+    requireCondition(message.storagePath, 404, 'file_not_found');
+    return {
+      bucket: message.roomId ? 'room-files' : 'conversation-files',
+      storagePath: message.storagePath,
+    };
+  });
   route('GET', '/v1/bookings/:id', empty, (c, tx) => booking(tx, c.params.id));
+  route('GET', '/v1/admin/booking-completions', empty, async (c, tx) => {
+    await admin(tx);
+    const page = z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(10000)
+      .parse(c.query.page ?? 1);
+    return bookings.listCompletions(tx, page);
+  });
+  route(
+    'PATCH',
+    '/v1/admin/bookings/:id/completion-hold',
+    schemas.completionHoldInputSchema,
+    async (c, tx, i) => {
+      await admin(tx);
+      return bookings.setCompletionHold(tx, c.params.id, i);
+    },
+  );
   route(
     'POST',
     '/v1/bookings/:id/transitions',
@@ -227,19 +319,35 @@ function registerBusiness(app: FastifyInstance, deps: ApiDependencies) {
         return { ...(i as object), url: await media.url('deliveries', file.storagePath) };
       }),
     );
-    result.messages = await Promise.all(
-      result.messages.map(async (i) => {
-        const m = i as { storagePath: string | null };
-        return {
-          ...(i as object),
-          url: m.storagePath ? await media.url('room-files', m.storagePath) : null,
-        };
-      }),
-    );
     return result;
   });
-  route('POST', '/v1/bookings/:id/brief-versions', schemas.briefContentSchema, (c, tx, i) =>
-    bookings.createBrief(tx, c.params.id, c.userId, i),
+  route('POST', '/v1/bookings/:id/brief-versions', schemas.briefContentSchema, async (c, tx, i) => {
+    const paths = i.requirements?.referencePaths ?? [];
+    if (paths.length) await booking(tx, c.params.id);
+    for (const path of paths) {
+      const inherited = await tx.optional(
+        "select id from brief_versions where booking_id=$1 and content->'requirements'->'referencePaths' ? $2 limit 1",
+        [c.params.id, path],
+      );
+      if (!inherited) await media.verifyReference(c.userId, 'brief-references', path);
+    }
+    return bookings.createBrief(tx, c.params.id, c.userId, i);
+  });
+  route('GET', '/v1/bookings/:id/brief-versions/:briefId/reference', empty, async (c, tx) => {
+    await booking(tx, c.params.id);
+    const index = z.coerce.number().int().min(0).max(11).parse(c.query.index);
+    const reference = await tx.one<{ path: string | null }>(
+      "select content->'requirements'->'referencePaths'->>$3::integer as path from brief_versions where id=$1 and booking_id=$2",
+      [c.params.briefId, c.params.id, index],
+    );
+    requireCondition(reference.path, 404, 'file_not_found');
+    return { url: await media.url('brief-references', reference.path) };
+  });
+  route(
+    'POST',
+    '/v1/bookings/:id/brief-versions/:briefId/revision',
+    schemas.bookingReasonSchema,
+    (c, tx, i) => bookings.closeBrief(tx, c.params.id, c.params.briefId, c.userId, i.reason),
   );
   route(
     'POST',
@@ -249,8 +357,9 @@ function registerBusiness(app: FastifyInstance, deps: ApiDependencies) {
     { status: 200 },
   );
   route('POST', '/v1/shoot-rooms/:id/messages', schemas.messageInputSchema, async (c, tx, i) => {
+    await access(tx, 'room', c.params.id);
     if (i.storagePath) await media.verify('room-files', i.storagePath, c.params.id);
-    return room.sendMessage(tx, c.userId, c.params.id, i);
+    return room.sendMessage(tx, c.userId, c.params.id, i, c.requestKey);
   });
   route('POST', '/v1/shoot-rooms/:id/milestones', schemas.milestoneInputSchema, (c, tx, i) =>
     room.milestone(tx, c.userId, c.params.id, i),
@@ -261,11 +370,10 @@ function registerBusiness(app: FastifyInstance, deps: ApiDependencies) {
     z.object({ status: z.enum(['todo', 'done']) }),
     async (c, tx, i) => {
       await room.openRoom(tx, c.params.id);
-      return tx.one('update room_milestones set status=$3 where id=$1 and room_id=$2 returning *', [
-        c.params.milestoneId,
-        c.params.id,
-        i.status,
-      ]);
+      return tx.one(
+        'update room_milestones set status=$3,updated_by=$4,updated_at=now() where id=$1 and room_id=$2 returning *',
+        [c.params.milestoneId, c.params.id, i.status, c.userId],
+      );
     },
   );
   route('POST', '/v1/shoot-rooms/:id/decisions', schemas.decisionInputSchema, (c, tx, i) =>
@@ -284,7 +392,7 @@ function registerBusiness(app: FastifyInstance, deps: ApiDependencies) {
     async (c, tx, i) => {
       const b = await booking(tx, c.params.id, true);
       await providerSide(tx, c.params.id);
-      requireCondition(['confirmed', 'in_progress'].includes(b.status), 422, 'gallery_locked');
+      requireCondition(b.status === 'in_progress', 422, 'gallery_locked');
       const file = await media.verify('gallery-previews', i.storagePath, c.params.id);
       const gallery = await tx.one<{ id: string }>(
         "select id from galleries where booking_id=$1 and status='draft' for update",
@@ -298,6 +406,12 @@ function registerBusiness(app: FastifyInstance, deps: ApiDependencies) {
   );
   route('POST', '/v1/bookings/:id/selections', schemas.selectionInputSchema, (c, tx, i) =>
     room.submitSelection(tx, c.userId, c.params.id, i),
+  );
+  route('POST', '/v1/bookings/:id/photo-feedback', schemas.photoFeedbackInputSchema, (c, tx, i) =>
+    room.addPhotoFeedback(tx, c.params.id, c.userId, i),
+  );
+  route('POST', '/v1/bookings/:id/selections/revision-request', empty, (c, tx) =>
+    room.requestSelectionRevision(tx, c.params.id, c.userId),
   );
   route(
     'POST',
@@ -314,15 +428,19 @@ function registerBusiness(app: FastifyInstance, deps: ApiDependencies) {
       const b = await booking(tx, c.params.id, true);
       await providerSide(tx, c.params.id);
       requireCondition(b.status === 'proofing', 422, 'delivery_locked');
+      const round = await room.requireSubmittedSelection(tx, c.params.id);
       const file = await media.verify('deliveries', i.storagePath, c.params.id, false);
       return tx.one(
-        'insert into deliveries(booking_id,storage_path,file_name,mime_type) values($1,$2,$3,$4) returning *',
-        [c.params.id, i.storagePath, i.fileName, file.mimeType],
+        'insert into deliveries(booking_id,storage_path,file_name,mime_type,selection_round) values($1,$2,$3,$4,$5) returning *',
+        [c.params.id, i.storagePath, i.fileName, file.mimeType, round],
       );
     },
   );
   route('POST', '/v1/bookings/:id/reviews', schemas.reviewInputSchema, (c, tx, i) =>
     room.review(tx, c.userId, c.params.id, i),
+  );
+  route('PATCH', '/v1/bookings/:id/review', schemas.reviewInputSchema, (c, tx, i) =>
+    moderation.resubmitReview(tx, c.params.id, c.userId, i),
   );
   route('GET', '/v1/me/timeline', empty, async (c, tx) => {
     const range = z
@@ -389,15 +507,34 @@ function registerBusiness(app: FastifyInstance, deps: ApiDependencies) {
     { status: 204 },
   );
   route('POST', '/v1/reports', schemas.reportInputSchema, (c, tx, i) =>
-    tx.one(
-      'insert into content_reports(reporter_id,target_type,target_id,reason,description) values($1,$2,$3,$4,$5) returning *',
-      [c.userId, i.targetType, i.targetId, i.reason, i.description],
-    ),
+    moderation.reportContent(tx, c.userId, i),
   );
   route('GET', '/v1/admin/reports', empty, async (_c, tx) => {
     await admin(tx);
     return tx.rows('select * from content_reports order by created_at desc limit 100');
   });
+  route('GET', '/v1/admin/reports/:id', empty, (c, tx) =>
+    moderation.getReport(tx, c.params.id, (path) => media.url('portfolio-images', path)),
+  );
+  route('POST', '/v1/admin/reports/:id/decisions', schemas.reportDecisionSchema, (c, tx, i) =>
+    moderation.decideReport(tx, c.params.id, c.userId, i),
+  );
+  route('GET', '/v1/admin/review-reassessments', empty, async (_c, tx) => {
+    await admin(tx);
+    return tx.rows(`select r.*, coalesce(history.events, '[]'::jsonb) as history from reviews r
+      left join lateral (
+        select jsonb_agg(to_jsonb(e) order by e.created_at,e.id) as events
+        from private.moderation_events e where e.target_type='review' and e.target_id=r.id
+      ) history on true
+      where r.reassessment_requested_at is not null and r.is_hidden and r.deleted_at is null
+      order by r.reassessment_requested_at,r.id limit 100`);
+  });
+  route(
+    'POST',
+    '/v1/admin/review-reassessments/:id/decisions',
+    schemas.reassessmentDecisionSchema,
+    (c, tx, i) => moderation.decideReassessment(tx, c.params.id, c.userId, i.approve, i.reason),
+  );
   route(
     'PATCH',
     '/v1/admin/reports/:id',
@@ -439,16 +576,18 @@ function registerBusiness(app: FastifyInstance, deps: ApiDependencies) {
   );
 
   // AI network calls are outside DB transactions; persisted reservations serialize spend.
-  app.post('/v1/search', async (request) => {
-    const actor = await authenticateVerified(authenticate, request.headers.authorization);
-    return search(
-      db,
-      ai,
-      actor.id,
-      schemas.searchInputSchema.parse(request.body),
-      schemas.requestLanguage(request.headers['accept-language']),
-    );
-  });
+  if (env.AI_SEARCH_ENABLED) {
+    app.post('/v1/search', async (request) => {
+      const actor = await authenticateVerified(authenticate, request.headers.authorization);
+      return search(
+        db,
+        ai,
+        actor.id,
+        schemas.searchInputSchema.parse(request.body),
+        schemas.requestLanguage(request.headers['accept-language']),
+      );
+    });
+  }
   app.post('/v1/creative-projects/:id/assistant', async (request) => {
     const actor = await authenticateVerified(authenticate, request.headers.authorization);
     const id = schemas.idSchema.parse((request.params as { id: string }).id);

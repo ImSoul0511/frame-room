@@ -761,3 +761,34 @@ a.workspace-list-row:hover {
     width: 100%;
   }
 }
+.proofing-frame {
+  position: relative;
+}
+
+.proofing-frame > .proofing-photo,
+.proofing-photo-button,
+.proofing-photo-button > .proofing-photo {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: auto;
+}
+
+.proofing-photo-button {
+  border: 0;
+  padding: 0;
+  background: none;
+  cursor: crosshair;
+}
+
+.proofing-pin {
+  position: absolute;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  min-width: 1.5rem;
+  padding: 0.1rem;
+  border-radius: 50%;
+  background: #222;
+  color: #fff;
+  text-align: center;
+}

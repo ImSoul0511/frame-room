@@ -8,7 +8,7 @@ import { useTask } from '../lib/hooks';
 import { Action, Area, Field, Feedback, Form, GenreSelect, Select } from '../components/ui';
 import { Botanical } from '../components/Botanical';
 import { useStrings } from '../lib/i18n';
-import { safeReturnPath, authErrorReason } from '../lib/auth-navigation';
+import { accountDestination, safeReturnPath, authErrorReason } from '../lib/auth-navigation';
 
 export function AuthPage({
   recovery = false,
@@ -31,9 +31,11 @@ export function AuthPage({
   const auth = useAuth();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const next = safeReturnPath(params.get('next'));
-  const onboarding = '/onboarding?next=' + encodeURIComponent(next);
-  const redirectTo = location.origin + '/auth/callback?next=' + encodeURIComponent(next);
+  const requested = params.get('next');
+  const next = safeReturnPath(requested, accountDestination(auth.profile?.roles ?? []));
+  const returnQuery = requested ? '?next=' + encodeURIComponent(safeReturnPath(requested)) : '';
+  const onboarding = '/onboarding' + returnQuery;
+  const redirectTo = location.origin + '/auth/callback' + returnQuery;
   const task = useTask(async () => {
     if (!supabase) throw new Error(t.authMissing);
     if ((mode !== 'reset' || recovery) && !password) throw new RequestError(400, 'invalid_input');
@@ -67,9 +69,17 @@ export function AuthPage({
           },
         },
       });
-      if (error) throw new RequestError(400, authErrorReason(error.code));
+      if (error)
+        throw new RequestError(
+          400,
+          error.code === 'user_already_exists' || error.code === 'email_exists'
+            ? 'registration_email_unavailable'
+            : authErrorReason(error.code),
+        );
       setPassword('');
       setConfirmation('');
+      if (data.user?.identities?.length === 0)
+        throw new RequestError(400, 'registration_email_unavailable');
       if (data.session) navigate(onboarding, { replace: true });
       else setNotice('checkEmail');
     } else {
@@ -91,18 +101,17 @@ export function AuthPage({
     setNotice('emailSent');
   });
   const changeMode = (value: string) => {
-    setParams({ mode: value, next });
+    setParams(requested ? { mode: value, next: safeReturnPath(requested) } : { mode: value });
     task.reset();
     resend.reset();
     setNotice('');
     setPassword('');
     setConfirmation('');
   };
-  const profileMissing =
-    auth.profileError instanceof RequestError && auth.profileError.reason === 'profile_required';
+  const profileMissing = auth.onboardingRequired;
   if (!recovery && auth.session && !auth.loading && !auth.profileLoading) {
     if (profileMissing) return <Navigate to={onboarding} replace />;
-    if (auth.profile) return <Navigate to={next} replace />;
+    if (auth.profile && mode !== 'reset') return <Navigate to={next} replace />;
   }
   if (auth.loading || (auth.session && auth.profileLoading))
     return (
@@ -297,8 +306,8 @@ function OnboardingForm() {
   const t = useStrings();
   const auth = useAuth();
   const [params] = useSearchParams();
-  const next = safeReturnPath(params.get('next'));
-  const nav = useNavigate();
+  const next = params.get('next');
+  const navigate = useNavigate();
   const client = useQueryClient();
   const metadata = auth.session?.user.user_metadata;
   const [name, setName] = useState(
@@ -312,20 +321,47 @@ function OnboardingForm() {
   );
   const [genre, setGenre] = useState('portrait');
   const [bio, setBio] = useState('');
+  const [completed, setCompleted] = useState(false);
+  const signInAgain = useTask(async () => {
+    const result = await supabase?.auth.signOut({ scope: 'local' });
+    if (result?.error) throw new RequestError(400, 'auth_failed');
+    navigate(next ? `/auth?next=${encodeURIComponent(safeReturnPath(next))}` : '/auth', {
+      replace: true,
+    });
+  });
   const task = useTask(async () => {
     const parsed = profileInputSchema.safeParse({ displayName: name, userName: username });
     if (!parsed.success) throw new RequestError(400, 'invalid_input');
-    const photographer = photographerInputSchema.parse({ displayName: name, bio, genres: [genre] });
+    const photographer =
+      role === 'photographer'
+        ? photographerInputSchema.parse({ displayName: name, bio, genres: [genre] })
+        : null;
     await post('/v1/me', parsed.data);
-    if (role === 'photographer') {
+    if (photographer) {
       const existing = await api('/v1/photographers/me');
       if (!existing) await post('/v1/photographers/me', photographer);
     }
     await client.invalidateQueries({ queryKey: ['profile'] });
-    nav(next, { replace: true });
+    setCompleted(true);
   });
   if (auth.loading) return <p role="status">{t.pending}</p>;
-  if (!auth.session) return <Navigate to={`/auth?next=${encodeURIComponent(next)}`} replace />;
+  if (!auth.session) return <Navigate to="/auth" replace />;
+  if (completed)
+    return (
+      <section className="onboarding-page narrow-page">
+        <h1 role="status">{t.discovery.registrationComplete}</h1>
+        <Link
+          className="button-link dark"
+          to={safeReturnPath(next, accountDestination(auth.profile?.roles ?? []))}
+        >
+          {t.continue}
+        </Link>
+        <Action secondary pending={signInAgain.isPending} onClick={() => signInAgain.mutate()}>
+          {t.login}
+        </Action>
+        <Feedback error={signInAgain.error} />
+      </section>
+    );
   return (
     <section className="onboarding-page narrow-page">
       <p className="eyebrow">FRAMEROOM</p>
@@ -344,6 +380,11 @@ function OnboardingForm() {
               className={role === value ? 'role-option selected' : 'role-option'}
               aria-pressed={role === value}
               onClick={() => setRole(value)}
+              disabled={
+                metadata?.registration_role === 'client' ||
+                metadata?.registration_role === 'photographer' ||
+                task.isPending
+              }
             >
               <strong>{t[value]}</strong>
               <span>

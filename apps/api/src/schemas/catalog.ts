@@ -2,6 +2,7 @@ import {
   genreSchema,
   idSchema,
   paginationSchema,
+  photographerInputSchema,
   portfolioInputSchema,
   portfolioImageInputSchema as sharedPortfolioImageInputSchema,
   providerSchema,
@@ -38,6 +39,16 @@ const optionalFilterText = z.string().trim().min(1).max(100).optional();
 export const idParamsSchema = z.object({
   id: idSchema,
 });
+
+export const photographerLookupParamsSchema = z.object({
+  id: photographerInputSchema.shape.displayName,
+});
+
+export const photographerDisplayNameQuerySchema = z.object({
+  displayName: photographerInputSchema.shape.displayName,
+});
+
+export type ProviderLookup = { id: string } | { displayName: string };
 
 /** Query parameters for GET /v1/explore. */
 export const exploreQuerySchema = paginationSchema.extend({
@@ -185,6 +196,7 @@ export const ownedPortfolioSchema = z.object({
 export const portfolioImageInputSchema = sharedPortfolioImageInputSchema.extend({
   sortOrder: z.number().int().min(0).default(0),
   tagIds: z.array(idSchema).max(20).default([]),
+  crewCredits: z.string().trim().max(500).optional(),
 });
 
 export const portfolioImageSchema = z.object({
@@ -199,6 +211,7 @@ export const portfolioImageSchema = z.object({
   provenance: provenanceSchema,
   source: z.string().nullable(),
   licenseNote: z.string().nullable(),
+  crewCredits: z.string().optional(),
   isHidden: z.boolean(),
   createdAt: z.string(),
   tags: z.array(tagSchema),

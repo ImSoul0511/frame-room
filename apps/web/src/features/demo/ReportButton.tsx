@@ -4,8 +4,29 @@ import { useStrings } from '../../lib/i18n';
 import { useDemo, useDemoTask } from './DemoContext';
 import { isPhotographer } from './permissions';
 import type { DemoReport } from './types';
+import { ReportButton } from '../../pages/SettingsPage';
 
 export function DemoReportButton({
+  targetType,
+  targetId,
+  title,
+}: {
+  targetType: DemoReport['targetType'];
+  targetId: string;
+  title?: string;
+}) {
+  const { choice } = useDemo();
+  if (choice === 'account')
+    return (
+      <ReportButton
+        targetType={targetType === 'image' ? 'portfolio_image' : targetType}
+        targetId={targetId}
+      />
+    );
+  return <LocalReportButton targetType={targetType} targetId={targetId} title={title} />;
+}
+
+function LocalReportButton({
   targetType,
   targetId,
   title = '',

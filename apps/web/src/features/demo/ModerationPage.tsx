@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Action, Area, Feedback, Form, Modal, Select } from '../../components/ui';
 import { useStrings } from '../../lib/i18n';
 import { useDemo, useDemoTask } from './DemoContext';
@@ -45,6 +46,11 @@ export function WorkspaceModerationPage() {
           <p className="eyebrow">{t.demo.admin}</p>
           <h1>{t.demo.moderation}</h1>
         </div>
+        {demo.choice === 'account' ? (
+          <Link className="button-link" to="/admin/booking-completions">
+            {t.booking.manageCompletion}
+          </Link>
+        ) : null}
       </header>
       <DemoTabs
         tabs={[

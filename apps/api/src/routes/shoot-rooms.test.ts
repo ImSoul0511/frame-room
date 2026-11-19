@@ -111,6 +111,31 @@ function sampleBooking(status = 'in_progress') {
   };
 }
 
+function roomAccess(status = 'open'): QueryResponse[] {
+  return [
+    { kind: 'one', value: { allowed: true } },
+    { kind: 'one', value: { bookingId: BOOKING_ID } },
+    { kind: 'one', value: { allowed: true } },
+    { kind: 'one', value: sampleBooking('confirmed') },
+    { kind: 'one', value: { allowed: true } },
+    { kind: 'one', value: { id: ROOM_ID, bookingId: BOOKING_ID, status } },
+  ];
+}
+
+function roomMessageAccess(status = 'open'): QueryResponse[] {
+  return [
+    { kind: 'one', value: { allowed: true } },
+    { kind: 'one', value: { allowed: true } },
+    {
+      kind: 'one',
+      value: { clientId: CLIENT_ID, photographerId: PHOTOGRAPHER_ID, studioId: null },
+    },
+    { kind: 'execute' },
+    { kind: 'optional', value: { id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' } },
+    ...roomAccess(status),
+  ];
+}
+
 beforeEach(() => {
   queue.length = 0;
   executedSql.length = 0;
@@ -126,21 +151,17 @@ describe('shoot room collaboration (106a)', () => {
   it('posts a text message and an image attachment message in an open room', async () => {
     const app = createTestApp();
 
-    queue.push(
-      { kind: 'one', value: { allowed: true } },
-      { kind: 'one', value: { id: ROOM_ID, bookingId: BOOKING_ID, status: 'open' } },
-      {
-        kind: 'one',
-        value: {
-          id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
-          roomId: ROOM_ID,
-          senderId: CLIENT_ID,
-          text: 'Confirmed call time at 8:45 AM.',
-          storagePath: null,
-          type: 'text',
-        },
+    queue.push(...roomMessageAccess(), {
+      kind: 'optional',
+      value: {
+        id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+        roomId: ROOM_ID,
+        senderId: CLIENT_ID,
+        text: 'Confirmed call time at 8:45 AM.',
+        storagePath: null,
+        type: 'text',
       },
-    );
+    });
 
     const textRes = await app.inject({
       method: 'POST',
@@ -156,21 +177,17 @@ describe('shoot room collaboration (106a)', () => {
       height: 800,
       mimeType: 'image/jpeg',
     });
-    queue.push(
-      { kind: 'one', value: { allowed: true } },
-      { kind: 'one', value: { id: ROOM_ID, bookingId: BOOKING_ID, status: 'open' } },
-      {
-        kind: 'one',
-        value: {
-          id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
-          roomId: ROOM_ID,
-          senderId: PROVIDER_ID,
-          text: 'Lighting diagram',
-          storagePath: `${ROOM_ID}/diagram.jpg`,
-          type: 'image',
-        },
+    queue.push(...roomMessageAccess(), {
+      kind: 'optional',
+      value: {
+        id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+        roomId: ROOM_ID,
+        senderId: PROVIDER_ID,
+        text: 'Lighting diagram',
+        storagePath: `${ROOM_ID}/diagram.jpg`,
+        type: 'image',
       },
-    );
+    });
 
     const imgRes = await app.inject({
       method: 'POST',
@@ -195,10 +212,7 @@ describe('shoot room collaboration (106a)', () => {
     });
     expect(outsiderRes.statusCode).toBe(404);
 
-    queue.push(
-      { kind: 'one', value: { allowed: true } },
-      { kind: 'one', value: { id: ROOM_ID, bookingId: BOOKING_ID, status: 'closed' } },
-    );
+    queue.push(...roomMessageAccess('closed'));
     const closedRes = await app.inject({
       method: 'POST',
       url: `/v1/shoot-rooms/${ROOM_ID}/messages`,
@@ -212,21 +226,17 @@ describe('shoot room collaboration (106a)', () => {
   it('creates and updates milestones in an open shoot room', async () => {
     const app = createTestApp();
 
-    queue.push(
-      { kind: 'one', value: { allowed: true } },
-      { kind: 'one', value: { id: ROOM_ID, bookingId: BOOKING_ID, status: 'open' } },
-      {
-        kind: 'one',
-        value: {
-          id: MILESTONE_ID,
-          roomId: ROOM_ID,
-          title: 'Wardrobe fitting',
-          dueAt: '2026-11-21T10:00:00.000Z',
-          status: 'todo',
-          createdBy: PROVIDER_ID,
-        },
+    queue.push(...roomAccess(), {
+      kind: 'one',
+      value: {
+        id: MILESTONE_ID,
+        roomId: ROOM_ID,
+        title: 'Wardrobe fitting',
+        dueAt: '2026-11-21T10:00:00.000Z',
+        status: 'todo',
+        createdBy: PROVIDER_ID,
       },
-    );
+    });
 
     const createRes = await app.inject({
       method: 'POST',
@@ -237,19 +247,15 @@ describe('shoot room collaboration (106a)', () => {
     expect(createRes.statusCode).toBe(201);
     expect(createRes.json().data.status).toBe('todo');
 
-    queue.push(
-      { kind: 'one', value: { allowed: true } },
-      { kind: 'one', value: { id: ROOM_ID, bookingId: BOOKING_ID, status: 'open' } },
-      {
-        kind: 'one',
-        value: {
-          id: MILESTONE_ID,
-          roomId: ROOM_ID,
-          title: 'Wardrobe fitting',
-          status: 'done',
-        },
+    queue.push(...roomAccess(), {
+      kind: 'one',
+      value: {
+        id: MILESTONE_ID,
+        roomId: ROOM_ID,
+        title: 'Wardrobe fitting',
+        status: 'done',
       },
-    );
+    });
 
     const patchRes = await app.inject({
       method: 'PATCH',
@@ -265,21 +271,17 @@ describe('shoot room collaboration (106a)', () => {
     const app = createTestApp();
 
     // Propose decision as client
-    queue.push(
-      { kind: 'one', value: { allowed: true } },
-      { kind: 'one', value: { id: ROOM_ID, bookingId: BOOKING_ID, status: 'open' } },
-      {
-        kind: 'one',
-        value: {
-          id: DECISION_ID,
-          roomId: ROOM_ID,
-          title: 'Switch to outdoor rooftop',
-          description: 'Golden hour natural light',
-          proposedBy: CLIENT_ID,
-          status: 'proposed',
-        },
+    queue.push(...roomAccess(), {
+      kind: 'one',
+      value: {
+        id: DECISION_ID,
+        roomId: ROOM_ID,
+        title: 'Switch to outdoor rooftop',
+        description: 'Golden hour natural light',
+        proposedBy: CLIENT_ID,
+        status: 'proposed',
       },
-    );
+    });
     const proposeRes = await app.inject({
       method: 'POST',
       url: `/v1/shoot-rooms/${ROOM_ID}/decisions`,
@@ -290,8 +292,7 @@ describe('shoot room collaboration (106a)', () => {
 
     // Client tries to approve own decision -> 403 counterparty_required
     queue.push(
-      { kind: 'one', value: { allowed: true } },
-      { kind: 'one', value: { id: ROOM_ID, bookingId: BOOKING_ID, status: 'open' } },
+      ...roomAccess(),
       { kind: 'one', value: { allowed: true } },
       { kind: 'one', value: sampleBooking('confirmed') },
       { kind: 'one', value: { proposedBy: CLIENT_ID, status: 'proposed' } },
@@ -307,8 +308,7 @@ describe('shoot room collaboration (106a)', () => {
 
     // Provider approves decision -> 200
     queue.push(
-      { kind: 'one', value: { allowed: true } },
-      { kind: 'one', value: { id: ROOM_ID, bookingId: BOOKING_ID, status: 'open' } },
+      ...roomAccess(),
       { kind: 'one', value: { allowed: true } },
       { kind: 'one', value: sampleBooking('confirmed') },
       { kind: 'one', value: { proposedBy: CLIENT_ID, status: 'proposed' } },
@@ -328,8 +328,7 @@ describe('shoot room collaboration (106a)', () => {
 
     // Re-resolving an already agreed decision -> 409 decision_resolved
     queue.push(
-      { kind: 'one', value: { allowed: true } },
-      { kind: 'one', value: { id: ROOM_ID, bookingId: BOOKING_ID, status: 'open' } },
+      ...roomAccess(),
       { kind: 'one', value: { allowed: true } },
       { kind: 'one', value: sampleBooking('confirmed') },
       { kind: 'one', value: { proposedBy: CLIENT_ID, status: 'agreed' } },
@@ -445,7 +444,17 @@ describe('gallery proofing and selections (106b)', () => {
       { kind: 'one', value: { allowed: true } },
       { kind: 'one', value: sampleBooking('proofing') },
       { kind: 'one', value: { allowed: true } },
+      {
+        kind: 'one',
+        value: {
+          id: GALLERY_ID,
+          status: 'selection_submitted',
+          round: 1,
+          revisionRequestedAt: '2026-11-20T00:00:00Z',
+        },
+      },
       { kind: 'one', value: { id: GALLERY_ID, status: 'open_for_selection', round: 2 } },
+      { kind: 'execute' },
     );
     const reopenRes = await app.inject({
       method: 'POST',
@@ -480,6 +489,22 @@ describe('deliveries, reviews, and timeline (106c–106d)', () => {
     expect(lockedRes.statusCode).toBe(422);
     expect(lockedRes.json().error.details).toEqual([{ reason: 'delivery_locked' }]);
 
+    queue.push(
+      { kind: 'one', value: { allowed: true } },
+      { kind: 'one', value: sampleBooking('proofing') },
+      { kind: 'one', value: { allowed: true } },
+      { kind: 'optional', value: undefined },
+    );
+    const noSelection = await app.inject({
+      method: 'POST',
+      url: `/v1/bookings/${BOOKING_ID}/deliveries`,
+      headers: { authorization: 'Bearer provider' },
+      payload: { storagePath: `${BOOKING_ID}/final.webp`, fileName: 'final.webp' },
+    });
+    expect(noSelection.statusCode).toBe(422);
+    expect(noSelection.json().error.details).toEqual([{ reason: 'selection_delivery_required' }]);
+    expect(verifyMock).not.toHaveBeenCalled();
+
     // Proofing status -> 201
     verifyMock.mockResolvedValueOnce({
       width: 0,
@@ -490,6 +515,7 @@ describe('deliveries, reviews, and timeline (106c–106d)', () => {
       { kind: 'one', value: { allowed: true } },
       { kind: 'one', value: sampleBooking('proofing') },
       { kind: 'one', value: { allowed: true } },
+      { kind: 'optional', value: { round: 1 } },
       {
         kind: 'one',
         value: {
@@ -615,21 +641,17 @@ describe('deliveries, reviews, and timeline (106c–106d)', () => {
     it('rejects client trying to approve own decision (403 counterparty_required)', async () => {
       const app = createTestApp();
       // propose decision as client
-      queue.push(
-        { kind: 'one', value: { allowed: true } },
-        { kind: 'one', value: { id: ROOM_ID, bookingId: BOOKING_ID, status: 'open' } },
-        {
-          kind: 'one',
-          value: {
-            id: DECISION_ID,
-            roomId: ROOM_ID,
-            title: 'Switch',
-            description: 'desc',
-            proposedBy: CLIENT_ID,
-            status: 'proposed',
-          },
+      queue.push(...roomAccess(), {
+        kind: 'one',
+        value: {
+          id: DECISION_ID,
+          roomId: ROOM_ID,
+          title: 'Switch',
+          description: 'desc',
+          proposedBy: CLIENT_ID,
+          status: 'proposed',
         },
-      );
+      });
       const proposeRes = await app.inject({
         method: 'POST',
         url: `/v1/shoot-rooms/${ROOM_ID}/decisions`,
@@ -639,8 +661,7 @@ describe('deliveries, reviews, and timeline (106c–106d)', () => {
       expect(proposeRes.statusCode).toBe(201);
       // client attempts self‑approval
       queue.push(
-        { kind: 'one', value: { allowed: true } },
-        { kind: 'one', value: { id: ROOM_ID, bookingId: BOOKING_ID, status: 'open' } },
+        ...roomAccess(),
         { kind: 'one', value: { allowed: true } }, // booking
         { kind: 'one', value: sampleBooking('confirmed') },
         { kind: 'one', value: { proposedBy: CLIENT_ID, status: 'proposed' } },
@@ -657,10 +678,7 @@ describe('deliveries, reviews, and timeline (106c–106d)', () => {
 
     it('returns 422 when posting a milestone to a closed room', async () => {
       const app = createTestApp();
-      queue.push(
-        { kind: 'one', value: { allowed: true } },
-        { kind: 'one', value: { id: ROOM_ID, bookingId: BOOKING_ID, status: 'closed' } },
-      );
+      queue.push(...roomAccess('closed'));
       const res = await app.inject({
         method: 'POST',
         url: `/v1/shoot-rooms/${ROOM_ID}/milestones`,
@@ -674,10 +692,7 @@ describe('deliveries, reviews, and timeline (106c–106d)', () => {
     it('fails image upload when storage verification throws', async () => {
       const app = createTestApp();
       verifyMock.mockRejectedValueOnce(new Error('Verification failed'));
-      queue.push(
-        { kind: 'one', value: { allowed: true } },
-        { kind: 'one', value: { id: ROOM_ID, bookingId: BOOKING_ID, status: 'open' } },
-      );
+      queue.push({ kind: 'one', value: { allowed: true } });
       const res = await app.inject({
         method: 'POST',
         url: `/v1/shoot-rooms/${ROOM_ID}/messages`,
@@ -690,8 +705,7 @@ describe('deliveries, reviews, and timeline (106c–106d)', () => {
     it('maps duplicate decision DB error to 409 decision_resolved', async () => {
       const app = createTestApp();
       queue.push(
-        { kind: 'one', value: { allowed: true } },
-        { kind: 'one', value: { id: ROOM_ID, bookingId: BOOKING_ID, status: 'open' } },
+        ...roomAccess(),
         { kind: 'one', value: { allowed: true } }, // booking
         { kind: 'one', value: sampleBooking('confirmed') },
         { kind: 'throw', error: { code: '23505', constraint: 'room_decisions_pkey' } },

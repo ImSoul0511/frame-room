@@ -4,11 +4,20 @@ import { useStrings } from '../../lib/i18n';
 import { useDemo } from '../demo/DemoContext';
 import { DemoReportButton } from '../demo/ReportButton';
 
-export type GalleryPhoto = { id: string; url: string; caption?: string; provenance?: string };
+export type GalleryPhoto = {
+  id: string;
+  url: string;
+  caption?: string;
+  provenance?: string;
+  crewCredits?: string;
+  tags?: { id: string; name: string }[];
+};
 export function PhotoGallery({ photos: source }: { photos: GalleryPhoto[] }) {
   const t = useStrings();
   const demo = useDemo();
-  const photos = source.filter((photo) => !demo.state.hiddenTargets.includes(photo.id));
+  const photos = source.filter(
+    (photo) => demo.choice === 'account' || !demo.state.hiddenTargets.includes(photo.id),
+  );
   const [selected, setSelected] = useState<number | null>(null);
   const current = selected === null ? null : photos[selected];
   const previous = () =>
@@ -45,6 +54,12 @@ export function PhotoGallery({ photos: source }: { photos: GalleryPhoto[] }) {
             }}
           >
             <img src={current.url} alt={current.caption || t.profileUi.photo} />
+            {current.crewCredits ? (
+              <p>
+                {t.demo.credits} · {current.crewCredits}
+              </p>
+            ) : null}
+            {current.tags?.length ? <p>{current.tags.map((tag) => tag.name).join(' · ')}</p> : null}
             <div className="row between wrap">
               <button className="text-button" onClick={previous}>
                 {t.profileUi.previous}

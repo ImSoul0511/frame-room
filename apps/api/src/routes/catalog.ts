@@ -5,11 +5,14 @@ import { defineRoute, type ApiModule } from '../plugins/route.js';
 import {
   exploreProviderSchema,
   exploreQuerySchema,
+  idSchema,
   idParamsSchema,
   myInvitationSchema,
   myStudioSchema,
   ownedPortfolioSchema,
   ownedServiceSchema,
+  photographerDisplayNameQuerySchema,
+  photographerLookupParamsSchema,
   portfolioDetailSchema,
   portfolioImageInputSchema,
   portfolioImageSchema,
@@ -34,15 +37,54 @@ import {
   studioTeamMemberSchema,
   tagSchema,
   updateStudioMemberRoleInputSchema,
+  type ProviderLookup,
 } from '../schemas/catalog.js';
 import * as catalog from '../services/catalog.js';
 import { createCloudCatalog } from '../services/cloud-catalog.js';
+import { MediaService, requireStoragePath } from '../services/media.js';
+import { requireCondition } from '../lib/errors.js';
 
 /** 102: Provider discovery and catalog routes (/v1/*). */
 export const catalogModule: ApiModule = {
   name: 'catalog',
   register(app, deps) {
     const cloud = deps.db.isConfigured ? null : createCloudCatalog(deps.env);
+    const { API_PUBLIC_ORIGIN, SUPABASE_URL } = deps.env;
+    const media = new MediaService(deps.env);
+    const providerDetail = (type: 'photographer' | 'studio', lookup: ProviderLookup) =>
+      cloud
+        ? cloud.detail(type, lookup)
+        : deps.db.run(null, (tx) =>
+            catalog.getProviderDetail(tx, type, lookup, SUPABASE_URL, API_PUBLIC_ORIGIN),
+          );
+    app.get('/v1/portfolio-media', async (request, reply) => {
+      const { path } = z.object({ path: z.string().max(500) }).parse(request.query);
+      requireStoragePath(path);
+      const visible = cloud
+        ? await cloud.publicImageExists(path)
+        : await deps.db.run(null, (tx) =>
+            tx.optional(
+              `select i.id from portfolio_images i join portfolios p on p.id=i.portfolio_id
+           where i.storage_path=$1 and not i.is_hidden and p.status='published'
+             and p.deleted_at is null and private.provider_visible(p.photographer_id,p.studio_id)
+           limit 1`,
+              [path],
+            ),
+          );
+      requireCondition(visible, 404, 'file_not_found');
+      const bytes = await media.download('portfolio-images', path);
+      return reply
+        .header('Cache-Control', 'no-store')
+        .header('X-Content-Type-Options', 'nosniff')
+        .type(
+          path.endsWith('.webp')
+            ? 'image/webp'
+            : path.endsWith('.png')
+              ? 'image/png'
+              : 'image/jpeg',
+        )
+        .send(bytes);
+    });
     const verifyPortfolioUpload = createPortfolioUploadVerifier(deps.env);
     // ---------- 102a: Public discovery ----------
     defineRoute(app, deps, {
@@ -55,7 +97,9 @@ export const catalogModule: ApiModule = {
       handler: ({ query, transaction }) =>
         cloud
           ? cloud.list(query)
-          : transaction((tx) => catalog.exploreProviders(tx, query, deps.env.SUPABASE_URL)),
+          : transaction((tx) =>
+              catalog.exploreProviders(tx, query, SUPABASE_URL, API_PUBLIC_ORIGIN),
+            ),
     });
 
     for (const [plural, type] of [
@@ -78,18 +122,35 @@ export const catalogModule: ApiModule = {
       defineRoute(app, deps, {
         method: 'GET',
         url: `/v1/${plural}/:id`,
-        summary: `Public ${type} detail with active services, published portfolios and visible reviews.`,
+        summary:
+          type === 'photographer'
+            ? 'Public photographer detail by exact display name or UUID.'
+            : 'Public studio detail by UUID.',
         access: 'public',
-        params: idParamsSchema,
+        params: type === 'photographer' ? photographerLookupParamsSchema : idParamsSchema,
         response: providerDetailSchema,
-        handler: ({ params, transaction }) =>
-          cloud
-            ? cloud.detail(type, params.id)
-            : transaction((tx) =>
-                catalog.getProviderDetail(tx, type, params.id, deps.env.SUPABASE_URL),
-              ),
+        errors: type === 'photographer' ? [404, 409] : [404],
+        handler: ({ params }) =>
+          providerDetail(
+            type,
+            type === 'photographer' && !idSchema.safeParse(params.id).success
+              ? { displayName: params.id }
+              : { id: params.id },
+          ),
       });
     }
+
+    defineRoute(app, deps, {
+      method: 'GET',
+      url: '/v1/photographers/by-name',
+      summary:
+        'Public photographer detail using an exact display name, including reserved path names.',
+      access: 'public',
+      query: photographerDisplayNameQuerySchema,
+      response: providerDetailSchema,
+      errors: [404, 409],
+      handler: ({ query }) => providerDetail('photographer', { displayName: query.displayName }),
+    });
 
     defineRoute(app, deps, {
       method: 'GET',
@@ -116,7 +177,11 @@ export const catalogModule: ApiModule = {
       url: '/v1/studios',
       summary: 'Create a studio and add the caller as its initial manager.',
       access: 'verified',
-      body: studioInputSchema,
+      body: studioInputSchema.extend({
+        city: z.string().trim().min(1).max(100),
+        address: z.string().trim().min(1).max(200),
+        contactEmail: z.string().trim().email().max(254),
+      }),
       response: studioSchema,
       errors: [403],
       handler: ({ actor, body, transaction }) =>
@@ -146,6 +211,51 @@ export const catalogModule: ApiModule = {
       errors: [403],
       handler: ({ actor, params, transaction }) =>
         transaction((tx) => catalog.getStudioTeam(tx, actor.id, params.id)),
+    });
+    defineRoute(app, deps, {
+      method: 'GET',
+      url: '/v1/studios/:id/invitable-photographers',
+      summary: 'Search active photographers eligible for a studio invitation.',
+      access: 'verified',
+      params: idParamsSchema,
+      query: z.object({ term: z.string().trim().min(2).max(100) }),
+      response: z.array(
+        z.object({ id: z.string().uuid(), displayName: z.string(), userName: z.string() }),
+      ),
+      handler: ({ actor, params, query, transaction }) =>
+        transaction(async (tx) => {
+          await catalog.requireStudioManager(tx, params.id, actor.id);
+          return tx.rows(
+            `select p.id,p.display_name,pr.user_name from photographers p join profiles pr on pr.id=p.user_id
+           where not p.is_hidden and (strpos(lower(p.display_name),lower($2))>0
+             or strpos(lower(pr.user_name),lower($2))>0)
+             and not exists (select 1 from studio_members m where m.studio_id=$1 and m.user_id=p.user_id)
+             and not exists (select 1 from studio_invitations i where i.studio_id=$1 and i.photographer_id=p.id and i.status='pending')
+           order by p.display_name,p.id limit 30`,
+            [params.id, query.term],
+          );
+        }),
+    });
+    defineRoute(app, deps, {
+      method: 'GET',
+      url: '/v1/studios/:id/members/:userId/active-bookings',
+      summary: 'List bookings currently assigned to this studio member.',
+      access: 'verified',
+      params: studioMemberParamsSchema,
+      response: z.array(
+        z.object({ id: z.string().uuid(), serviceName: z.string(), scheduledStart: z.string() }),
+      ),
+      handler: ({ actor, params, transaction }) =>
+        transaction(async (tx) => {
+          await catalog.requireStudioManager(tx, params.id, actor.id);
+          return tx.rows(
+            `select b.id,b.service_name,b.scheduled_start from bookings b
+           join photographers p on p.id=b.assigned_photographer_id
+           where b.studio_id=$1 and p.user_id=$2 and b.status not in ('rejected','cancelled','completed')
+           order by b.scheduled_start,b.id`,
+            [params.id, params.userId],
+          );
+        }),
     });
 
     // ---------- 102c: Services ----------
@@ -232,7 +342,9 @@ export const catalogModule: ApiModule = {
       query: portfolioListQuerySchema,
       response: z.array(publicPortfolioSchema),
       handler: ({ query, transaction }) =>
-        transaction((tx) => catalog.listPublicPortfolios(tx, query, deps.env.SUPABASE_URL)),
+        transaction((tx) =>
+          catalog.listPublicPortfolios(tx, query, SUPABASE_URL, API_PUBLIC_ORIGIN),
+        ),
     });
 
     defineRoute(app, deps, {
@@ -246,7 +358,28 @@ export const catalogModule: ApiModule = {
       handler: ({ params, transaction }) =>
         cloud
           ? cloud.portfolio(params.id)
-          : transaction((tx) => catalog.getPortfolioDetail(tx, params.id, deps.env.SUPABASE_URL)),
+          : transaction((tx) =>
+              catalog.getPortfolioDetail(tx, params.id, SUPABASE_URL, {
+                apiOrigin: API_PUBLIC_ORIGIN,
+              }),
+            ),
+    });
+
+    defineRoute(app, deps, {
+      method: 'GET',
+      url: '/v1/me/portfolios/:id',
+      summary: 'Read a portfolio in the owner editor, including unpublished drafts.',
+      access: 'verified',
+      params: idParamsSchema,
+      response: portfolioDetailSchema,
+      errors: [403, 404],
+      handler: ({ actor, params, transaction }) =>
+        transaction((tx) =>
+          catalog.getPortfolioDetail(tx, params.id, SUPABASE_URL, {
+            ownerId: actor.id,
+            ownerUrl: (path) => media.url('portfolio-images', path),
+          }),
+        ),
     });
 
     defineRoute(app, deps, {

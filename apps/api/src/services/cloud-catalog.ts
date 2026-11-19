@@ -5,9 +5,14 @@ import { profileSchema, ownPhotographerSchema, type Profile } from '@frameroom/s
 import type { ApiEnv } from '../config/env.js';
 import { ApiError } from '../lib/errors.js';
 import { normalizeRow } from '../repositories/database.js';
-import type { ExploreQuery, Provider, ProviderListQuery } from '../schemas/catalog.js';
+import type {
+  ExploreQuery,
+  Provider,
+  ProviderListQuery,
+  ProviderLookup,
+} from '../schemas/catalog.js';
 import { providerDetailSchema, portfolioDetailSchema, tagSchema } from '../schemas/catalog.js';
-import { buildPublicPortfolioImageUrl } from './catalog.js';
+import { buildPublicPortfolioImageUrl, singleDisplayNameMatch } from './catalog.js';
 
 function check(error: PostgrestError | null, conflictReason = 'already_exists') {
   if (!error) return;
@@ -60,7 +65,11 @@ export function createCloudCatalog(env: ApiEnv) {
         .sort((a, b) => a.sort_order - b.sort_order)[0];
       return {
         ...provider,
-        coverUrl: buildPublicPortfolioImageUrl(env.SUPABASE_URL, image?.storage_path),
+        coverUrl: buildPublicPortfolioImageUrl(
+          env.SUPABASE_URL,
+          image?.storage_path,
+          env.API_PUBLIC_ORIGIN,
+        ),
       };
     });
   };
@@ -154,6 +163,8 @@ export function createCloudCatalog(env: ApiEnv) {
         district: string;
         genres: string[];
         styles: string[];
+        contactEmail?: string | null;
+        professionalRoles?: string[];
       },
       update = false,
     ) {
@@ -166,6 +177,10 @@ export function createCloudCatalog(env: ApiEnv) {
         district: input.district,
         genres: input.genres,
         styles: input.styles,
+        ...(input.contactEmail === undefined ? {} : { contact_email: input.contactEmail }),
+        ...(input.professionalRoles === undefined
+          ? {}
+          : { professional_roles: input.professionalRoles }),
       };
       const result = update
         ? await client.from('photographers').update(values).eq('user_id', userId).select().single()
@@ -177,15 +192,15 @@ export function createCloudCatalog(env: ApiEnv) {
       check(result.error);
       return ownPhotographerSchema.parse(normalizeRow(result.data));
     },
-    async detail(type: 'photographer' | 'studio', id: string) {
-      const { data, error } = await publicClient
-        .from('providers')
-        .select('*')
-        .eq('type', type)
-        .eq('id', id)
-        .maybeSingle();
+    async detail(type: 'photographer' | 'studio', lookup: ProviderLookup) {
+      const query = publicClient.from('providers').select('*').eq('type', type);
+      const { data: matches, error } = await ('id' in lookup
+        ? query.eq('id', lookup.id).limit(1)
+        : query.eq('display_name', lookup.displayName).limit(2));
       check(error);
+      const data = singleDisplayNameMatch(matches ?? []);
       if (!data) throw new ApiError(404, 'NOT_FOUND', `${type}_not_found`);
+      const { id } = data;
       const owner = type === 'photographer' ? 'photographer_id' : 'studio_id';
       const [services, portfolios, reviews] = await Promise.all([
         publicClient
@@ -226,6 +241,7 @@ export function createCloudCatalog(env: ApiEnv) {
               .parse(portfolio.portfolio_images ?? [])
               .filter((image) => !image.is_hidden)
               .sort((a, b) => a.sort_order - b.sort_order)[0]?.storage_path,
+            env.API_PUBLIC_ORIGIN,
           ),
         })),
         reviews: (reviews.data ?? []).map((review) => ({
@@ -233,6 +249,18 @@ export function createCloudCatalog(env: ApiEnv) {
           authorName: '',
         })),
       });
+    },
+    async publicImageExists(path: string) {
+      const { data, error } = await publicClient
+        .from('portfolio_images')
+        .select('id,portfolios!inner(id)')
+        .eq('storage_path', path)
+        .eq('is_hidden', false)
+        .eq('portfolios.status', 'published')
+        .is('portfolios.deleted_at', null)
+        .limit(1);
+      check(error);
+      return Boolean(data?.length);
     },
     async portfolio(id: string) {
       const { data: portfolio, error } = await publicClient
@@ -271,7 +299,11 @@ export function createCloudCatalog(env: ApiEnv) {
           ...(normalizeRow(image) as object),
           source: image.source ?? null,
           licenseNote: image.license_note ?? null,
-          url: buildPublicPortfolioImageUrl(env.SUPABASE_URL, image.storage_path),
+          url: buildPublicPortfolioImageUrl(
+            env.SUPABASE_URL,
+            image.storage_path,
+            env.API_PUBLIC_ORIGIN,
+          ),
           tags: linksSchema
             .parse(image.image_tags ?? [])
             .flatMap((link) =>

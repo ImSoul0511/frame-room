@@ -1,6 +1,16 @@
 import { useState } from 'react';
 import { briefContentSchema, type BriefContent } from '@frameroom/shared';
-import { Action, Area, Feedback, Field, Form } from '../../components/ui';
+import {
+  Action,
+  Area,
+  DateField,
+  Feedback,
+  Field,
+  Form,
+  GenreSelect,
+  NumberField,
+  Select,
+} from '../../components/ui';
 import { useStrings } from '../../lib/i18n';
 
 export function BriefEditor({
@@ -36,6 +46,12 @@ export function BriefEditor({
         value={value.concept}
         onChange={(concept) => setValue({ ...value, concept })}
       />
+      {value.requirements ? (
+        <ScopeFields
+          value={value.requirements}
+          onChange={(requirements) => setValue({ ...value, requirements })}
+        />
+      ) : null}
       {(['shotList', 'lighting', 'checklist', 'milestones'] as const).map((key) => (
         <Area
           key={key}
@@ -49,5 +65,80 @@ export function BriefEditor({
         {t.project.applyPlan}
       </Action>
     </Form>
+  );
+}
+
+type Scope = NonNullable<BriefContent['requirements']>;
+function ScopeFields({ value, onChange }: { value: Scope; onChange: (value: Scope) => void }) {
+  const t = useStrings();
+  const change = <Key extends keyof Scope>(key: Key, next: Scope[Key]) =>
+    onChange({ ...value, [key]: next });
+  const local = (iso?: string) => {
+    if (!iso) return '';
+    const time = new Date(iso);
+    return new Date(time.getTime() - time.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  };
+  const iso = (date: string) => (date ? new Date(date).toISOString() : undefined);
+  return (
+    <>
+      <div className="two-col">
+        <GenreSelect
+          value={value.genre}
+          onChange={(genre) => change('genre', genre as Scope['genre'])}
+        />
+        <Select
+          label={t.demo.locationType}
+          value={value.locationType}
+          onChange={(location) => change('locationType', location as Scope['locationType'])}
+        >
+          <option value="outdoor">{t.demo.outdoor}</option>
+          <option value="indoor">{t.demo.indoor}</option>
+          <option value="studio">{t.demo.studioLocation}</option>
+        </Select>
+        <Field
+          label={t.demo.location}
+          value={value.location}
+          onChange={(location) => change('location', location)}
+        />
+        <NumberField
+          label={t.demo.people}
+          value={value.people}
+          min={1}
+          onChange={(number) => change('people', number)}
+        />
+        <DateField
+          label={t.booking.start}
+          value={local(value.scheduledStart)}
+          onChange={(date) => change('scheduledStart', iso(date))}
+        />
+        <DateField
+          label={t.booking.end}
+          value={local(value.scheduledEnd)}
+          onChange={(date) => change('scheduledEnd', iso(date))}
+        />
+        <NumberField
+          label={t.demo.photos}
+          value={value.photoCount}
+          onChange={(number) => change('photoCount', number)}
+        />
+        <NumberField
+          label={t.demo.retouched}
+          value={value.retouchedCount}
+          onChange={(number) => change('retouchedCount', number)}
+        />
+        <NumberField
+          label={t.demo.revisions}
+          value={value.revisionLimit}
+          onChange={(number) => change('revisionLimit', number)}
+        />
+        <NumberField
+          label={t.demo.budget}
+          value={value.budget}
+          onChange={(number) => change('budget', number)}
+        />
+      </div>
+      <Area label={t.demo.crew} value={value.crew} onChange={(crew) => change('crew', crew)} />
+      <Area label={t.demo.notes} value={value.notes} onChange={(notes) => change('notes', notes)} />
+    </>
   );
 }

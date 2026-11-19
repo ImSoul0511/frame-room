@@ -20,12 +20,29 @@ const ai = new AiService(env, db, media);
 const log = createLogger();
 let stopping = false;
 let nextCleanup = 0;
-process.once('SIGINT', () => {
+const completionTimer = new AbortController();
+function stop() {
   stopping = true;
-});
-process.once('SIGTERM', () => {
-  stopping = true;
-});
+  completionTimer.abort();
+}
+process.once('SIGINT', stop);
+process.once('SIGTERM', stop);
+
+async function completeDueBookings() {
+  const { signal } = completionTimer;
+  while (!signal.aborted) {
+    try {
+      await db.run(null, (tx) => tx.execute('select public.frameroom_complete_due_bookings()'));
+    } catch {
+      log.warn('Booking completion check failed; retrying');
+    }
+    try {
+      await setTimeout(30000, undefined, { signal });
+    } catch (error) {
+      if (!signal.aborted) throw error;
+    }
+  }
+}
 async function work(job: Job) {
   const input = z
     .object({
@@ -167,6 +184,7 @@ async function work(job: Job) {
     );
   });
 }
+const completionTask = completeDueBookings();
 while (!stopping) {
   let messageId: string | undefined;
   try {
@@ -184,7 +202,9 @@ while (!stopping) {
       continue;
     }
     messageId = message.msgId;
-    const job = await db.run(null, (tx) => claimForWork(tx, message.message.jobId));
+    const job = await db.run(null, (tx) =>
+      claimForWork(tx, message.message.jobId, env.AI_SEARCH_ENABLED),
+    );
     if (job) {
       try {
         const result = await work(job);
@@ -212,4 +232,5 @@ while (!stopping) {
     await setTimeout(5000);
   }
 }
+await completionTask;
 await db.close();

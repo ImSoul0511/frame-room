@@ -24,7 +24,7 @@ const PROFILE_SQL = `
   where p.id = $1`;
 
 const PHOTOGRAPHER_COLUMNS =
-  'id, user_id, display_name, bio, city, district, genres, styles, is_hidden, created_at, updated_at';
+  'id, user_id, display_name, bio, city, district, genres, styles, contact_email, professional_roles, is_hidden, created_at, updated_at';
 
 export function findProfile(tx: Transaction, userId: string) {
   return tx.optional<Profile>(PROFILE_SQL, [userId]);
@@ -61,17 +61,40 @@ export function findPhotographer(tx: Transaction, userId: string) {
 
 export function insertPhotographer(tx: Transaction, userId: string, input: PhotographerInput) {
   return tx.one<OwnPhotographer>(
-    `insert into photographers (user_id, display_name, bio, city, district, genres, styles)
-     values ($1, $2, $3, $4, $5, $6, $7) returning ${PHOTOGRAPHER_COLUMNS}`,
-    [userId, input.displayName, input.bio, input.city, input.district, input.genres, input.styles],
+    `insert into photographers (user_id, display_name, bio, city, district, genres, styles, contact_email, professional_roles)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9) returning ${PHOTOGRAPHER_COLUMNS}`,
+    [
+      userId,
+      input.displayName,
+      input.bio,
+      input.city,
+      input.district,
+      input.genres,
+      input.styles,
+      input.contactEmail ?? null,
+      input.professionalRoles ?? [],
+    ],
   );
 }
 
 export function updatePhotographer(tx: Transaction, userId: string, input: PhotographerInput) {
   return tx.optional<OwnPhotographer>(
     `update photographers
-     set display_name = $2, bio = $3, city = $4, district = $5, genres = $6, styles = $7
+     set display_name = $2, bio = $3, city = $4, district = $5, genres = $6, styles = $7,
+       contact_email = case when $8 then $9 else contact_email end,
+       professional_roles = coalesce($10, professional_roles)
      where user_id = $1 returning ${PHOTOGRAPHER_COLUMNS}`,
-    [userId, input.displayName, input.bio, input.city, input.district, input.genres, input.styles],
+    [
+      userId,
+      input.displayName,
+      input.bio,
+      input.city,
+      input.district,
+      input.genres,
+      input.styles,
+      input.contactEmail !== undefined,
+      input.contactEmail ?? null,
+      input.professionalRoles ?? null,
+    ],
   );
 }

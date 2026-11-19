@@ -6,7 +6,7 @@ import { insertProject } from './repositories/projects.js';
 import {
   createBooking,
   transition,
-  reschedule,
+  assignPhotographer,
   createBrief,
   approveBrief,
 } from './services/bookings.js';
@@ -16,9 +16,20 @@ import { createProfile } from './services/providers.js';
 import { claimForWork } from './repositories/ai-jobs.js';
 
 const env = loadEnv();
-if (!env.DATABASE_URL || new URL(env.DATABASE_URL).hostname !== '127.0.0.1')
-  throw new Error('Verification is local-only.');
-const db = new PgDatabase(env.DATABASE_URL);
+const testDatabaseUrl = process.env.CLOUD_TEST_DATABASE_URL;
+if (!testDatabaseUrl && (!env.DATABASE_URL || new URL(env.DATABASE_URL).hostname !== '127.0.0.1'))
+  throw new Error('Set CLOUD_TEST_DATABASE_URL to a disposable Supabase Cloud database.');
+if (testDatabaseUrl) {
+  const target = new URL(testDatabaseUrl);
+  const ref = process.env.CLOUD_TEST_PROJECT_REF;
+  const correctProject =
+    ref &&
+    (target.hostname === `db.${ref}.supabase.co` ||
+      (target.hostname.endsWith('.pooler.supabase.com') && target.username.endsWith(`.${ref}`)));
+  if (!correctProject)
+    throw new Error('CLOUD_TEST_PROJECT_REF must match the disposable Cloud database.');
+}
+const db = new PgDatabase(testDatabaseUrl || env.DATABASE_URL);
 let checks = 0;
 const actor = async (tx: Transaction, id: string) =>
   tx.execute("select set_config('request.jwt.claims',$1,true)", [
@@ -97,10 +108,18 @@ try {
         "insert into services(owner_type,studio_id,name,genre,duration_minutes,price) values('studio',$1,'Test shoot','portrait',120,1000) returning id",
         [studio.id],
       );
+      const content = {
+        title: 'Agreed portrait',
+        concept: 'Natural light',
+        shotList: ['Portrait'],
+        lighting: ['Window'],
+        checklist: ['Camera'],
+        milestones: ['Shoot'],
+      };
       const makeBooking = async () => {
         await actor(tx, client);
         const p = await insertProject(tx, client, 'Permission test', 'A natural portrait');
-        return createBooking(tx, client, {
+        const b = await createBooking(tx, client, {
           projectId: p.id,
           serviceId: service.id,
           scheduledStart: '2036-11-10T03:00:00.000Z',
@@ -108,34 +127,39 @@ try {
           addOnIds: [],
           note: '',
         });
+        const brief = await createBrief(tx, b.id, client, content);
+        return { booking: b, brief };
       };
-      let b = await makeBooking();
-      const collision = await makeBooking();
-      await actor(tx, outsider);
-      await denied(
-        tx,
-        () => transition(tx, b.id, { to: 'confirmed', version: 1, reason: '', resourceIds: [] }),
-        'forbidden',
-      );
-      await actor(tx, manager);
-      b = await transition(tx, b.id, {
-        to: 'confirmed',
-        version: 1,
-        reason: '',
-        resourceIds: [resource.id],
-        assignedPhotographerId: ph.id,
-      });
-      assert.equal(b.status, 'confirmed');
-      checks++;
-      await denied(tx, () =>
-        transition(tx, collision.id, {
+      const initial = await makeBooking();
+      const competing = await makeBooking();
+      let b = initial.booking;
+      const confirm = (id: string, version: number) =>
+        transition(tx, id, {
           to: 'confirmed',
-          version: 1,
+          version,
           reason: '',
           resourceIds: [resource.id],
-          assignedPhotographerId: ph.id,
-        }),
-      );
+        });
+      await actor(tx, outsider);
+      await denied(tx, () => confirm(b.id, b.version), 'forbidden');
+      await actor(tx, manager);
+      await denied(tx, () => confirm(b.id, b.version), 'brief_required');
+      await approveBrief(tx, b.id, initial.brief.id, manager);
+      await approveBrief(tx, competing.booking.id, competing.brief.id, manager);
+      await denied(tx, () => confirm(b.id, b.version), 'invalid_assignment');
+      b = await assignPhotographer(tx, b.id, manager, {
+        version: b.version,
+        photographerId: ph.id,
+      });
+      const collision = await assignPhotographer(tx, competing.booking.id, manager, {
+        version: competing.booking.version,
+        photographerId: ph.id,
+      });
+      b = await confirm(b.id, b.version);
+      assert.equal(b.status, 'confirmed');
+      assert.equal(b.agreedBriefVersion, 1);
+      checks++;
+      await denied(tx, () => confirm(collision.id, collision.version));
       assert.equal(
         (
           await tx.one<{ status: string }>('select status from bookings where id=$1', [
@@ -149,32 +173,6 @@ try {
           .length,
         0,
       );
-      checks++;
-      await denied(
-        tx,
-        () =>
-          transition(tx, b.id, {
-            to: 'in_progress',
-            version: b.version,
-            reason: '',
-            resourceIds: [],
-          }),
-        'brief_required',
-      );
-      const content = {
-        title: 'Agreed portrait',
-        concept: 'Natural light',
-        shotList: ['Portrait'],
-        lighting: ['Window'],
-        checklist: ['Camera'],
-        milestones: ['Shoot'],
-      };
-      await actor(tx, client);
-      const brief = (await createBrief(tx, b.id, client, content)) as { id: string };
-      await actor(tx, photographer);
-      await approveBrief(tx, b.id, brief.id, photographer);
-      b = await tx.one('select * from bookings where id=$1', [b.id]);
-      assert.equal(b.agreedBriefVersion, 1);
       checks++;
       await actor(tx, outsider);
       await tx.execute('set local role authenticated');
@@ -213,12 +211,10 @@ try {
         },
         'last_manager',
       );
-      b = await reschedule(tx, b.id, {
+      b = await assignPhotographer(tx, b.id, manager, {
         version: b.version,
-        scheduledStart: b.scheduledStart,
-        scheduledEnd: b.scheduledEnd,
-        assignedPhotographerId: managerPh.id,
-        resourceIds: [resource.id],
+        photographerId: managerPh.id,
+        reason: 'Permission verification replacement',
       });
       await actor(tx, photographer);
       const access = await tx.one<{ allowed: boolean }>(
@@ -264,7 +260,7 @@ try {
       await submitSelection(tx, client, b.id, { imageIds: [image.id] });
       await actor(tx, manager);
       await tx.execute(
-        "insert into deliveries(booking_id,storage_path,file_name,mime_type) values($1,$2,'final.webp','image/webp')",
+        "insert into deliveries(booking_id,storage_path,file_name,mime_type,selection_round) values($1,$2,'final.webp','image/webp',1)",
         [b.id, `${b.id}/${randomUUID()}.webp`],
       );
       b = await transition(tx, b.id, {
@@ -288,8 +284,15 @@ try {
       ]);
       await denied(
         tx,
-        () => sendMessage(tx, client, room.id, { text: 'Should not send', storagePath: null }),
-        'room_closed',
+        () =>
+          sendMessage(
+            tx,
+            client,
+            room.id,
+            { text: 'Should not send', storagePath: null },
+            randomUUID(),
+          ),
+        'not_found',
       );
       const spent = await tx.one<{ total: number }>(
         "select coalesce(sum(greatest(reserved_usd,coalesce(actual_usd,0))),0)::float as total from ai_usage where created_at>=date_trunc('month',now())",
@@ -306,8 +309,8 @@ try {
         "insert into ai_jobs(user_id,kind,input,request_key) values($1,'index','{}',$2) returning id",
         [client, randomUUID()],
       );
-      assert.ok(await claimForWork(tx, queued.id));
-      assert.equal(await claimForWork(tx, queued.id), null);
+      assert.ok(await claimForWork(tx, queued.id, true));
+      assert.equal(await claimForWork(tx, queued.id, true), null);
       assert.equal(
         (await tx.one<{ status: string }>('select status from ai_jobs where id=$1', [queued.id]))
           .status,
@@ -315,7 +318,7 @@ try {
       );
       checks++;
       await tx.execute("update ai_jobs set status='succeeded' where id=$1", [queued.id]);
-      assert.equal(await claimForWork(tx, queued.id), null);
+      assert.equal(await claimForWork(tx, queued.id, true), null);
       checks++;
       await actor(tx, outsider);
       await tx.execute('set local role authenticated');
@@ -349,7 +352,7 @@ try {
         tx,
         client.id,
         'Concurrent verification fixture',
-        'Temporary local verification',
+        'Temporary workflow verification',
       );
       const b = await createBooking(tx, client.id, {
         projectId: p.id,
@@ -359,9 +362,24 @@ try {
         addOnIds: [],
         note: '',
       });
-      ids.push({ projectId: p.id, bookingId: b.id });
+      const brief = await createBrief(tx, b.id, client.id, {
+        title: 'Concurrent brief',
+        concept: 'Conflict test',
+        shotList: [],
+        lighting: [],
+        checklist: [],
+        milestones: [],
+      });
+      await actor(tx, manager.id);
+      await approveBrief(tx, b.id, brief.id, manager.id);
+      const assigned = await assignPhotographer(tx, b.id, manager.id, {
+        version: b.version,
+        photographerId: photographer.id,
+      });
+      ids.push({ projectId: p.id, bookingId: b.id, version: assigned.version });
+      await actor(tx, client.id);
     }
-    return { ids, managerId: manager.id, photographerId: photographer.id };
+    return { ids, managerId: manager.id };
   });
   try {
     const outcomes = await Promise.allSettled(
@@ -369,9 +387,8 @@ try {
         db.run(setup.managerId, (tx) =>
           transition(tx, f.bookingId, {
             to: 'confirmed',
-            version: 1,
+            version: f.version,
             reason: '',
-            assignedPhotographerId: setup.photographerId,
             resourceIds: [],
           }),
         ),
@@ -397,6 +414,11 @@ try {
       await tx.execute('delete from booking_resources where booking_id=any($1::uuid[])', [
         bookings,
       ]);
+      await tx.execute('delete from notifications where booking_id=any($1::uuid[])', [bookings]);
+      await tx.execute('delete from private.booking_events where booking_id=any($1::uuid[])', [
+        bookings,
+      ]);
+      await tx.execute('delete from brief_versions where booking_id=any($1::uuid[])', [bookings]);
       await tx.execute('delete from bookings where id=any($1::uuid[])', [bookings]);
       await tx.execute('delete from creative_projects where id=any($1::uuid[])', [
         setup.ids.map((f) => f.projectId),

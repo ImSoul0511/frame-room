@@ -13,6 +13,17 @@ export const genres = [
 ] as const;
 export const genreSchema = z.enum(genres);
 export const providerTypeSchema = z.enum(['photographer', 'studio']);
+export const conversationInputSchema = z.object({
+  providerType: providerTypeSchema,
+  providerId: idSchema,
+});
+export const conversationMessageInputSchema = z
+  .object({
+    submissionId: idSchema,
+    text: z.string().trim().max(4000).default(''),
+    storagePath: z.string().max(500).nullable().default(null),
+  })
+  .refine((message) => Boolean(message.text || message.storagePath));
 export const provenanceSchema = z.enum(['captured', 'manipulated', 'ai_generated']);
 export const bookingStatusSchema = z.enum([
   'pending',
@@ -49,6 +60,11 @@ export const photographerInputSchema = z.object({
   district: z.string().trim().max(100).default(''),
   genres: z.array(genreSchema).min(1).max(5),
   styles: z.array(z.string().trim().max(30)).max(10).default([]),
+  contactEmail: z.string().trim().email().max(254).nullable().optional(),
+  professionalRoles: z
+    .array(z.enum(['photographer', 'retoucher', 'art_director']))
+    .max(3)
+    .optional(),
 });
 /** The caller's own photographer row; public discovery uses providerSchema instead. */
 export const ownPhotographerSchema = photographerInputSchema.extend({
@@ -80,6 +96,7 @@ export const studioInputSchema = z.object({
   district: z.string().trim().max(100).default(''),
   address: z.string().trim().max(200).default(''),
   genres: z.array(genreSchema).min(1).max(5),
+  contactEmail: z.string().trim().email().max(254).nullish(),
 });
 export const serviceInputSchema = z.object({
   name: shortText,
@@ -89,6 +106,8 @@ export const serviceInputSchema = z.object({
   price: nonnegative.max(1000000000),
   photoCount: nonnegative.default(10),
   retouchedCount: nonnegative.default(5),
+  selectionQuota: z.number().int().min(1).max(200).nullish(),
+  revisionLimit: nonnegative.max(100).nullish(),
   isActive: z.boolean().default(true),
 });
 export const serviceSchema = serviceInputSchema.extend({
@@ -140,6 +159,24 @@ export const briefContentSchema = z.object({
   lighting: z.array(z.string().max(500)).max(20),
   checklist: z.array(z.string().max(500)).max(30),
   milestones: z.array(z.string().max(200)).max(20),
+  requirements: z
+    .object({
+      genre: genreSchema,
+      locationType: z.enum(['outdoor', 'indoor', 'studio']),
+      location: z.string().trim().max(500).default(''),
+      people: z.number().int().min(1).max(10000),
+      photoCount: nonnegative.max(10000),
+      retouchedCount: nonnegative.max(10000),
+      revisionLimit: nonnegative.max(100),
+      budget: nonnegative.max(1_000_000_000),
+      crew: z.string().trim().max(1000).default(''),
+      notes: description,
+      referencePaths: z.array(z.string().max(500)).max(12).default([]),
+      scheduledStart: z.string().datetime().optional(),
+      scheduledEnd: z.string().datetime().optional(),
+    })
+    .refine((value) => value.retouchedCount <= value.photoCount, { path: ['retouchedCount'] })
+    .optional(),
 });
 export const projectPatchSchema = z.object({
   selectedArtifactIds: z.array(idSchema).max(12).optional(),
@@ -192,19 +229,39 @@ export const searchResultSchema = z.object({
     z.object({ id: idSchema, url: z.string(), caption: z.string(), provenance: provenanceSchema }),
   ),
 });
-export const bookingInputSchema = z
-  .object({
-    serviceId: idSchema,
-    projectId: idSchema,
-    scheduledStart: z.string().datetime(),
-    scheduledEnd: z.string().datetime(),
-    addOnIds: z.array(idSchema).max(20).default([]),
-    note: z.string().max(2000).default(''),
-  })
+const bookingRequestFields = z.object({
+  serviceId: idSchema,
+  scheduledStart: z.string().datetime(),
+  scheduledEnd: z.string().datetime(),
+  addOnIds: z.array(idSchema).max(20).default([]),
+  note: z.string().max(2000).default(''),
+});
+export const bookingInputSchema = bookingRequestFields
+  .extend({ projectId: idSchema })
   .refine(
     (v) => Date.parse(v.scheduledEnd) > Date.parse(v.scheduledStart),
     'End must follow start',
   );
+export const initialBookingInputSchema = bookingRequestFields
+  .extend({
+    projectId: idSchema.optional(),
+    brief: briefContentSchema.extend({
+      concept: z.string().trim().min(1).max(4000),
+      requirements: briefContentSchema.shape.requirements.unwrap(),
+    }),
+  })
+  .refine((value) => Date.parse(value.scheduledEnd) > Date.parse(value.scheduledStart), {
+    path: ['scheduledEnd'],
+  });
+export const assignmentInputSchema = z.object({
+  version: z.number().int().min(1),
+  photographerId: idSchema,
+});
+export const reassignmentInputSchema = assignmentInputSchema.extend({
+  reason: z.string().trim().min(1).max(1000),
+});
+export const bookingReasonSchema = z.object({ reason: z.string().trim().min(1).max(1000) });
+export const cancellationResponseSchema = z.object({ accept: z.boolean() });
 export const scheduleInputSchema = z
   .object({
     scheduledStart: z.string().datetime(),
@@ -226,6 +283,11 @@ export const transitionInputSchema = z.object({
   assignedPhotographerId: idSchema.optional(),
   resourceIds: z.array(idSchema).max(20).default([]),
 });
+export const completionHoldInputSchema = z.object({
+  hold: z.boolean(),
+  version: z.number().int().min(1),
+  reason: z.string().trim().min(1).max(1000),
+});
 export const bookingSchema = z.object({
   id: idSchema,
   clientId: idSchema,
@@ -242,6 +304,9 @@ export const bookingSchema = z.object({
   serviceName: z.string(),
   version: z.number(),
   agreedBriefVersion: z.number().nullable(),
+  completionDueAt: z.string().datetime().nullable().optional(),
+  completionHoldAt: z.string().datetime().nullable().optional(),
+  completionRemainingMs: z.number().int().nonnegative().nullable().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -265,6 +330,15 @@ export const milestoneInputSchema = z.object({
 });
 export const decisionInputSchema = z.object({ title: shortText, description });
 export const selectionInputSchema = z.object({ imageIds: z.array(idSchema).min(1).max(200) });
+export const photoFeedbackInputSchema = z
+  .object({
+    imageId: idSchema,
+    round: z.number().int().min(1),
+    note: z.string().trim().min(1).max(1000),
+    x: z.number().min(0).max(1).nullable().default(null),
+    y: z.number().min(0).max(1).nullable().default(null),
+  })
+  .refine((value) => (value.x === null) === (value.y === null));
 export const reviewInputSchema = z.object({
   rating: z.number().int().min(1).max(5),
   comment: z.string().trim().max(1000).default(''),
@@ -280,9 +354,17 @@ export const reportInputSchema = z.object({
   ]),
   targetId: idSchema,
   reason: z.enum(['inappropriate', 'copyright', 'spam', 'other']),
-  description: z.string().trim().min(1).max(1000),
+  description: z.string().trim().max(1000).default(''),
 });
 export const moderationInputSchema = z.object({ isHidden: z.boolean() });
+export const reportDecisionSchema = z.object({
+  decision: z.enum(['actioned', 'dismissed', 'deferred']),
+  reason: z.string().trim().min(1).max(1000),
+});
+export const reassessmentDecisionSchema = z.object({
+  approve: z.boolean(),
+  reason: z.string().trim().min(1).max(1000),
+});
 export const assistantInputSchema = z.object({
   text: z.string().trim().min(1).max(4000),
   mode: z.enum(['chat', 'brief', 'summary', 'feedback', 'action']).default('chat'),
@@ -368,6 +450,15 @@ export type Profile = z.infer<typeof profileSchema>;
 export type Provider = z.infer<typeof providerSchema>;
 export type CreativeProject = z.infer<typeof projectSchema>;
 export type Booking = z.infer<typeof bookingSchema>;
+export type BookingCompletion = Pick<
+  Booking,
+  | 'id'
+  | 'serviceName'
+  | 'version'
+  | 'completionDueAt'
+  | 'completionHoldAt'
+  | 'completionRemainingMs'
+>;
 export type BriefContent = z.infer<typeof briefContentSchema>;
 export type AiJob = z.infer<typeof jobSchema>;
 export type AiAction = z.infer<typeof actionSchema>;

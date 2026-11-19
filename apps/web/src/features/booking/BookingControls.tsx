@@ -1,16 +1,11 @@
 import { useState } from 'react';
 import { useIsFetching, useIsMutating } from '@tanstack/react-query';
 import type { Booking } from '@frameroom/shared';
-import type { Member, Resource, Workspace } from '../../lib/types';
+import type { Resource, Workspace } from '../../lib/types';
 import { patch, post } from '../../lib/api';
 import { useApi, useTask } from '../../lib/hooks';
 import { useStrings } from '../../lib/i18n';
-import { Action, Area, DateField, Feedback, Form, Modal, Select } from '../../components/ui';
-
-export function localTime(value: string) {
-  const date = new Date(value);
-  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-}
+import { Action, Area, Feedback, Form, Modal, Select } from '../../components/ui';
 export function BookingControls({ workspace: w }: { workspace: Workspace }) {
   const t = useStrings();
   const refreshing = useIsFetching({ queryKey: ['api'] }) > 0;
@@ -18,6 +13,7 @@ export function BookingControls({ workspace: w }: { workspace: Workspace }) {
   const b = w.booking;
   const [open, setOpen] = useState<'confirm' | 'reschedule' | null>(null);
   const [reason, setReason] = useState('');
+  const [pendingDecision, setPendingDecision] = useState<'rejected' | 'cancelled' | null>(null);
   const change = useTask(async (to: Booking['status']) =>
     post(`/v1/bookings/${b.id}/transitions`, { to, version: b.version, reason }),
   );
@@ -26,10 +22,7 @@ export function BookingControls({ workspace: w }: { workspace: Workspace }) {
     {
       to: 'cancelled',
       label: t.booking.cancel,
-      allowed:
-        (b.status === 'pending' && w.isClient) ||
-        b.status === 'confirmed' ||
-        (b.status === 'in_progress' && w.isProvider),
+      allowed: b.status === 'pending' && w.isClient,
     },
     {
       to: 'in_progress',
@@ -44,15 +37,21 @@ export function BookingControls({ workspace: w }: { workspace: Workspace }) {
     { to: 'delivered', label: t.booking.deliver, allowed: b.status === 'proofing' && w.isProvider },
     { to: 'completed', label: t.booking.complete, allowed: b.status === 'delivered' && w.isClient },
   ];
+  const latest = w.briefs[0];
+  const ready = latest?.clientApproved && latest.providerApproved && latest.status !== 'closed';
+  const canConfirm = ready && Boolean(b.assignedPhotographerId);
   return (
     <>
       <div className="row wrap">
         {b.status === 'pending' && w.canManage ? (
-          <Action disabled={changing || refreshing} onClick={() => setOpen('confirm')}>
+          <Action
+            disabled={changing || refreshing || !canConfirm}
+            onClick={() => setOpen('confirm')}
+          >
             {t.booking.confirm}
           </Action>
         ) : null}
-        {['confirmed', 'in_progress'].includes(b.status) && w.canManage ? (
+        {['confirmed', 'in_progress'].includes(b.status) && w.canManage && b.studioId ? (
           <Action secondary onClick={() => setOpen('reschedule')}>
             {t.booking.reschedule}
           </Action>
@@ -64,16 +63,43 @@ export function BookingControls({ workspace: w }: { workspace: Workspace }) {
               key={c.to}
               secondary
               pending={change.isPending || changing || refreshing}
-              onClick={() => change.mutate(c.to)}
+              onClick={() => {
+                if (c.to === 'rejected' || c.to === 'cancelled') setPendingDecision(c.to);
+                else change.mutate(c.to);
+              }}
             >
               {c.label}
             </Action>
           ))}
       </div>
-      {controls.some((c) => c.allowed && c.to === 'cancelled') ? (
-        <Area label={t.booking.reason} value={reason} onChange={setReason} />
+      {pendingDecision ? (
+        <Modal
+          title={pendingDecision === 'rejected' ? t.booking.reject : t.booking.cancel}
+          onClose={() => setPendingDecision(null)}
+        >
+          <Form
+            onSubmit={() =>
+              change.mutate(pendingDecision, { onSuccess: () => setPendingDecision(null) })
+            }
+          >
+            <Area label={t.booking.reason} value={reason} onChange={setReason} />
+            <Feedback error={change.error} />
+            <Action type="submit" pending={change.isPending} disabled={!reason.trim()}>
+              {t.booking.agree}
+            </Action>
+          </Form>
+        </Modal>
       ) : null}
       <Feedback error={change.error} />
+      {b.studioId &&
+      w.canManage &&
+      ((b.status === 'pending' && ready) || ['confirmed', 'in_progress'].includes(b.status)) ? (
+        <AssignmentForm workspace={w} />
+      ) : null}
+      {(w.isClient || w.canManage) &&
+      ['confirmed', 'in_progress', 'proofing'].includes(b.status) ? (
+        <CancellationForm workspace={w} />
+      ) : null}
       {open ? (
         <Modal
           title={open === 'confirm' ? t.booking.confirm : t.booking.reschedule}
@@ -101,38 +127,28 @@ function ScheduleForm({
 }) {
   const t = useStrings();
   const b = w.booking;
-  const [start, setStart] = useState(localTime(b.scheduledStart));
-  const [end, setEnd] = useState(localTime(b.scheduledEnd));
-  const [assigned, setAssigned] = useState(b.assignedPhotographerId ?? '');
   const [resources, setResources] = useState(w.resources.map((r) => r.resourceId));
-  const team = useApi<Member[]>(`/v1/studios/${b.studioId}/team`, Boolean(b.studioId));
   const available = useApi<Resource[]>(`/v1/studios/${b.studioId}/resources`, Boolean(b.studioId));
   const task = useTask(async () => {
     const input = {
       version: b.version,
-      scheduledStart: new Date(start).toISOString(),
-      scheduledEnd: new Date(end).toISOString(),
-      ...(assigned ? { assignedPhotographerId: assigned } : {}),
+      scheduledStart: b.scheduledStart,
+      scheduledEnd: b.scheduledEnd,
       resourceIds: resources,
     };
-    if (confirm) await post(`/v1/bookings/${b.id}/transitions`, { ...input, to: 'confirmed' });
+    if (confirm)
+      await post(`/v1/bookings/${b.id}/transitions`, {
+        version: b.version,
+        resourceIds: resources,
+        to: 'confirmed',
+      });
     else await patch(`/v1/bookings/${b.id}/schedule`, input);
     onDone();
   });
   return (
     <Form onSubmit={() => task.mutate()}>
-      <DateField label={t.booking.start} value={start} onChange={setStart} />
-      <DateField label={t.booking.end} value={end} onChange={setEnd} />
       {b.studioId ? (
         <>
-          <Select label={t.booking.assign} value={assigned} onChange={setAssigned} required>
-            <option value="">—</option>
-            {team.data?.map((m) => (
-              <option key={m.photographerId} value={m.photographerId}>
-                {m.displayName}
-              </option>
-            ))}
-          </Select>
           <fieldset>
             <legend>{t.booking.resources}</legend>
             {available.data
@@ -156,10 +172,105 @@ function ScheduleForm({
           </fieldset>
         </>
       ) : null}
-      <Feedback error={task.error ?? team.error ?? available.error} />
+      <Feedback error={task.error ?? available.error} />
       <Action type="submit" pending={task.isPending}>
         {confirm ? t.booking.confirm : t.save}
       </Action>
     </Form>
+  );
+}
+
+function AssignmentForm({ workspace: { booking: b } }: { workspace: Workspace }) {
+  const t = useStrings();
+  const [id, setId] = useState('');
+  const [reason, setReason] = useState('');
+  const [open, setOpen] = useState(false);
+  const reassign = b.status !== 'pending';
+  const candidates = useApi<{ id: string; displayName: string; isAvailable: boolean }[]>(
+    `/v1/bookings/${b.id}/available-photographers`,
+    open,
+  );
+  const task = useTask(async () => {
+    await post(`/v1/bookings/${b.id}/${reassign ? 'reassignment' : 'assignment'}`, {
+      version: b.version,
+      photographerId: id,
+      ...(reassign ? { reason } : {}),
+    });
+    setOpen(false);
+  });
+  const label = reassign ? t.demo.reassign : t.booking.assign;
+  return (
+    <>
+      <Action secondary onClick={() => setOpen(true)}>
+        {label}
+      </Action>
+      {open ? (
+        <Modal title={label} onClose={() => setOpen(false)}>
+          <Form onSubmit={() => task.mutate()}>
+            <Select label={t.photographer} value={id} onChange={setId} required>
+              <option value="">—</option>
+              {candidates.data?.map((candidate) => (
+                <option
+                  key={candidate.id}
+                  value={candidate.id}
+                  disabled={!candidate.isAvailable || candidate.id === b.assignedPhotographerId}
+                >
+                  {candidate.displayName}
+                  {candidate.isAvailable ? '' : ` · ${t.errors.slot_overlap}`}
+                </option>
+              ))}
+            </Select>
+            {reassign ? (
+              <Area label={t.booking.reason} value={reason} onChange={setReason} />
+            ) : null}
+            <Feedback error={task.error ?? candidates.error} />
+            <Action
+              type="submit"
+              pending={task.isPending}
+              disabled={!id || (reassign && !reason.trim())}
+            >
+              {label}
+            </Action>
+          </Form>
+        </Modal>
+      ) : null}
+    </>
+  );
+}
+
+function CancellationForm({ workspace: w }: { workspace: Workspace }) {
+  const t = useStrings();
+  const [reason, setReason] = useState('');
+  const path = `/v1/bookings/${w.booking.id}/cancellation`;
+  const submit = useTask(async () => post(path, { reason }));
+  const respond = useTask(async (accept: boolean) => patch(path, { accept }));
+  return (
+    <section className="panel">
+      {w.cancellation ? (
+        <>
+          <p>{w.cancellation.reason}</p>
+          {w.cancellation.isClientProposal === w.isClient ? (
+            <p>{t.demo.counterparty}</p>
+          ) : (
+            <div className="row wrap">
+              <Action pending={respond.isPending} onClick={() => respond.mutate(true)}>
+                {t.demo['cancel-agree']}
+              </Action>
+              <Action secondary pending={respond.isPending} onClick={() => respond.mutate(false)}>
+                {t.demo['cancel-decline']}
+              </Action>
+            </div>
+          )}
+        </>
+      ) : (
+        <Form onSubmit={() => submit.mutate()}>
+          <Area label={t.booking.reason} value={reason} onChange={setReason} />
+          <Action secondary type="submit" pending={submit.isPending} disabled={!reason.trim()}>
+            {t.demo.cancel}
+          </Action>
+        </Form>
+      )}
+      <Feedback error={submit.error ?? respond.error} />
+    </section>
   );
 }

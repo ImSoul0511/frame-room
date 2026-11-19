@@ -6,6 +6,8 @@ import type { ApiEnv } from '../config/env.js';
 import { ApiError, requireCondition } from '../lib/errors.js';
 import type { Transaction } from '../repositories/database.js';
 import { requirePortfolioOwnership } from './catalog.js';
+import { readConversation } from './conversations.js';
+import { requireSubmittedSelection } from './collaboration.js';
 
 export const uploadBuckets = [
   'avatars',
@@ -15,10 +17,23 @@ export const uploadBuckets = [
   'search-uploads',
   'gallery-previews',
   'room-files',
+  'conversation-files',
   'deliveries',
 ] as const;
 export type UploadBucket = (typeof uploadBuckets)[number];
-const publicBuckets = new Set(['avatars', 'profile-covers', 'portfolio-images']);
+export const defaultUploadInputLimit = 20 * 1024 * 1024;
+const largeImageInputBuckets = new Set<UploadBucket>([
+  'portfolio-images',
+  'brief-references',
+  'room-files',
+  'conversation-files',
+]);
+
+export function uploadInputLimit(bucket: UploadBucket) {
+  return largeImageInputBuckets.has(bucket) ? 50 * 1024 * 1024 : defaultUploadInputLimit;
+}
+
+const publicBuckets = new Set(['avatars', 'profile-covers']);
 export const thumbnailPath = (path: string) => path.replace(/\.webp$/, '_thumb.webp');
 
 export function requireStoragePath(path: string, prefix?: string) {
@@ -64,6 +79,11 @@ export class MediaService {
     if (error) throw new ApiError(503, 'SERVICE_UNAVAILABLE', 'upload_failed');
   }
   async authorizeUpload(tx: Transaction, userId: string, bucket: UploadBucket, scopeId?: string) {
+    if (bucket === 'conversation-files') {
+      requireCondition(scopeId, 400, 'invalid_input');
+      await readConversation(tx, scopeId);
+      return `${userId}/${scopeId}`;
+    }
     if (bucket === 'portfolio-images') {
       requireCondition(scopeId, 400, 'portfolio_required');
       await requirePortfolioOwnership(tx, userId, scopeId);
@@ -77,12 +97,11 @@ export class MediaService {
       );
       requireCondition(booking, 404, 'booking_not_found');
       requireCondition(
-        bucket === 'deliveries'
-          ? booking.status === 'proofing'
-          : ['confirmed', 'in_progress'].includes(booking.status),
+        bucket === 'deliveries' ? booking.status === 'proofing' : booking.status === 'in_progress',
         422,
         'upload_locked',
       );
+      if (bucket === 'deliveries') await requireSubmittedSelection(tx, scopeId);
       return scopeId;
     }
     if (bucket === 'room-files') {
@@ -98,7 +117,7 @@ export class MediaService {
   }
   async upload(bucket: UploadBucket, prefix: string, input: Buffer, declaredMime: string) {
     this.client();
-    requireCondition(input.length <= 20 * 1024 * 1024, 413, 'image_too_large');
+    requireCondition(input.length <= uploadInputLimit(bucket), 413, 'image_too_large');
     let metadata: Metadata;
     try {
       metadata = await sharp(input, { limitInputPixels: 40000000 }).metadata();
@@ -133,6 +152,20 @@ export class MediaService {
         .toBuffer({ resolveWithObject: true });
     } catch {
       throw new ApiError(400, 'VALIDATION_ERROR', 'invalid_image');
+    }
+    if (bucket === 'gallery-previews') {
+      const { width, height } = main.info;
+      const marks = Buffer.from(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
+          <text x="50%" y="50%" text-anchor="middle" dominant-baseline="middle"
+            fill="white" stroke="#222" stroke-width="0.8" opacity="0.48"
+            font-family="sans-serif" font-size="${Math.max(8, Math.round(width / 12))}">FrameRoom</text>
+        </svg>`,
+      );
+      main = await sharp(main.data)
+        .composite([{ input: marks }])
+        .webp({ quality: 85 })
+        .toBuffer({ resolveWithObject: true });
     }
     requireCondition(main.data.length <= 2097152, 400, 'image_too_large');
     const thumbnail = await sharp(main.data)

@@ -36,7 +36,9 @@ Business routes cover accounts, discovery, portfolios, projects, studios/resourc
 
 ## Install and run
 
-Requirements: Node.js 22 (minimum 22.13), npm, pnpm 9.15.0, and Git. Docker Desktop's Linux engine runs local Supabase.
+Use Node.js 22 (minimum 22.13), npm, pnpm 9.15.0 and Git. The application can run
+against Supabase Cloud with Auth, Storage, Realtime and a server-only PostgreSQL
+connection from the same project. See the [Cloud workflow](docs/infrastructure/supabase-cloud-preview.md).
 
 From the root:
 
@@ -49,7 +51,8 @@ pnpm dev
 
 Confirm that `pnpm --version` reports `9.15.0`. Use pnpm for workspace dependencies, which use the `workspace:*` protocol. See the [pnpm setup guide](docs/infrastructure/pnpm-without-corepack.md).
 
-For the full local MVP, start Docker Desktop's Linux engine, then run:
+The repository also retains an optional local Supabase workflow. To use it,
+start Docker Desktop's Linux engine and run:
 
 ```sh
 pnpm db:start
@@ -91,8 +94,8 @@ readiness. Windows users may use `scripts\start-dev.bat` for the development com
 For the connected Cloud discovery and account preview, see the
 [Supabase Cloud preview guide](docs/infrastructure/supabase-cloud-preview.md).
 
-Web/API startup and health work without an environment file. Business features need
-local Supabase settings from `demo:configure`. `.env.example` lists optional overrides.
+Web/API startup and health work without an environment file. Business features
+require the project settings in `.env.example`.
 
 | Variable                 | Default / purpose                                               |
 | ------------------------ | --------------------------------------------------------------- |
@@ -104,6 +107,7 @@ local Supabase settings from `demo:configure`. `.env.example` lists optional ove
 | VITE_SUPABASE_*          | Browser Auth connection and public anonymous key                |
 | DATABASE_URL, SUPABASE_* | Server DB/Auth/Storage connections; never browser-visible       |
 | AI_GATEWAY_API_KEY       | Optional server-only key; absent means real AI is unavailable   |
+| AI_SEARCH_ENABLED        | Defaults to false; enables AI Search API and portfolio indexing |
 | AI_TEXT_MODEL            | google/gemini-3.8-flash                                         |
 | AI_EMBEDDING_MODEL       | google/gemini-embedding-2, 768 dimensions                       |
 | AI_IMAGE_MODEL           | google/gemini-3.1-flash-image                                   |
@@ -135,18 +139,23 @@ All workspace commands use the pnpm CLI installed with npm.
 
 There are no active GitHub Actions workflows or deployments. The disabled workflow is historical reference. Run local checks and include evidence in reviewed PRs.
 
-Additional commands: `pnpm test:db` verifies real local permissions, transactions,
-concurrent confirmation, job recovery and budget rejection; `pnpm test:e2e` runs
-Playwright browser journeys. Install Chromium with `pnpm exec playwright install
-chromium` first. Both need the configured/seeded local database.
+Use `pnpm test:db` to verify real transactions and RLS on a disposable Cloud project.
+`pnpm test:e2e` runs browser smoke tests and enables the private workflow journey
+with synthetic accounts on that project. `pnpm db:types:cloud` generates shared
+database types after replay. See the [Cloud verification setup](docs/infrastructure/supabase-cloud-preview.md#verification).
 
 Before enabling paid AI, configure a Gateway key with a $30 monthly cap and no
 automatic refill, then add it to ignored `.env` and restart API/worker. The app
 reserves spend transactionally, limits generated/edited output to 100 per month,
 and never silently substitutes mock responses. Unknown provider outcomes retain
-their reservation and are not automatically repeated. Run `pnpm ai:index` to queue
-portfolio indexing. `pnpm ai:evaluate` measures the 30 bilingual labeled queries
-after at least 100 permitted images are indexed. The small initial seed is not a
+their reservation and are not automatically repeated.
+
+The MVP uses keyword search and catalog filters. For local AI Search development,
+set `AI_SEARCH_ENABLED=true` in `.env` and restart the API and worker. This
+enables the search and indexing endpoints, search image uploads, and the CLI
+commands. Run `pnpm ai:index` to queue portfolio indexing. `pnpm ai:evaluate`
+measures the 30 bilingual labeled queries after at least 100 permitted images
+are indexed. The small initial seed is not a
 completed benchmark dataset; model quality is not claimed without that run.
 
 ## Repository
@@ -180,6 +189,6 @@ Clients discover, book, select photos, and review. Photographers work independen
 
 ## Demo media
 
-Use synthetic accounts and permitted internal educational images. Record source, collected_at, and license_note; exclude personal contact information. The existing design accepts public portfolio-images URLs, even for drafts/demo images. API hiding cannot revoke direct Storage URLs; choose media compatible with that access.
+Use synthetic accounts and permitted internal educational images. Record source, collected_at, and license_note and exclude personal contact information. The portfolio media endpoint checks current publication and moderation state before serving a managed Storage object.
 
 Private brief/room/gallery/delivery files require authorization and expiring signed URLs. See contract 2.6 for paired thumbnails and image limits. No redistribution license is granted.

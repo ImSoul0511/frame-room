@@ -1,102 +1,82 @@
-# Supabase Cloud discovery and account preview
+# Supabase Cloud
 
-The discovery and authentication screens can use the existing Supabase Cloud project
-without a direct PostgreSQL connection. The API selects this adapter only when
-`DATABASE_URL` is absent. Existing PostgreSQL routes continue to use the original
-repository implementation when that setting is present.
+Run the web app, API and optional completion worker against one Supabase Cloud
+project. The web app uses Supabase Auth and Realtime. The API verifies the
+session with Supabase Auth, runs business transactions in PostgreSQL, and manages
+uploads in the project's Storage.
 
 ## Configuration
 
-Use Node.js 22 and the repository's pinned pnpm version. Configure the ignored root
-`.env`, then start the application with `pnpm dev`.
+Use Node.js 22 and pnpm 9.15.0. Set the ignored root `.env` using
+[.env.example](../../.env.example).
 
-| Setting                                              | Purpose                                                         |
-| ---------------------------------------------------- | --------------------------------------------------------------- |
-| `SUPABASE_URL`                                       | Cloud project URL used by the API                               |
-| `SUPABASE_ANON_KEY` or `SUPABASE_PUBLIC_KEY`         | Public key used for Auth verification and public catalog reads  |
-| `SUPABASE_SERVICE_ROLE_KEY` or `SUPABASE_SECRET_KEY` | Server-only credential for authenticated own-account operations |
-| `VITE_SUPABASE_URL`                                  | Same Cloud project URL for the browser                          |
-| `VITE_SUPABASE_ANON_KEY`                             | Same public key for the browser; never a privileged key         |
-| `VITE_API_URL`                                       | Local API origin, normally `http://localhost:4000`              |
+| Setting                                         | Purpose                                                                                               |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `SUPABASE_URL`, `VITE_SUPABASE_URL`             | The same project URL on the server and browser                                                        |
+| `SUPABASE_PUBLIC_KEY`, `VITE_SUPABASE_ANON_KEY` | Project publishable or anonymous key                                                                  |
+| `SUPABASE_SECRET_KEY`                           | Secret or service-role key for server-side Storage and REST operations                                |
+| `DATABASE_URL`                                  | Server-only PostgreSQL connection for the same project. Use the Cloud session pooler for IPv4 access. |
+| `VITE_API_URL`, `API_PUBLIC_ORIGIN`             | Browser-visible API origin. The second setting defaults to the first.                                 |
+| `WEB_ORIGIN`                                    | Frontend origin allowed by the API                                                                    |
+| `AI_SEARCH_ENABLED`                             | Keep `false` for UC-001 verification                                                                  |
 
-The standard API key names take precedence over their aliases. Restart the API and
-web server after environment changes. A local browser URL must not be combined with
-unrelated local Supabase keys when the intended database is Cloud.
+The API also accepts the legacy `SUPABASE_ANON_KEY` and
+`SUPABASE_SERVICE_ROLE_KEY` names. Restart the API and web after editing settings.
+Keep email confirmation enabled and allow the application origin and callback
+paths in Supabase Auth. Development commonly uses
+`http://localhost:5173/**`. [Supabase redirect URLs](https://supabase.com/docs/guides/auth/redirect-urls)
 
-Supabase email confirmation remains enabled. In Supabase Authentication URL
-Configuration, allow the application origin and its callback/recovery paths. For
-local development, the redirect allowlist can include `http://localhost:5173/**`.
-Hosted deployments need their own precise origins. The application uses
-`/auth/callback?next=...` for confirmation and `/reset-password` for recovery.
-See [Supabase redirect URLs](https://supabase.com/docs/guides/auth/redirect-urls)
-and [password authentication](https://supabase.com/docs/guides/auth/passwords).
+```powershell
+pnpm install --frozen-lockfile
+pnpm dev
+```
 
-## Implemented scope
+Run `pnpm dev:worker` in a second terminal to process due booking completions.
+Completion works with AI Search disabled and without an AI Gateway key. The
+REST adapter handles discovery and own-account operations when `DATABASE_URL`
+is absent. Booking, Studio management, reporting and other transactional
+operations use the PostgreSQL connection.
 
-- Public provider discovery, genre/location/budget filters and card sorting.
-- Public taxonomy tags, including optional Vietnamese labels and categories.
-- Provider detail with publicly visible portfolios, services and reviews.
-- Public portfolio galleries and image previews, retaining published/visible filters.
-- Separate display-name/username search using public profile fields only.
-- Supabase password login, signup, confirmation/resend and recovery forms.
-- Verified own-profile read/create/update and own-photographer onboarding.
+## Account workflow and demo
 
-Catalog reads use the public credential and existing RLS. Draft portfolios and
-hidden images are not made public. When no public cover exists, cards show initials
-and the explicit no-public-images label. Account endpoints verify the Supabase
-identity and confirmed email before account access; writes use that identity rather
-than IDs or roles supplied in form data. Registration metadata only prefills the
-onboarding form. Roles are derived from database records.
+Account navigation opens persistent routes for profile, Studio, portfolio,
+projects, bookings, messages, notifications and moderation. A public provider
+page uses published packages for booking and returns visitors to their intended
+action after login. The header's **View as** selector explicitly activates an
+in-memory demo role.
 
-An interrupted profile creation can be retried with the existing Auth identity.
-An existing own profile is returned without renaming it on repeated creation.
-New users complete their account profile after email confirmation; photographer
-users additionally create their photographer record. The intended local destination
-survives authentication and onboarding. Callback errors and backend failures have
-visible recovery states.
+After the private portfolio bucket migration, new catalog responses point to
+`/v1/portfolio-media`. Existing direct Supabase public Storage URLs for that
+bucket must be refreshed. Authenticated owners can preview staged images with
+short-lived URLs in the portfolio editor.
 
-Live business services still require their documented PostgreSQL and AI
-configuration. The current operational UI uses a frontend-only demo described below.
-The runtime does not automatically publish portfolios or change
-database policies. On 2026-11-19, a separate user-authorized data operation published
-25 existing photographer portfolios containing 752 images; deleted portfolios were
-excluded. Public API verification returned 24 profiles with covers and all 752 images.
+## Verification
 
-## Profile layouts
+Replay the ordered migrations on a designated disposable Cloud project before
+changing a shared database. Review the migration list with the PostgreSQL
+connection for that project and apply the reviewed set.
+[Migration workflow](migration-workflow.md)
 
-The account overview is available at `/profile`; editing remains at `/settings`.
-These operational layouts now use the selected local demo actor and save changes
-only in memory. The account does not display an AI usage panel or request usage data.
-Existing real provider and portfolio URLs continue to read public data.
+Set `CLOUD_TEST_DATABASE_URL` and `CLOUD_TEST_PROJECT_REF` before running
+`pnpm test:db`. The second value must match the tested Cloud connection.
+The database suite uses synthetic records, rollback and targeted fixture cleanup.
+Its concurrency scenario expects the fixture profiles `demo_client`,
+`demo_minh`, `demo_linh` and the `Still Studio` package.
 
-Standalone sample profiles and their navigation entry remain removed. Where a public
-provider has no service package, its page offers an explicitly named **Demo package**
-so the mock booking form can be reviewed. No fake package is written to the database.
+The Playwright private journey uses the same disposable database configured as
+`DATABASE_URL` and the same Cloud project configured in the browser. Set
+`FRAME_ROOM_E2E_CLIENT_EMAIL`, `FRAME_ROOM_E2E_MANAGER_EMAIL`,
+`FRAME_ROOM_E2E_OUTSIDER_EMAIL` and `FRAME_ROOM_E2E_PASSWORD` for synthetic
+accounts. The fixture Studio needs a published package, an eligible Photographer
+named Linh Nguyen and an active Daylight room resource. Use Chromium or set
+`FRAME_ROOM_E2E_CHANNEL=msedge` for an installed Microsoft Edge.
 
-## Frontend workflow demo
+```powershell
+pnpm test:db
+pnpm test:e2e
+pnpm db:types:cloud
+```
 
-The header's **Demo session / View as** selector previews visitor, client, two
-photographers, studio manager and administrator roles. Primary navigation changes
-with role; studio management tabs also require manager membership in the selected
-studio. **Account role** derives a demo role from the existing real account, without
-changing authentication or live permissions. Login, signup and password recovery
-continue to use their existing real Supabase flows.
-
-`/projects`, `/bookings`, `/messages`, `/portfolio`, `/studio`, `/profile`, `/settings`,
-`/notifications` and `/admin` now demonstrate operations with shared in-memory state.
-Switch roles to follow the same booking through brief approval, assignment,
-confirmation, collaboration, proofing, delivery and review. Admin can simulate the
-168-hour completion countdown and apply/release a dispute hold. No automatic review
-is generated. There are seeded examples at each booking stage.
-
-New operational interactions call no business mutation endpoint. Files use local
-object URLs; content moderation changes only a local visibility overlay. A request
-from an actual public provider page creates a local booking/conversation and assigns
-a demo representative to handle the provider side. It is not a real booking or message.
-Explore uses basic frontend text matching and existing public catalog/tag reads;
-reference files are not uploaded and no new AI search request is made.
-
-Reloading or **Reset demo** discards all workflow changes. Demo data does not change
-Supabase rows, roles, publication state, RLS, Storage policies or existing credentials.
-See [UI-003](../../plans/tasks/UI-003.md) for the role/use-case matrix, limits and
-verification evidence.
+Cloud type generation requires Supabase CLI authentication with access to
+`CLOUD_TEST_PROJECT_REF`. Generate types after the migration replay and database
+checks succeed.

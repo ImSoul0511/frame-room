@@ -537,10 +537,12 @@ describe('brief versions and approval (105c)', () => {
     expect(createRes.statusCode).toBe(201);
     expect(createRes.json().data).toEqual(SAMPLE_BRIEF);
 
-    tx.one.mockResolvedValueOnce(SAMPLE_BRIEF).mockResolvedValueOnce({
-      ...SAMPLE_BRIEF,
-      providerApproved: true,
-    });
+    tx.one
+      .mockResolvedValueOnce({ ...SAMPLE_BRIEF, latestVersion: 1, status: 'open' })
+      .mockResolvedValueOnce({
+        ...SAMPLE_BRIEF,
+        providerApproved: true,
+      });
     const approveRes = await app.inject({
       method: 'POST',
       url: `/v1/bookings/${BOOKING_ID}/brief-versions/${BRIEF_ID}/approve`,

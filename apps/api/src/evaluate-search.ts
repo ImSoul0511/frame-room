@@ -8,6 +8,7 @@ import { MediaService } from './services/media.js';
 import { AiService } from './services/ai.js';
 import { search } from './services/search.js';
 const env = loadEnv();
+if (!env.AI_SEARCH_ENABLED) throw new Error('AI Search is disabled. No model calls were made.');
 if (!env.AI_GATEWAY_API_KEY)
   throw new Error(
     'Real-model evaluation requires a budgeted AI_GATEWAY_API_KEY. No score was fabricated.',

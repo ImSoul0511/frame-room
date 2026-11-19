@@ -3,6 +3,7 @@ import { loadEnv } from './config/env.js';
 import { PgDatabase } from './repositories/database.js';
 import { enqueueIndex } from './services/ai-jobs.js';
 const env = loadEnv();
+if (!env.AI_SEARCH_ENABLED) throw new Error('AI Search is disabled. No indexing jobs were queued.');
 if (!env.AI_GATEWAY_API_KEY)
   throw new Error('Set a budgeted AI_GATEWAY_API_KEY before indexing. No model calls were made.');
 if (!env.DATABASE_URL || new URL(env.DATABASE_URL).hostname !== '127.0.0.1')

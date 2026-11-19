@@ -31,6 +31,7 @@
     "db:status": "supabase status",
     "db:reset": "supabase db reset --local",
     "db:types": "node scripts/db-types.mjs",
+    "db:types:cloud": "node scripts/db-types.mjs --cloud",
     "docs:check": "node scripts/check-docs.mjs",
     "ai:index": "pnpm --filter @frameroom/shared build && pnpm --filter api exec tsx src/index-portfolios.ts",
     "ai:evaluate": "pnpm --filter @frameroom/shared build && pnpm --filter api exec tsx src/evaluate-search.ts"
