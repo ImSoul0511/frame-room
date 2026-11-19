@@ -9,6 +9,7 @@ import { OpenApiRegistry } from './plugins/openapi.js';
 import type { ApiDependencies, ApiModule } from './plugins/route.js';
 import { PgDatabase, type Database } from './repositories/database.js';
 import { catalogModule } from './routes/catalog.js';
+import { businessModule } from './routes/business.js';
 import { profileModule } from './routes/profile.js';
 import { systemModule } from './routes/system.js';
 import { projectsModule } from './routes/projects.js';
@@ -63,6 +64,7 @@ export function buildApp(env: ApiEnv, options: BuildAppOptions = {}) {
     catalogModule,
     projectsModule,
     uploadsModule,
+    businessModule,
     ...(options.modules ?? []),
   ]) {
     module.register(app, dependencies);

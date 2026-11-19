@@ -98,6 +98,8 @@ export const tagSchema = z.object({
   name: z.string(),
   slug: z.string(),
   kind: tagKindSchema,
+  nameVi: z.string().nullish(),
+  category: z.string().nullish(),
 });
 
 /** Response payload for GET /v1/photographers/:id and GET /v1/studios/:id. */

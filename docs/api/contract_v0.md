@@ -1,5 +1,9 @@
 # FrameRoom: MVP API Contract (draft v0)
 
+MVP-001 implementation is documented in [the MVP contract](mvp.md). This historical
+draft preserves original design questions and numbering; its foundation-only AI
+deferral and GET /me initialization sketch do not describe the current implementation.
+
 **Location:** `docs/api/contract_v0.md`. After v1 review, it may be split into common conventions and resource-specific files.
 **Implemented contract source of truth:** Zod schemas in `packages/shared`. Resolve code/documentation mismatches in the same PR. Most business schemas below are still designs.
 

@@ -1,11 +1,10 @@
-export const strings = {
-  eyebrow: 'FrameRoom',
-  title: 'Khám phá. Cộng tác. Tạo nên câu chuyện.',
-  introduction: 'Không gian kết nối khách hàng, nhiếp ảnh gia và studio.',
-  pending: 'Đang kiểm tra kết nối…',
-  connected: 'Kết nối API thành công.',
-  unavailable: 'Chưa thể kết nối API. Vui lòng thử lại.',
-  retry: 'Kiểm tra lại',
-  notFound: 'Không tìm thấy trang',
-  home: 'Về trang chủ',
-};
+import { english } from './locales/en';
+import { vietnamese } from './locales/vi';
+import { getLanguage } from './lib/locale-store';
+
+// For non-React utilities. Components subscribe with useStrings() instead.
+export const strings: typeof english = new Proxy(english, {
+  get(_target, key: keyof typeof english) {
+    return (getLanguage() === 'vi' ? vietnamese : english)[key];
+  },
+});

@@ -5,8 +5,7 @@ import { v7 as uuidv7 } from 'uuid';
 import type { ApiEnv } from '../config/env.js';
 import { ApiError, requireCondition } from '../lib/errors.js';
 import type { Transaction } from '../repositories/database.js';
-import * as catalogRepo from '../repositories/catalog.js';
-import { assertProviderOwnership } from './catalog.js';
+import { requirePortfolioOwnership } from './catalog.js';
 
 export const uploadBuckets = [
   'avatars',
@@ -67,9 +66,7 @@ export class MediaService {
   async authorizeUpload(tx: Transaction, userId: string, bucket: UploadBucket, scopeId?: string) {
     if (bucket === 'portfolio-images') {
       requireCondition(scopeId, 400, 'portfolio_required');
-      const owner = await catalogRepo.findPortfolioOwnership(tx, scopeId);
-      requireCondition(owner, 404, 'portfolio_not_found');
-      await assertProviderOwnership(tx, userId, owner);
+      await requirePortfolioOwnership(tx, userId, scopeId);
       return `${userId}/${scopeId}`;
     }
     if (bucket === 'gallery-previews' || bucket === 'deliveries') {
@@ -159,41 +156,47 @@ export class MediaService {
       height: main.info.height,
     };
   }
-  async verifyReference(
-    userId: string,
-    bucket: 'brief-references' | 'search-uploads',
-    path: string,
-  ) {
-    requireStoragePath(path, userId);
+  private async inspectUpload(bucket: string, path: string, maxSide?: number) {
+    const bytes = await this.download(bucket, path);
+    try {
+      const image = sharp(bytes, { limitInputPixels: 40000000 });
+      const { format, width, height, pages } = await image.metadata();
+      requireCondition(
+        format && ['jpeg', 'png', 'webp'].includes(format) && width && height && (pages ?? 1) === 1,
+        400,
+        'invalid_image',
+      );
+      if (maxSide !== undefined) {
+        requireCondition(
+          format === 'webp' && width <= maxSide && height <= maxSide && bytes.length <= 2097152,
+          400,
+          'invalid_image',
+        );
+      }
+      await image.raw().toBuffer();
+      return { width, height, mimeType: `image/${format}` };
+    } catch {
+      throw new ApiError(400, 'VALIDATION_ERROR', 'invalid_image');
+    }
+  }
+  async verify(bucket: string, path: string, prefix: string, pair = true) {
+    requireStoragePath(path, prefix);
+    if (!pair) return this.inspectUpload(bucket, path);
     requireCondition(
       path.endsWith('.webp') && !path.endsWith('_thumb.webp'),
       400,
       'invalid_storage_path',
     );
-    for (const [key, max] of [
-      [path, 1280],
-      [thumbnailPath(path), 320],
-    ] as const) {
-      const bytes = await this.download(bucket, key);
-      requireCondition(bytes.length <= 2097152, 400, 'invalid_image');
-      try {
-        const image = sharp(bytes, { limitInputPixels: 40000000 });
-        const metadata = await image.metadata();
-        requireCondition(
-          metadata.format === 'webp' &&
-            metadata.width &&
-            metadata.height &&
-            metadata.width <= max &&
-            metadata.height <= max &&
-            (metadata.pages ?? 1) === 1,
-          400,
-          'invalid_image',
-        );
-        await image.raw().toBuffer();
-      } catch {
-        throw new ApiError(400, 'VALIDATION_ERROR', 'invalid_image');
-      }
-    }
+    const result = await this.inspectUpload(bucket, path, 1280);
+    await this.inspectUpload(bucket, thumbnailPath(path), 320);
+    return result;
+  }
+  async verifyReference(
+    userId: string,
+    bucket: 'brief-references' | 'search-uploads',
+    path: string,
+  ) {
+    await this.verify(bucket, path, userId);
     if (bucket === 'search-uploads') {
       const { data, error } = await this.client().storage.from(bucket).info(path);
       requireCondition(!error && data, 404, 'file_not_found');

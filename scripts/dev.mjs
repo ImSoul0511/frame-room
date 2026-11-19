@@ -1,47 +1,32 @@
-import { spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { runDev } from './dev-runner.mjs';
 
-const cwd = fileURLToPath(new URL('../', import.meta.url));
-const runner = process.env.npm_execpath;
-if (!runner) throw new Error('Start development through pnpm dev.');
-const build = spawn(process.execPath, [runner, '--filter', '@frameroom/shared', 'build'], {
-  cwd,
-  stdio: 'inherit',
-});
-const buildCode = await new Promise((resolve) => build.once('exit', resolve));
-if (buildCode !== 0) process.exit(1);
-const services = spawn(
-  process.execPath,
-  [
-    runner,
-    '--parallel',
-    '--stream',
-    '--filter',
-    '@frameroom/shared',
-    '--filter',
-    'api',
-    '--filter',
-    'web',
-    'dev',
+const root = fileURLToPath(new URL('../', import.meta.url));
+const shared = resolve(root, 'packages/shared');
+const api = resolve(root, 'apps/api');
+const web = resolve(root, 'apps/web');
+const rootRequire = createRequire(resolve(root, 'package.json'));
+const apiRequire = createRequire(resolve(api, 'package.json'));
+const webRequire = createRequire(resolve(web, 'package.json'));
+const compiler = rootRequire.resolve('typescript/bin/tsc');
+const tsx = apiRequire.resolve('tsx/cli');
+const vite = resolve(dirname(webRequire.resolve('vite/package.json')), 'bin/vite.js');
+
+process.exitCode = await runDev({
+  build: { name: 'shared build', cwd: shared, args: [compiler, '-p', 'tsconfig.json'] },
+  services: [
+    {
+      name: 'shared watcher',
+      cwd: shared,
+      args: [compiler, '-p', 'tsconfig.json', '--watch', '--preserveWatchOutput'],
+    },
+    {
+      name: 'api',
+      cwd: api,
+      args: [tsx, 'watch', '--include', '../../packages/shared/dist/**/*.js', 'src/server.ts'],
+    },
+    { name: 'web', cwd: web, args: [vite] },
   ],
-  { cwd, stdio: 'inherit' },
-);
-let stopping = false;
-function stop() {
-  if (stopping) return;
-  stopping = true;
-  if (process.platform === 'win32') {
-    const cleanup = spawn('taskkill', ['/pid', String(services.pid), '/t', '/f'], {
-      windowsHide: true,
-      stdio: 'ignore',
-    });
-    cleanup.on('error', () => services.kill());
-  } else {
-    services.kill('SIGTERM');
-  }
-}
-process.once('SIGINT', stop);
-process.once('SIGTERM', stop);
-services.once('exit', (code) => {
-  process.exitCode = stopping ? 0 : (code ?? 1);
 });

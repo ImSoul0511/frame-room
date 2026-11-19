@@ -3,11 +3,13 @@ import { photographerInputSchema, profileInputSchema, profileSchema } from '@fra
 import { defineRoute, Respond, type ApiModule } from '../plugins/route.js';
 import { ownPhotographerSchema } from '../schemas/own-photographer.js';
 import * as profiles from '../services/profiles.js';
+import { createCloudCatalog } from '../services/cloud-catalog.js';
 
 /** /v1/me and /v1/photographers/me. Routes stay thin; logic lives in services/profiles. */
 export const profileModule: ApiModule = {
   name: 'profiles',
   register(app, deps) {
+    const cloud = deps.db.isConfigured ? null : createCloudCatalog(deps.env);
     defineRoute(app, deps, {
       method: 'GET',
       url: '/v1/me',
@@ -16,7 +18,7 @@ export const profileModule: ApiModule = {
       response: profileSchema,
       errors: [404],
       handler: ({ actor, transaction }) =>
-        transaction((tx) => profiles.getOwnProfile(tx, actor.id)),
+        cloud ? cloud.profile(actor.id) : transaction((tx) => profiles.getOwnProfile(tx, actor.id)),
     });
 
     defineRoute(app, deps, {
@@ -29,9 +31,9 @@ export const profileModule: ApiModule = {
       successStatuses: [200],
       errors: [409],
       handler: async ({ actor, body, transaction }) => {
-        const { profile, created } = await transaction((tx) =>
-          profiles.createOwnProfile(tx, actor.id, body),
-        );
+        const { profile, created } = cloud
+          ? await cloud.createProfile(actor.id, body)
+          : await transaction((tx) => profiles.createOwnProfile(tx, actor.id, body));
         return created ? profile : new Respond(200, profile);
       },
     });
@@ -45,7 +47,9 @@ export const profileModule: ApiModule = {
       response: profileSchema,
       errors: [404, 409],
       handler: ({ actor, body, transaction }) =>
-        transaction((tx) => profiles.updateOwnProfile(tx, actor.id, body)),
+        cloud
+          ? cloud.updateProfile(actor.id, body)
+          : transaction((tx) => profiles.updateOwnProfile(tx, actor.id, body)),
     });
 
     defineRoute(app, deps, {
@@ -55,7 +59,9 @@ export const profileModule: ApiModule = {
       access: 'verified',
       response: ownPhotographerSchema.nullable(),
       handler: ({ actor, transaction }) =>
-        transaction((tx) => profiles.getOwnPhotographer(tx, actor.id)),
+        cloud
+          ? cloud.photographer(actor.id)
+          : transaction((tx) => profiles.getOwnPhotographer(tx, actor.id)),
     });
 
     defineRoute(app, deps, {
@@ -67,7 +73,9 @@ export const profileModule: ApiModule = {
       response: ownPhotographerSchema,
       errors: [404, 409],
       handler: ({ actor, body, transaction }) =>
-        transaction((tx) => profiles.createOwnPhotographer(tx, actor.id, body)),
+        cloud
+          ? cloud.savePhotographer(actor.id, body)
+          : transaction((tx) => profiles.createOwnPhotographer(tx, actor.id, body)),
     });
 
     defineRoute(app, deps, {
@@ -79,7 +87,9 @@ export const profileModule: ApiModule = {
       response: ownPhotographerSchema,
       errors: [404],
       handler: ({ actor, body, transaction }) =>
-        transaction((tx) => profiles.updateOwnPhotographer(tx, actor.id, body)),
+        cloud
+          ? cloud.savePhotographer(actor.id, body, true)
+          : transaction((tx) => profiles.updateOwnPhotographer(tx, actor.id, body)),
     });
   },
 };

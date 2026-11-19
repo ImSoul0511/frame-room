@@ -4,7 +4,7 @@
 
 Clients struggle to describe photographic styles and find providers. Photographers and small studios lose requirements, schedules, references, and feedback across separate channels.
 
-FrameRoom brings clients, photographers, and studio managers into one browser workflow: discover portfolios -> agree on a Shoot Brief -> book -> collaborate in a private Shoot Room -> select photos -> receive files -> review.
+FrameRoom brings clients, photographers, and studio managers into one AI-assisted browser workflow: describe an idea -> generate concepts -> discover providers -> agree on a Shoot Brief -> book -> collaborate -> select photos -> receive files -> review. English is the default; Vietnamese is a persistent selectable language.
 
 ## Product rules
 
@@ -18,12 +18,20 @@ FrameRoom brings clients, photographers, and studio managers into one browser wo
 
 ## Phases and success
 
-Foundation delivers tooling, agent artifacts, health connectivity, and local database commands. It does not implement business endpoints or schema.
+MVP-001 builds on the foundation with business APIs/schema, bilingual screens,
+AI discovery/concepts/planning/culling/editing, studio scheduling, collaboration,
+proofing, delivery, reviews and moderation. AI business changes require explicit
+confirmation and normal authorization/state checks.
 
 Follow [the backlog](../../plans/backlog.md): auth/profile, portfolio/discovery, services/booking/brief, Shoot Room, proofing/delivery/review. Introduce studio features alongside their dependent flows.
 
-AI search and Tauri are later phases. AI Concept Studio, Community Rooms, payments, RAW storage, and deployment automation are outside foundation. Existing AI contract sketches remain deferred designs.
+The user's 2026-10-30 implementation request supersedes the original AI deferral.
+Community Rooms, payments, RAW storage, custom model training, desktop and hosting
+remain deferred. Real AI quality/evaluation requires a budgeted Gateway key and
+permitted benchmark data; missing prerequisites are not treated as a pass.
 
-Success: a developer can clone, install, run web/API, see their connection, and run checks without Python/cloud credentials. Database work is reproducible through local Supabase migrations.
+Success: the real local client/provider journey completes through review, access
+and conflicts are enforced, and language switching persists without losing forms.
+Database work remains reproducible through local migrations; Python is unnecessary.
 
 The [contract](../api/contract_v0.md#20-open-decisions) and [ERD](../db/erd_v0.md#6-open-decisions) retain unresolved questions and owners. They are not frozen or implemented. Do not settle onboarding initialization, cancellations, participant scope, or quotas during tooling work.

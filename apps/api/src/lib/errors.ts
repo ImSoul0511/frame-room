@@ -77,6 +77,11 @@ function fromDatabaseError(error: DatabaseError): ApiError | undefined {
       return new ApiError(403, 'FORBIDDEN', 'forbidden');
     case 'P0002':
       return new ApiError(404, 'NOT_FOUND', 'not_found');
+    case 'P0001':
+      if (error.message === 'ai_budget_exhausted' || error.message === 'ai_daily_limit') {
+        return new ApiError(429, 'RATE_LIMITED', error.message);
+      }
+      return undefined;
     case 'ECONNREFUSED':
     case '57P01':
     case '42P01':

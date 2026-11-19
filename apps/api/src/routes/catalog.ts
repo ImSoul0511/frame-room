@@ -36,11 +36,13 @@ import {
   updateStudioMemberRoleInputSchema,
 } from '../schemas/catalog.js';
 import * as catalog from '../services/catalog.js';
+import { createCloudCatalog } from '../services/cloud-catalog.js';
 
 /** 102: Provider discovery and catalog routes (/v1/*). */
 export const catalogModule: ApiModule = {
   name: 'catalog',
   register(app, deps) {
+    const cloud = deps.db.isConfigured ? null : createCloudCatalog(deps.env);
     const verifyPortfolioUpload = createPortfolioUploadVerifier(deps.env);
     // ---------- 102a: Public discovery ----------
     defineRoute(app, deps, {
@@ -51,7 +53,9 @@ export const catalogModule: ApiModule = {
       query: exploreQuerySchema,
       response: z.array(exploreProviderSchema),
       handler: ({ query, transaction }) =>
-        transaction((tx) => catalog.exploreProviders(tx, query, deps.env.SUPABASE_URL)),
+        cloud
+          ? cloud.list(query)
+          : transaction((tx) => catalog.exploreProviders(tx, query, deps.env.SUPABASE_URL)),
     });
 
     for (const [plural, type] of [
@@ -66,7 +70,9 @@ export const catalogModule: ApiModule = {
         query: providerListQuerySchema,
         response: z.array(providerSchema),
         handler: ({ query, transaction }) =>
-          transaction((tx) => catalog.listProviders(tx, type, query)),
+          cloud
+            ? cloud.list(query, type)
+            : transaction((tx) => catalog.listProviders(tx, type, query)),
       });
 
       defineRoute(app, deps, {
@@ -77,9 +83,11 @@ export const catalogModule: ApiModule = {
         params: idParamsSchema,
         response: providerDetailSchema,
         handler: ({ params, transaction }) =>
-          transaction((tx) =>
-            catalog.getProviderDetail(tx, type, params.id, deps.env.SUPABASE_URL),
-          ),
+          cloud
+            ? cloud.detail(type, params.id)
+            : transaction((tx) =>
+                catalog.getProviderDetail(tx, type, params.id, deps.env.SUPABASE_URL),
+              ),
       });
     }
 
@@ -89,7 +97,8 @@ export const catalogModule: ApiModule = {
       summary: 'List all taxonomy tags ordered by kind and name.',
       access: 'public',
       response: z.array(tagSchema),
-      handler: ({ transaction }) => transaction((tx) => catalog.getAllTags(tx)),
+      handler: ({ transaction }) =>
+        cloud ? cloud.tags() : transaction((tx) => catalog.getAllTags(tx)),
     });
 
     // ---------- 102b: Studios & Team ----------
@@ -235,7 +244,9 @@ export const catalogModule: ApiModule = {
       response: portfolioDetailSchema,
       errors: [404],
       handler: ({ params, transaction }) =>
-        transaction((tx) => catalog.getPortfolioDetail(tx, params.id, deps.env.SUPABASE_URL)),
+        cloud
+          ? cloud.portfolio(params.id)
+          : transaction((tx) => catalog.getPortfolioDetail(tx, params.id, deps.env.SUPABASE_URL)),
     });
 
     defineRoute(app, deps, {

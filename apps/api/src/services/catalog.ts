@@ -183,6 +183,12 @@ export async function assertProviderOwnership(
   throw new ApiError(403, 'FORBIDDEN', 'not_resource_owner');
 }
 
+export async function requirePortfolioOwnership(tx: Transaction, userId: string, id: string) {
+  const owner = await repo.findPortfolioOwnership(tx, id);
+  if (!owner) throw new ApiError(404, 'NOT_FOUND', 'portfolio_not_found');
+  await assertProviderOwnership(tx, userId, owner);
+}
+
 /** Lists non-deleted services owned by the caller or their managed studios. */
 export async function listMyServices(tx: Transaction, userId: string): Promise<OwnedService[]> {
   return repo.listOwnedServices(tx, userId);

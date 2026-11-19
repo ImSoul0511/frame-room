@@ -7,9 +7,11 @@ import { useQuery } from '@tanstack/react-query';
 
 import { env } from '../lib/env';
 import { fetchHealth } from '../lib/health';
-import { strings } from '../strings';
+import { useStrings } from '../lib/i18n';
 
 export function HomePage() {
+  const strings = useStrings();
+
   const health = useQuery({
     queryKey: ['health'],
     queryFn: ({ signal }) => fetchHealth(env.VITE_API_URL, signal),
