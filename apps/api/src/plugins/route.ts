@@ -143,6 +143,9 @@ export function defineRoute<
         request.log.error({ issues: parsed.error.issues }, 'response contract violation');
         throw new ApiError(500, 'INTERNAL_ERROR', 'internal_error', 'Unexpected server error');
       }
+      if (outcome.status === 204) {
+        return reply.code(204).send();
+      }
       return reply.code(outcome.status).send(envelope ? { data: parsed.data } : parsed.data);
     },
   });

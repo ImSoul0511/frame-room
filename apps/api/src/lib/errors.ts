@@ -56,6 +56,22 @@ interface DatabaseError {
   message?: string;
 }
 
+const KNOWN_CHECK_REASONS = new Set([
+  'invalid_state',
+  'invalid_interval',
+  'invalid_assignment',
+  'invalid_resource',
+  'duplicate_resource',
+  'provider_unavailable',
+  'studio_unavailable',
+  'brief_required',
+  'gallery_required',
+  'selection_delivery_required',
+  'invalid_transition',
+  'active_assignment',
+  'last_manager',
+]);
+
 /** Postgres codes that map to a stable public error. Unknown codes fall through to 500. */
 function fromDatabaseError(error: DatabaseError): ApiError | undefined {
   switch (error.code) {
@@ -71,8 +87,11 @@ function fromDatabaseError(error: DatabaseError): ApiError | undefined {
       return new ApiError(409, 'CONFLICT', 'stale_version');
     case '23503':
       return new ApiError(409, 'CONFLICT', 'referenced_resource');
-    case '23514':
-      return new ApiError(422, 'UNPROCESSABLE', 'invalid_state');
+    case '23514': {
+      const reason =
+        error.message && KNOWN_CHECK_REASONS.has(error.message) ? error.message : 'invalid_state';
+      return new ApiError(422, 'UNPROCESSABLE', reason);
+    }
     case '42501':
       return new ApiError(403, 'FORBIDDEN', 'forbidden');
     case 'P0002':
