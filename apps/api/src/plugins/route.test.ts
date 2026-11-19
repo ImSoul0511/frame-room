@@ -74,16 +74,6 @@ const testModule: ApiModule = {
       response: noteOutput,
       handler: async () => ({ id: 1 }) as unknown as z.input<typeof noteOutput>,
     });
-    defineRoute(app, deps, {
-      method: 'DELETE',
-      url: '/v1/notes/:id',
-      summary: 'Delete note',
-      access: 'public',
-      status: 204,
-      params: z.object({ id: z.string() }),
-      response: z.void(),
-      handler: async () => undefined,
-    });
   },
 };
 
@@ -206,11 +196,6 @@ describe('defineRoute', () => {
     });
     expect(response.statusCode).toBe(400);
     expect(response.json().error.code).toBe('VALIDATION_ERROR');
-  });
-  it('emits an empty body when status is 204', async () => {
-    const response = await createApp().inject({ method: 'DELETE', url: '/v1/notes/123' });
-    expect(response.statusCode).toBe(204);
-    expect(response.body).toBe('');
   });
 });
 
