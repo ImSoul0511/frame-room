@@ -245,7 +245,8 @@ function CancellationForm({ workspace: w }: { workspace: Workspace }) {
   const submit = useTask(async () => post(path, { reason }));
   const respond = useTask(async (accept: boolean) => patch(path, { accept }));
   return (
-    <section className="panel">
+    <details className="atelier-cancellation" open={Boolean(w.cancellation)}>
+      <summary>{t.booking.cancel}</summary>
       {w.cancellation ? (
         <>
           <p>{w.cancellation.reason}</p>
@@ -271,6 +272,6 @@ function CancellationForm({ workspace: w }: { workspace: Workspace }) {
         </Form>
       )}
       <Feedback error={submit.error ?? respond.error} />
-    </section>
+    </details>
   );
 }

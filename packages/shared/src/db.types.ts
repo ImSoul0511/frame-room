@@ -165,6 +165,38 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"booking_cancellations": {
+                  Row: {
+                    "booking_id": string,"created_at": string,"decided_at": string | null,"decided_by": string | null,"id": string,"is_client_proposal": boolean,"proposed_by": string,"reason": string,"status": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "booking_id": string,"created_at"?: string,"decided_at"?: string | null,"decided_by"?: string | null,"id"?: string,"is_client_proposal": boolean,"proposed_by": string,"reason": string,"status"?: string
+                  }
+                  Update: {
+                    "booking_id"?: string,"created_at"?: string,"decided_at"?: string | null,"decided_by"?: string | null,"id"?: string,"is_client_proposal"?: boolean,"proposed_by"?: string,"reason"?: string,"status"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "booking_cancellations_booking_id_fkey"
+      columns: ["booking_id"]
+isOneToOne: false
+      referencedRelation: "bookings"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "booking_cancellations_decided_by_fkey"
+      columns: ["decided_by"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "booking_cancellations_proposed_by_fkey"
+      columns: ["proposed_by"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"booking_resources": {
                   Row: {
                     "booking_id": string,"name": string,"resource_id": string,"type": Database["public"]['Enums']["resource_type"]
@@ -193,14 +225,14 @@ isOneToOne: false
                   ]
                 },"bookings": {
                   Row: {
-                    "agreed_brief_version": number | null,"assigned_photographer_id": string | null,"client_id": string,"created_at": string,"id": string,"note": string,"owner_type": Database["public"]['Enums']["provider_type"],"photographer_id": string | null,"project_id": string,"scheduled_end": string,"scheduled_start": string,"service_id": string,"service_name": string,"service_snapshot": NonNullable<Json>,"status": Database["public"]['Enums']["booking_status"],"studio_id": string | null,"total_price": number,"updated_at": string,"version": number
+                    "agreed_brief_version": number | null,"assigned_photographer_id": string | null,"client_id": string,"completion_due_at": string | null,"completion_hold_at": string | null,"completion_remaining_ms": number | null,"conversation_id": string | null,"created_at": string,"id": string,"note": string,"owner_type": Database["public"]['Enums']["provider_type"],"photographer_id": string | null,"project_id": string,"request_key": string | null,"scheduled_end": string,"scheduled_start": string,"service_id": string,"service_name": string,"service_snapshot": NonNullable<Json>,"status": Database["public"]['Enums']["booking_status"],"studio_id": string | null,"total_price": number,"updated_at": string,"version": number
                   }
                   ComputedFields: never
                   Insert: {
-                    "agreed_brief_version"?: number | null,"assigned_photographer_id"?: string | null,"client_id": string,"created_at"?: string,"id"?: string,"note"?: string,"owner_type": Database["public"]['Enums']["provider_type"],"photographer_id"?: string | null,"project_id": string,"scheduled_end": string,"scheduled_start": string,"service_id": string,"service_name": string,"service_snapshot": NonNullable<Json>,"status"?: Database["public"]['Enums']["booking_status"],"studio_id"?: string | null,"total_price": number,"updated_at"?: string,"version"?: number
+                    "agreed_brief_version"?: number | null,"assigned_photographer_id"?: string | null,"client_id": string,"completion_due_at"?: string | null,"completion_hold_at"?: string | null,"completion_remaining_ms"?: number | null,"conversation_id"?: string | null,"created_at"?: string,"id"?: string,"note"?: string,"owner_type": Database["public"]['Enums']["provider_type"],"photographer_id"?: string | null,"project_id": string,"request_key"?: string | null,"scheduled_end": string,"scheduled_start": string,"service_id": string,"service_name": string,"service_snapshot": NonNullable<Json>,"status"?: Database["public"]['Enums']["booking_status"],"studio_id"?: string | null,"total_price": number,"updated_at"?: string,"version"?: number
                   }
                   Update: {
-                    "agreed_brief_version"?: number | null,"assigned_photographer_id"?: string | null,"client_id"?: string,"created_at"?: string,"id"?: string,"note"?: string,"owner_type"?: Database["public"]['Enums']["provider_type"],"photographer_id"?: string | null,"project_id"?: string,"scheduled_end"?: string,"scheduled_start"?: string,"service_id"?: string,"service_name"?: string,"service_snapshot"?: NonNullable<Json>,"status"?: Database["public"]['Enums']["booking_status"],"studio_id"?: string | null,"total_price"?: number,"updated_at"?: string,"version"?: number
+                    "agreed_brief_version"?: number | null,"assigned_photographer_id"?: string | null,"client_id"?: string,"completion_due_at"?: string | null,"completion_hold_at"?: string | null,"completion_remaining_ms"?: number | null,"conversation_id"?: string | null,"created_at"?: string,"id"?: string,"note"?: string,"owner_type"?: Database["public"]['Enums']["provider_type"],"photographer_id"?: string | null,"project_id"?: string,"request_key"?: string | null,"scheduled_end"?: string,"scheduled_start"?: string,"service_id"?: string,"service_name"?: string,"service_snapshot"?: NonNullable<Json>,"status"?: Database["public"]['Enums']["booking_status"],"studio_id"?: string | null,"total_price"?: number,"updated_at"?: string,"version"?: number
                   }
                   Relationships: [
                     {
@@ -214,6 +246,12 @@ isOneToOne: false
       columns: ["client_id"]
 isOneToOne: false
       referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "bookings_conversation_id_fkey"
+      columns: ["conversation_id"]
+isOneToOne: false
+      referencedRelation: "conversations"
       referencedColumns: ["id"]
     },{
       foreignKeyName: "bookings_photographer_id_fkey"
@@ -243,14 +281,14 @@ isOneToOne: false
                   ]
                 },"brief_versions": {
                   Row: {
-                    "booking_id": string,"client_approved": boolean,"content": NonNullable<Json>,"created_at": string,"created_by": string,"id": string,"provider_approved": boolean,"version": number
+                    "booking_id": string,"client_approved": boolean,"content": NonNullable<Json>,"created_at": string,"created_by": string,"id": string,"provider_approved": boolean,"status": string,"version": number
                   }
                   ComputedFields: never
                   Insert: {
-                    "booking_id": string,"client_approved"?: boolean,"content": NonNullable<Json>,"created_at"?: string,"created_by": string,"id"?: string,"provider_approved"?: boolean,"version": number
+                    "booking_id": string,"client_approved"?: boolean,"content": NonNullable<Json>,"created_at"?: string,"created_by": string,"id"?: string,"provider_approved"?: boolean,"status"?: string,"version": number
                   }
                   Update: {
-                    "booking_id"?: string,"client_approved"?: boolean,"content"?: NonNullable<Json>,"created_at"?: string,"created_by"?: string,"id"?: string,"provider_approved"?: boolean,"version"?: number
+                    "booking_id"?: string,"client_approved"?: boolean,"content"?: NonNullable<Json>,"created_at"?: string,"created_by"?: string,"id"?: string,"provider_approved"?: boolean,"status"?: string,"version"?: number
                   }
                   Relationships: [
                     {
@@ -269,14 +307,14 @@ isOneToOne: false
                   ]
                 },"content_reports": {
                   Row: {
-                    "created_at": string,"description": string,"id": string,"reason": string,"reporter_id": string,"status": string,"target_id": string,"target_type": string,"updated_at": string
+                    "created_at": string,"description": string,"id": string,"outcome": string | null,"reason": string,"reporter_id": string,"status": string,"target_id": string,"target_type": string,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"description": string,"id"?: string,"reason": string,"reporter_id": string,"status"?: string,"target_id": string,"target_type": string,"updated_at"?: string
+                    "created_at"?: string,"description": string,"id"?: string,"outcome"?: string | null,"reason": string,"reporter_id": string,"status"?: string,"target_id": string,"target_type": string,"updated_at"?: string
                   }
                   Update: {
-                    "created_at"?: string,"description"?: string,"id"?: string,"reason"?: string,"reporter_id"?: string,"status"?: string,"target_id"?: string,"target_type"?: string,"updated_at"?: string
+                    "created_at"?: string,"description"?: string,"id"?: string,"outcome"?: string | null,"reason"?: string,"reporter_id"?: string,"status"?: string,"target_id"?: string,"target_type"?: string,"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -284,6 +322,38 @@ isOneToOne: false
       columns: ["reporter_id"]
 isOneToOne: false
       referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"conversations": {
+                  Row: {
+                    "client_id": string,"created_at": string,"id": string,"photographer_id": string | null,"studio_id": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "client_id": string,"created_at"?: string,"id"?: string,"photographer_id"?: string | null,"studio_id"?: string | null
+                  }
+                  Update: {
+                    "client_id"?: string,"created_at"?: string,"id"?: string,"photographer_id"?: string | null,"studio_id"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "conversations_client_id_fkey"
+      columns: ["client_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "conversations_photographer_id_fkey"
+      columns: ["photographer_id"]
+isOneToOne: false
+      referencedRelation: "photographers"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "conversations_studio_id_fkey"
+      columns: ["studio_id"]
+isOneToOne: false
+      referencedRelation: "studios"
       referencedColumns: ["id"]
     }
                   ]
@@ -309,14 +379,14 @@ isOneToOne: false
                   ]
                 },"deliveries": {
                   Row: {
-                    "booking_id": string,"created_at": string,"file_name": string,"id": string,"mime_type": string,"storage_path": string
+                    "booking_id": string,"created_at": string,"file_name": string,"id": string,"mime_type": string,"selection_round": number | null,"storage_path": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "booking_id": string,"created_at"?: string,"file_name": string,"id"?: string,"mime_type": string,"storage_path": string
+                    "booking_id": string,"created_at"?: string,"file_name": string,"id"?: string,"mime_type": string,"selection_round"?: number | null,"storage_path": string
                   }
                   Update: {
-                    "booking_id"?: string,"created_at"?: string,"file_name"?: string,"id"?: string,"mime_type"?: string,"storage_path"?: string
+                    "booking_id"?: string,"created_at"?: string,"file_name"?: string,"id"?: string,"mime_type"?: string,"selection_round"?: number | null,"storage_path"?: string
                   }
                   Relationships: [
                     {
@@ -329,14 +399,14 @@ isOneToOne: false
                   ]
                 },"galleries": {
                   Row: {
-                    "booking_id": string,"created_at": string,"id": string,"round": number,"status": string,"updated_at": string
+                    "booking_id": string,"created_at": string,"id": string,"revision_requested_at": string | null,"round": number,"status": string,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "booking_id": string,"created_at"?: string,"id"?: string,"round"?: number,"status"?: string,"updated_at"?: string
+                    "booking_id": string,"created_at"?: string,"id"?: string,"revision_requested_at"?: string | null,"round"?: number,"status"?: string,"updated_at"?: string
                   }
                   Update: {
-                    "booking_id"?: string,"created_at"?: string,"id"?: string,"round"?: number,"status"?: string,"updated_at"?: string
+                    "booking_id"?: string,"created_at"?: string,"id"?: string,"revision_requested_at"?: string | null,"round"?: number,"status"?: string,"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -445,16 +515,74 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
-                },"photographers": {
+                },"notifications": {
                   Row: {
-                    "bio": string,"city": string,"created_at": string,"display_name": string,"district": string,"genres": (Database["public"]['Enums']["genre"])[],"id": string,"is_hidden": boolean,"styles": (string)[],"updated_at": string,"user_id": string
+                    "booking_id": string | null,"created_at": string,"event": string,"id": string,"read_at": string | null,"recipient_id": string,"studio_id": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "bio"?: string,"city"?: string,"created_at"?: string,"display_name": string,"district"?: string,"genres": (Database["public"]['Enums']["genre"])[],"id"?: string,"is_hidden"?: boolean,"styles"?: (string)[],"updated_at"?: string,"user_id": string
+                    "booking_id"?: string | null,"created_at"?: string,"event": string,"id"?: string,"read_at"?: string | null,"recipient_id": string,"studio_id"?: string | null
                   }
                   Update: {
-                    "bio"?: string,"city"?: string,"created_at"?: string,"display_name"?: string,"district"?: string,"genres"?: (Database["public"]['Enums']["genre"])[],"id"?: string,"is_hidden"?: boolean,"styles"?: (string)[],"updated_at"?: string,"user_id"?: string
+                    "booking_id"?: string | null,"created_at"?: string,"event"?: string,"id"?: string,"read_at"?: string | null,"recipient_id"?: string,"studio_id"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "notifications_booking_id_fkey"
+      columns: ["booking_id"]
+isOneToOne: false
+      referencedRelation: "bookings"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "notifications_recipient_id_fkey"
+      columns: ["recipient_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "notifications_studio_id_fkey"
+      columns: ["studio_id"]
+isOneToOne: false
+      referencedRelation: "studios"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"photo_feedback": {
+                  Row: {
+                    "author_id": string,"created_at": string,"id": string,"image_id": string,"note": string,"round": number,"x": number | null,"y": number | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "author_id": string,"created_at"?: string,"id"?: string,"image_id": string,"note": string,"round": number,"x"?: number | null,"y"?: number | null
+                  }
+                  Update: {
+                    "author_id"?: string,"created_at"?: string,"id"?: string,"image_id"?: string,"note"?: string,"round"?: number,"x"?: number | null,"y"?: number | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "photo_feedback_author_id_fkey"
+      columns: ["author_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "photo_feedback_image_id_fkey"
+      columns: ["image_id"]
+isOneToOne: false
+      referencedRelation: "gallery_images"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"photographers": {
+                  Row: {
+                    "bio": string,"city": string,"contact_email": string | null,"created_at": string,"display_name": string,"district": string,"genres": (Database["public"]['Enums']["genre"])[],"id": string,"is_hidden": boolean,"professional_roles": (string)[],"styles": (string)[],"updated_at": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "bio"?: string,"city"?: string,"contact_email"?: string | null,"created_at"?: string,"display_name": string,"district"?: string,"genres": (Database["public"]['Enums']["genre"])[],"id"?: string,"is_hidden"?: boolean,"professional_roles"?: (string)[],"styles"?: (string)[],"updated_at"?: string,"user_id": string
+                  }
+                  Update: {
+                    "bio"?: string,"city"?: string,"contact_email"?: string | null,"created_at"?: string,"display_name"?: string,"district"?: string,"genres"?: (Database["public"]['Enums']["genre"])[],"id"?: string,"is_hidden"?: boolean,"professional_roles"?: (string)[],"styles"?: (string)[],"updated_at"?: string,"user_id"?: string
                   }
                   Relationships: [
                     {
@@ -467,14 +595,14 @@ isOneToOne: true
                   ]
                 },"portfolio_images": {
                   Row: {
-                    "caption": string,"collected_at": string | null,"created_at": string,"height": number,"id": string,"is_hidden": boolean,"license_note": string | null,"portfolio_id": string,"provenance": Database["public"]['Enums']["provenance"],"sort_order": number,"source": string | null,"storage_path": string,"updated_at": string,"width": number
+                    "caption": string,"collected_at": string | null,"created_at": string,"crew_credits": string,"height": number,"id": string,"is_hidden": boolean,"license_note": string | null,"portfolio_id": string,"provenance": Database["public"]['Enums']["provenance"],"sort_order": number,"source": string | null,"storage_path": string,"updated_at": string,"width": number
                   }
                   ComputedFields: never
                   Insert: {
-                    "caption"?: string,"collected_at"?: string | null,"created_at"?: string,"height": number,"id"?: string,"is_hidden"?: boolean,"license_note"?: string | null,"portfolio_id": string,"provenance"?: Database["public"]['Enums']["provenance"],"sort_order"?: number,"source"?: string | null,"storage_path": string,"updated_at"?: string,"width": number
+                    "caption"?: string,"collected_at"?: string | null,"created_at"?: string,"crew_credits"?: string,"height": number,"id"?: string,"is_hidden"?: boolean,"license_note"?: string | null,"portfolio_id": string,"provenance"?: Database["public"]['Enums']["provenance"],"sort_order"?: number,"source"?: string | null,"storage_path": string,"updated_at"?: string,"width": number
                   }
                   Update: {
-                    "caption"?: string,"collected_at"?: string | null,"created_at"?: string,"height"?: number,"id"?: string,"is_hidden"?: boolean,"license_note"?: string | null,"portfolio_id"?: string,"provenance"?: Database["public"]['Enums']["provenance"],"sort_order"?: number,"source"?: string | null,"storage_path"?: string,"updated_at"?: string,"width"?: number
+                    "caption"?: string,"collected_at"?: string | null,"created_at"?: string,"crew_credits"?: string,"height"?: number,"id"?: string,"is_hidden"?: boolean,"license_note"?: string | null,"portfolio_id"?: string,"provenance"?: Database["public"]['Enums']["provenance"],"sort_order"?: number,"source"?: string | null,"storage_path"?: string,"updated_at"?: string,"width"?: number
                   }
                   Relationships: [
                     {
@@ -527,14 +655,14 @@ isOneToOne: false
                   ]
                 },"reviews": {
                   Row: {
-                    "author_id": string,"booking_id": string,"comment": string,"created_at": string,"deleted_at": string | null,"id": string,"is_hidden": boolean,"photographer_id": string | null,"rating": number,"studio_id": string | null,"updated_at": string
+                    "author_id": string,"booking_id": string,"comment": string,"created_at": string,"deleted_at": string | null,"id": string,"is_hidden": boolean,"moderation_reason": string | null,"photographer_id": string | null,"rating": number,"reassessment_requested_at": string | null,"studio_id": string | null,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "author_id": string,"booking_id": string,"comment"?: string,"created_at"?: string,"deleted_at"?: string | null,"id"?: string,"is_hidden"?: boolean,"photographer_id"?: string | null,"rating": number,"studio_id"?: string | null,"updated_at"?: string
+                    "author_id": string,"booking_id": string,"comment"?: string,"created_at"?: string,"deleted_at"?: string | null,"id"?: string,"is_hidden"?: boolean,"moderation_reason"?: string | null,"photographer_id"?: string | null,"rating": number,"reassessment_requested_at"?: string | null,"studio_id"?: string | null,"updated_at"?: string
                   }
                   Update: {
-                    "author_id"?: string,"booking_id"?: string,"comment"?: string,"created_at"?: string,"deleted_at"?: string | null,"id"?: string,"is_hidden"?: boolean,"photographer_id"?: string | null,"rating"?: number,"studio_id"?: string | null,"updated_at"?: string
+                    "author_id"?: string,"booking_id"?: string,"comment"?: string,"created_at"?: string,"deleted_at"?: string | null,"id"?: string,"is_hidden"?: boolean,"moderation_reason"?: string | null,"photographer_id"?: string | null,"rating"?: number,"reassessment_requested_at"?: string | null,"studio_id"?: string | null,"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -591,17 +719,23 @@ isOneToOne: false
                   ]
                 },"room_messages": {
                   Row: {
-                    "created_at": string,"id": string,"is_hidden": boolean,"room_id": string,"sender_id": string | null,"storage_path": string | null,"text": string,"type": string
+                    "conversation_id": string | null,"created_at": string,"id": string,"is_hidden": boolean,"room_id": string | null,"sender_id": string | null,"storage_path": string | null,"submission_id": string | null,"text": string,"type": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"id"?: string,"is_hidden"?: boolean,"room_id": string,"sender_id"?: string | null,"storage_path"?: string | null,"text": string,"type"?: string
+                    "conversation_id"?: string | null,"created_at"?: string,"id"?: string,"is_hidden"?: boolean,"room_id"?: string | null,"sender_id"?: string | null,"storage_path"?: string | null,"submission_id"?: string | null,"text": string,"type"?: string
                   }
                   Update: {
-                    "created_at"?: string,"id"?: string,"is_hidden"?: boolean,"room_id"?: string,"sender_id"?: string | null,"storage_path"?: string | null,"text"?: string,"type"?: string
+                    "conversation_id"?: string | null,"created_at"?: string,"id"?: string,"is_hidden"?: boolean,"room_id"?: string | null,"sender_id"?: string | null,"storage_path"?: string | null,"submission_id"?: string | null,"text"?: string,"type"?: string
                   }
                   Relationships: [
                     {
+      foreignKeyName: "room_messages_conversation_id_fkey"
+      columns: ["conversation_id"]
+isOneToOne: false
+      referencedRelation: "conversations"
+      referencedColumns: ["id"]
+    },{
       foreignKeyName: "room_messages_room_id_fkey"
       columns: ["room_id"]
 isOneToOne: false
@@ -617,14 +751,14 @@ isOneToOne: false
                   ]
                 },"room_milestones": {
                   Row: {
-                    "created_at": string,"created_by": string,"due_at": string | null,"id": string,"room_id": string,"status": string,"title": string,"updated_at": string
+                    "created_at": string,"created_by": string,"due_at": string | null,"id": string,"room_id": string,"status": string,"title": string,"updated_at": string,"updated_by": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"created_by": string,"due_at"?: string | null,"id"?: string,"room_id": string,"status"?: string,"title": string,"updated_at"?: string
+                    "created_at"?: string,"created_by": string,"due_at"?: string | null,"id"?: string,"room_id": string,"status"?: string,"title": string,"updated_at"?: string,"updated_by"?: string | null
                   }
                   Update: {
-                    "created_at"?: string,"created_by"?: string,"due_at"?: string | null,"id"?: string,"room_id"?: string,"status"?: string,"title"?: string,"updated_at"?: string
+                    "created_at"?: string,"created_by"?: string,"due_at"?: string | null,"id"?: string,"room_id"?: string,"status"?: string,"title"?: string,"updated_at"?: string,"updated_by"?: string | null
                   }
                   Relationships: [
                     {
@@ -638,6 +772,44 @@ isOneToOne: false
       columns: ["room_id"]
 isOneToOne: false
       referencedRelation: "shoot_rooms"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "room_milestones_updated_by_fkey"
+      columns: ["updated_by"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"saved_providers": {
+                  Row: {
+                    "created_at": string,"id": string,"photographer_id": string | null,"studio_id": string | null,"updated_at": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"id"?: string,"photographer_id"?: string | null,"studio_id"?: string | null,"updated_at"?: string,"user_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"id"?: string,"photographer_id"?: string | null,"studio_id"?: string | null,"updated_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "saved_providers_photographer_id_fkey"
+      columns: ["photographer_id"]
+isOneToOne: false
+      referencedRelation: "photographers"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "saved_providers_studio_id_fkey"
+      columns: ["studio_id"]
+isOneToOne: false
+      referencedRelation: "studios"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "saved_providers_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
       referencedColumns: ["id"]
     }
                   ]
@@ -695,14 +867,14 @@ isOneToOne: false
                   ]
                 },"services": {
                   Row: {
-                    "created_at": string,"deleted_at": string | null,"description": string,"duration_minutes": number,"genre": Database["public"]['Enums']["genre"],"id": string,"is_active": boolean,"name": string,"owner_type": Database["public"]['Enums']["provider_type"],"photo_count": number,"photographer_id": string | null,"price": number,"retouched_count": number,"studio_id": string | null,"updated_at": string
+                    "created_at": string,"deleted_at": string | null,"description": string,"duration_minutes": number,"genre": Database["public"]['Enums']["genre"],"id": string,"is_active": boolean,"name": string,"owner_type": Database["public"]['Enums']["provider_type"],"photo_count": number,"photographer_id": string | null,"price": number,"retouched_count": number,"revision_limit": number | null,"selection_quota": number | null,"studio_id": string | null,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"deleted_at"?: string | null,"description"?: string,"duration_minutes": number,"genre": Database["public"]['Enums']["genre"],"id"?: string,"is_active"?: boolean,"name": string,"owner_type": Database["public"]['Enums']["provider_type"],"photo_count"?: number,"photographer_id"?: string | null,"price": number,"retouched_count"?: number,"studio_id"?: string | null,"updated_at"?: string
+                    "created_at"?: string,"deleted_at"?: string | null,"description"?: string,"duration_minutes": number,"genre": Database["public"]['Enums']["genre"],"id"?: string,"is_active"?: boolean,"name": string,"owner_type": Database["public"]['Enums']["provider_type"],"photo_count"?: number,"photographer_id"?: string | null,"price": number,"retouched_count"?: number,"revision_limit"?: number | null,"selection_quota"?: number | null,"studio_id"?: string | null,"updated_at"?: string
                   }
                   Update: {
-                    "created_at"?: string,"deleted_at"?: string | null,"description"?: string,"duration_minutes"?: number,"genre"?: Database["public"]['Enums']["genre"],"id"?: string,"is_active"?: boolean,"name"?: string,"owner_type"?: Database["public"]['Enums']["provider_type"],"photo_count"?: number,"photographer_id"?: string | null,"price"?: number,"retouched_count"?: number,"studio_id"?: string | null,"updated_at"?: string
+                    "created_at"?: string,"deleted_at"?: string | null,"description"?: string,"duration_minutes"?: number,"genre"?: Database["public"]['Enums']["genre"],"id"?: string,"is_active"?: boolean,"name"?: string,"owner_type"?: Database["public"]['Enums']["provider_type"],"photo_count"?: number,"photographer_id"?: string | null,"price"?: number,"retouched_count"?: number,"revision_limit"?: number | null,"selection_quota"?: number | null,"studio_id"?: string | null,"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -819,14 +991,14 @@ isOneToOne: false
                   ]
                 },"studios": {
                   Row: {
-                    "address": string,"city": string,"created_at": string,"created_by": string,"deleted_at": string | null,"description": string,"district": string,"genres": (Database["public"]['Enums']["genre"])[],"id": string,"is_hidden": boolean,"name": string,"updated_at": string
+                    "address": string,"city": string,"contact_email": string | null,"created_at": string,"created_by": string,"deleted_at": string | null,"description": string,"district": string,"genres": (Database["public"]['Enums']["genre"])[],"id": string,"is_hidden": boolean,"name": string,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "address"?: string,"city"?: string,"created_at"?: string,"created_by": string,"deleted_at"?: string | null,"description"?: string,"district"?: string,"genres": (Database["public"]['Enums']["genre"])[],"id"?: string,"is_hidden"?: boolean,"name": string,"updated_at"?: string
+                    "address"?: string,"city"?: string,"contact_email"?: string | null,"created_at"?: string,"created_by": string,"deleted_at"?: string | null,"description"?: string,"district"?: string,"genres": (Database["public"]['Enums']["genre"])[],"id"?: string,"is_hidden"?: boolean,"name": string,"updated_at"?: string
                   }
                   Update: {
-                    "address"?: string,"city"?: string,"created_at"?: string,"created_by"?: string,"deleted_at"?: string | null,"description"?: string,"district"?: string,"genres"?: (Database["public"]['Enums']["genre"])[],"id"?: string,"is_hidden"?: boolean,"name"?: string,"updated_at"?: string
+                    "address"?: string,"city"?: string,"contact_email"?: string | null,"created_at"?: string,"created_by"?: string,"deleted_at"?: string | null,"description"?: string,"district"?: string,"genres"?: (Database["public"]['Enums']["genre"])[],"id"?: string,"is_hidden"?: boolean,"name"?: string,"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -893,6 +1065,9 @@ isOneToOne: true
               "message": Json,"msg_id": number
             }[]
                            },
+"frameroom_complete_due_bookings":
+{ Args: Record<PropertyKey, never>; Returns: number
+                           },
 "frameroom_enqueue_job":
 { Args: { "job_id": string }; Returns: undefined
                            },
@@ -901,12 +1076,17 @@ isOneToOne: true
               "agreed_brief_version": number | null,
 "assigned_photographer_id": string | null,
 "client_id": string,
+"completion_due_at": string | null,
+"completion_hold_at": string | null,
+"completion_remaining_ms": number | null,
+"conversation_id": string | null,
 "created_at": string,
 "id": string,
 "note": string,
 "owner_type": Database["public"]['Enums']["provider_type"],
 "photographer_id": string | null,
 "project_id": string,
+"request_key": string | null,
 "scheduled_end": string,
 "scheduled_start": string,
 "service_id": string,
@@ -927,17 +1107,55 @@ isOneToOne: true
 "frameroom_reserve_usage":
 { Args: { "feature_name": string,"images": number,"model_name": string,"monthly_limit"?: number,"reserve_amount": number,"uid": string }; Returns: string
                            },
-"frameroom_transition":
-{ Args: { "assignee"?: string,"bid": string,"desired": Database["public"]['Enums']["booking_status"],"ends"?: string,"expected_version": number,"reason"?: string,"resources"?: (string)[],"starts"?: string }; Returns: {
+"frameroom_set_completion_hold":
+{ Args: { "p_booking_id": string,"p_hold": boolean,"p_reason": string,"p_version": number }; Returns: {
               "agreed_brief_version": number | null,
 "assigned_photographer_id": string | null,
 "client_id": string,
+"completion_due_at": string | null,
+"completion_hold_at": string | null,
+"completion_remaining_ms": number | null,
+"conversation_id": string | null,
 "created_at": string,
 "id": string,
 "note": string,
 "owner_type": Database["public"]['Enums']["provider_type"],
 "photographer_id": string | null,
 "project_id": string,
+"request_key": string | null,
+"scheduled_end": string,
+"scheduled_start": string,
+"service_id": string,
+"service_name": string,
+"service_snapshot": NonNullable<Json>,
+"status": Database["public"]['Enums']["booking_status"],
+"studio_id": string | null,
+"total_price": number,
+"updated_at": string,
+"version": number
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "bookings"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
+"frameroom_transition":
+{ Args: { "assignee"?: string,"bid": string,"desired": Database["public"]['Enums']["booking_status"],"ends"?: string,"expected_version": number,"reason"?: string,"resources"?: (string)[],"starts"?: string }; Returns: {
+              "agreed_brief_version": number | null,
+"assigned_photographer_id": string | null,
+"client_id": string,
+"completion_due_at": string | null,
+"completion_hold_at": string | null,
+"completion_remaining_ms": number | null,
+"conversation_id": string | null,
+"created_at": string,
+"id": string,
+"note": string,
+"owner_type": Database["public"]['Enums']["provider_type"],
+"photographer_id": string | null,
+"project_id": string,
+"request_key": string | null,
 "scheduled_end": string,
 "scheduled_start": string,
 "service_id": string,

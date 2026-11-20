@@ -60,9 +60,9 @@ export function AccountPage() {
             <h2>{t.profileUi.profileLinks}</h2>
             <p className="muted">{t.profileUi.profileLinksDescription}</p>
             <div className="account-quick-links">
-              <Link to="/portfolio">{t.portfolio.title}</Link>
+              {isPhotographer ? <Link to="/portfolio">{t.portfolio.title}</Link> : null}
               <Link to="/bookings">{t.demo.bookings}</Link>
-              <Link to="/studio">{t.nav.studio}</Link>
+              {isPhotographer ? <Link to="/studio">{t.nav.studio}</Link> : null}
             </div>
           </section>
         </div>

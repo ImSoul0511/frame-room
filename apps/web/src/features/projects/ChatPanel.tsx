@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, type UIMessage } from 'ai';
 import { useQueryClient } from '@tanstack/react-query';
+import { invalidateResources } from '../../lib/query-resources';
 import type { AiAction } from '@frameroom/shared';
 import { post, supabase } from '../../lib/api';
 import { env } from '../../lib/env';
@@ -50,7 +51,7 @@ function Conversation({ projectId, initial }: { projectId: string; initial: UIMe
     messages: initial,
     transport,
     onFinish: () => {
-      void client.invalidateQueries({ queryKey: ['api'] });
+      void invalidateResources(client, [`/v1/creative-projects/${projectId}`, '/v1/bookings']);
     },
   });
   const actions = useApi<AiAction[]>(`/v1/creative-projects/${projectId}/actions`);

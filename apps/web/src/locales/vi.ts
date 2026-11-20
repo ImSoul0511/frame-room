@@ -1,5 +1,34 @@
+import { toolsVietnamese } from './tools';
+import { atelierVietnamese } from './atelier';
 import { workspaceVietnamese, demoErrorsVietnamese } from './workspace';
 export const vietnamese = {
+  tools: toolsVietnamese,
+  atelier: atelierVietnamese,
+  proofing: {
+    contactSheet: 'BẢNG CHỌN ẢNH',
+    hint: 'Chọn những khung hình mang dấu ấn của bạn.',
+    photos: 'ảnh',
+    selected: 'đã chọn',
+    allPhotos: 'Tất cả ảnh',
+    selectedOnly: 'Ảnh đã chọn',
+    noPhotos: 'Bảng ảnh đang chờ những khung hình đầu tiên.',
+    uploadHint: 'Ảnh xem trước sẽ xuất hiện khi nhiếp ảnh gia tải lên.',
+    noSelected: 'Chưa chọn ảnh nào. Xem tất cả ảnh để chọn những tấm yêu thích.',
+    open: 'Mở ảnh',
+    previous: 'Ảnh trước',
+    next: 'Ảnh tiếp theo',
+    zoomIn: 'Phóng to',
+    zoomOut: 'Vừa màn hình',
+    compare: 'So sánh với',
+    noCompare: 'Xem một ảnh',
+    select: 'Chọn ảnh này',
+    deselect: 'Bỏ chọn ảnh này',
+    shortcuts: '← → Chuyển ảnh · S Chọn ảnh · Esc Đóng',
+    readOnlyShortcuts: '← → Chuyển ảnh · Esc Đóng',
+    readOnly: 'Chỉ xem',
+    unsaved: 'Gửi lựa chọn để chia sẻ với nhiếp ảnh gia.',
+  },
+
   demo: workspaceVietnamese,
   demoErrors: demoErrorsVietnamese,
   profileUi: {

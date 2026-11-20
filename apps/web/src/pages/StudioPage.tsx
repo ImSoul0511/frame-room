@@ -46,7 +46,6 @@ export function StudioPage() {
       contactEmail,
       genres: [genre],
     });
-    await client.invalidateQueries({ queryKey: ['api'] });
     await client.invalidateQueries({ queryKey: ['profile'] });
     nav(`/studio/${studio.id}`);
   });

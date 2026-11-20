@@ -34,7 +34,9 @@
     "db:types:cloud": "node scripts/db-types.mjs --cloud",
     "docs:check": "node scripts/check-docs.mjs",
     "ai:index": "pnpm --filter @frameroom/shared build && pnpm --filter api exec tsx src/index-portfolios.ts",
-    "ai:evaluate": "pnpm --filter @frameroom/shared build && pnpm --filter api exec tsx src/evaluate-search.ts"
+    "ai:evaluate": "pnpm --filter @frameroom/shared build && pnpm --filter api exec tsx src/evaluate-search.ts",
+    "test:atelier:db": "node scripts/verify-atelier.mjs",
+    "test:tools:db": "pnpm --filter api exec tsx src/verify-workflow-tools.ts"
   },
   "devDependencies": {
     "@commitlint/cli": "19.8.1",

@@ -7,7 +7,7 @@
   height: clamp(220px, 27vw, 380px);
   overflow: hidden;
   border-radius: 5px;
-  background: #e2e4ed;
+  background: var(--fr-surface);
 }
 .profile-cover > img {
   width: 100%;
@@ -21,21 +21,21 @@
   bottom: 22px;
   border-radius: 30px;
   background: #fcf9f2f2;
-  color: #3e4e72;
+  color: var(--fr-ink);
   padding: 7px 16px;
   font-size: 0.875rem;
 }
 .profile-cover-empty {
   display: grid;
   place-items: center;
-  background: radial-gradient(ellipse at 30% 80%, #c8d8d1, transparent 60%), #deddeb;
+  background: radial-gradient(ellipse at 30% 80%, #c8d8d1, transparent 60%), var(--fr-surface);
 }
 .profile-cover-empty > span {
   font:
     italic clamp(40px, 6vw, 80px) 'Lora',
     Georgia,
     serif;
-  color: #647395;
+  color: var(--fr-muted);
   opacity: 0.6;
 }
 .profile-identity {
@@ -54,8 +54,8 @@
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: #dce2e9;
-  color: #4e6088;
+  background: var(--fr-surface);
+  color: var(--fr-ink);
   font:
     italic 2rem 'Lora',
     Georgia,
@@ -108,14 +108,14 @@
   background: transparent;
   border: 0;
   border-bottom: 2px solid transparent;
-  color: #606b84;
+  color: var(--fr-muted);
   font-size: 0.9375rem;
   padding: 0 0 17px;
   min-height: 44px;
 }
 .profile-tabs button.active {
-  color: #3d5079;
-  border-bottom-color: #7785a7;
+  color: var(--fr-ink);
+  border-bottom-color: var(--fr-muted);
   font-weight: 600;
 }
 .profile-section {
@@ -151,7 +151,7 @@
   height: auto;
   aspect-ratio: 4/3;
   object-fit: cover;
-  background: #e4e1ed;
+  background: var(--fr-surface);
 }
 .profile-album-placeholder {
   display: grid;
@@ -160,7 +160,7 @@
     italic 3rem 'Lora',
     Georgia,
     serif;
-  color: #6d7995;
+  color: var(--fr-muted);
 }
 .profile-album > div:last-child {
   padding: 19px;
@@ -188,14 +188,14 @@
   min-width: 0;
 }
 .profile-summary {
-  border: 1px solid #dedbe6;
-  background: #f5f2f7;
+  border: 1px solid var(--fr-surface);
+  background: var(--fr-surface);
   padding: 26px;
   border-radius: 5px;
 }
 .profile-summary > p {
   font-size: 0.875rem;
-  color: #5e667c;
+  color: var(--fr-muted);
   margin-top: 15px;
 }
 .profile-summary > h2,
@@ -212,7 +212,7 @@
   gap: 14px;
   margin: 24px 0 0;
   padding-top: 20px;
-  border-top: 1px solid #dcd8e5;
+  border-top: 1px solid var(--fr-surface);
 }
 .profile-summary dl > div {
   display: flex;
@@ -221,15 +221,15 @@
   font-size: 0.875rem;
 }
 .profile-summary dt {
-  color: #606b83;
+  color: var(--fr-muted);
 }
 .profile-summary dd {
   margin: 0;
   font-weight: 600;
 }
 .profile-inquiry {
-  background: #e5e7ef;
-  border: 1px solid #d8dce8;
+  background: var(--fr-surface);
+  border: 1px solid var(--fr-surface);
   border-radius: 5px;
   padding: 26px;
 }
@@ -240,7 +240,7 @@
 }
 .profile-inquiry > p:not(.eyebrow) {
   font-size: 0.875rem;
-  color: #5b657e;
+  color: var(--fr-muted);
   margin-bottom: 22px;
 }
 .profile-inquiry button,
@@ -250,7 +250,7 @@
 .profile-biography {
   font-size: 1rem;
   line-height: 1.95;
-  color: #59647c;
+  color: var(--fr-muted);
   max-width: 700px;
   white-space: pre-line;
 }
@@ -268,7 +268,7 @@
   font-size: 0.875rem;
 }
 .profile-facts dt {
-  color: #697189;
+  color: var(--fr-muted);
 }
 .profile-facts dd {
   margin: 0;
@@ -277,9 +277,9 @@
 .profile-empty {
   font-size: 0.9375rem;
   padding: 38px 20px;
-  border: 1px dashed #c9cbd8;
+  border: 1px dashed var(--fr-surface);
   border-radius: 5px;
-  color: #626e88;
+  color: var(--fr-muted);
   text-align: center;
 }
 .profile-package {
@@ -305,7 +305,7 @@
   gap: 15px;
   flex-wrap: wrap;
   font-size: 0.75rem;
-  color: #596582;
+  color: var(--fr-muted);
   margin-top: 20px;
 }
 .package-price {
@@ -317,7 +317,7 @@
 }
 .package-price > strong {
   font-size: 1.1rem;
-  color: #485d86;
+  color: var(--fr-ink);
   font-weight: 500;
 }
 .profile-review {
@@ -328,7 +328,7 @@
   border-radius: 5px;
 }
 .review-stars {
-  color: #78678e;
+  color: var(--fr-muted);
   letter-spacing: 3px;
 }
 .profile-review p {
@@ -337,15 +337,15 @@
 }
 .profile-review cite {
   font-style: normal;
-  color: #69738a;
+  color: var(--fr-muted);
   font-size: 0.875rem;
 }
 .profile-message-preview {
   margin: 0;
   white-space: pre-wrap;
   padding: 20px;
-  border-left: 2px solid #8f82a9;
-  background: #f1edf5;
+  border-left: 2px solid var(--fr-muted);
+  background: var(--fr-surface);
   overflow-wrap: anywhere;
 }
 .account-profile-heading {
@@ -355,7 +355,7 @@
   padding: 20px 0 34px;
 }
 .account-profile-heading .profile-monogram {
-  background: #e4deed;
+  background: var(--fr-surface);
 }
 .account-profile-heading h1 {
   font-size: clamp(28px, 3vw, 40px);
@@ -377,15 +377,15 @@
   margin: 22px 0;
 }
 .account-quick-links a {
-  border: 1px solid #d5cfdf;
+  border: 1px solid var(--fr-surface);
   padding: 10px 15px;
   border-radius: 5px;
   background: #fffdf9;
-  color: #4b5e85;
+  color: var(--fr-ink);
   font-size: 0.875rem;
 }
 .account-quick-links a:hover {
-  background: #eae4f2;
+  background: var(--fr-surface);
 }
 .gallery-heading {
   padding: 16px 0 30px;
@@ -408,7 +408,7 @@
   display: block;
   border: 0;
   padding: 0;
-  background: #e8e3ee;
+  background: var(--fr-surface);
   border-radius: 4px;
   overflow: hidden;
   aspect-ratio: 4/5;
@@ -434,7 +434,7 @@
   width: 100%;
   height: 65vh;
   object-fit: contain;
-  background: #edeaf2;
+  background: var(--fr-surface);
 }
 .photo-lightbox > .row {
   margin-top: 20px;

@@ -310,7 +310,7 @@ export async function isStudioManager(
 export async function listStudiosForUser(tx: Transaction, userId: string): Promise<MyStudio[]> {
   return tx.rows<MyStudio>(
     `select s.id, s.name, s.description, s.city, s.district, s.address,
-            s.genres, s.created_by, s.is_hidden, s.created_at, s.updated_at, s.contact_email,
+            s.genres::text[] as genres, s.created_by, s.is_hidden, s.created_at, s.updated_at, s.contact_email,
             m.role
      from studios s
      join studio_members m on m.studio_id = s.id
@@ -330,7 +330,7 @@ export async function insertStudio(
     `insert into studios (name, description, city, district, address, genres, created_by, contact_email)
      values ($1, $2, $3, $4, $5, $6::genre[], $7, $8)
      returning id, name, description, city, district, address,
-               genres, created_by, is_hidden, created_at, updated_at, contact_email`,
+               genres::text[] as genres, created_by, is_hidden, created_at, updated_at, contact_email`,
     [
       input.name,
       input.description,
@@ -371,7 +371,7 @@ export async function updateStudio(
          address = $6, genres = $7::genre[], contact_email = coalesce($8, contact_email), updated_at = now()
      where id = $1 and deleted_at is null
      returning id, name, description, city, district, address,
-               genres, created_by, is_hidden, created_at, updated_at, contact_email`,
+               genres::text[] as genres, created_by, is_hidden, created_at, updated_at, contact_email`,
     [
       studioId,
       input.name,

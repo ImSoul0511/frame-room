@@ -25,7 +25,13 @@ describe('system routes', () => {
   it('reports nothing configured by default', async () => {
     const response = await createApp().inject({ url: '/v1/config' });
     expect(response.json()).toEqual({
-      data: { authConfigured: false, databaseConfigured: false, storageConfigured: false },
+      data: {
+        authConfigured: false,
+        databaseConfigured: false,
+        storageConfigured: false,
+        aiConfigured: false,
+        aiSearchEnabled: false,
+      },
     });
   });
 
@@ -43,8 +49,21 @@ describe('system routes', () => {
       authConfigured: true,
       databaseConfigured: true,
       storageConfigured: true,
+      aiConfigured: false,
+      aiSearchEnabled: false,
     });
     expect(response.body).not.toMatch(/secret/);
+  });
+
+  it('exposes AI search only when both configuration and its feature flag are enabled', async () => {
+    const enabled = await createApp({
+      AI_GATEWAY_API_KEY: 'server-secret',
+      AI_SEARCH_ENABLED: 'true',
+    }).inject({ url: '/v1/config' });
+    expect(enabled.json().data).toMatchObject({ aiConfigured: true, aiSearchEnabled: true });
+    expect(enabled.body).not.toContain('server-secret');
+    const disabled = await createApp({ AI_SEARCH_ENABLED: 'true' }).inject({ url: '/v1/config' });
+    expect(disabled.json().data).toMatchObject({ aiConfigured: false, aiSearchEnabled: false });
   });
 
   it('serves the OpenAPI document without a token and documents the system routes', async () => {

@@ -1,3 +1,4 @@
+import { SaveProviderButton } from '../catalog/SaveProviderButton';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { Service } from '@frameroom/shared';
@@ -5,8 +6,7 @@ import type { ProviderDetail } from '../../lib/types';
 import { currency } from '../../lib/api';
 import { useStrings } from '../../lib/i18n';
 import { Action } from '../../components/ui';
-import { useDemo } from '../demo/DemoContext';
-import { DemoReportButton } from '../demo/ReportButton';
+import { ReportButton } from '../../pages/SettingsPage';
 
 export function ProviderProfile({
   detail,
@@ -20,14 +20,9 @@ export function ProviderProfile({
   canRequest?: boolean;
 }) {
   const t = useStrings();
-  const demo = useDemo();
   const { provider, services } = detail;
-  const portfolios = detail.portfolios.filter(
-    (value) => demo.choice === 'account' || !demo.state.hiddenTargets.includes(value.id),
-  );
-  const reviews = detail.reviews.filter(
-    (value) => demo.choice === 'account' || !demo.state.hiddenTargets.includes(value.id),
-  );
+  const portfolios = detail.portfolios;
+  const reviews = detail.reviews;
   const [tab, setTab] = useState('works');
   const cover = portfolios.find((portfolio) => portfolio.coverUrl)?.coverUrl;
   return (
@@ -41,6 +36,7 @@ export function ProviderProfile({
         <span className="profile-kind">{t.explore[provider.type]}</span>
       </div>
       <header className="profile-identity">
+        <SaveProviderButton type={provider.type} id={provider.id} name={provider.displayName} />
         <div className="profile-monogram" aria-hidden="true">
           {provider.displayName
             .trim()
@@ -189,11 +185,7 @@ export function ProviderProfile({
                     </span>
                     <p>{review.comment}</p>
                     <cite>{review.authorName}</cite>
-                    <DemoReportButton
-                      targetType="review"
-                      targetId={review.id}
-                      title={review.comment}
-                    />
+                    <ReportButton targetType="review" targetId={review.id} />
                   </blockquote>
                 ))
               ) : (

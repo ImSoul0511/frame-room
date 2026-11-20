@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { Modal, Provenance } from '../../components/ui';
 import { useStrings } from '../../lib/i18n';
-import { useDemo } from '../demo/DemoContext';
-import { DemoReportButton } from '../demo/ReportButton';
+import { ReportButton } from '../../pages/SettingsPage';
 
 export type GalleryPhoto = {
   id: string;
@@ -14,10 +13,7 @@ export type GalleryPhoto = {
 };
 export function PhotoGallery({ photos: source }: { photos: GalleryPhoto[] }) {
   const t = useStrings();
-  const demo = useDemo();
-  const photos = source.filter(
-    (photo) => demo.choice === 'account' || !demo.state.hiddenTargets.includes(photo.id),
-  );
+  const photos = source;
   const [selected, setSelected] = useState<number | null>(null);
   const current = selected === null ? null : photos[selected];
   const previous = () =>
@@ -40,7 +36,7 @@ export function PhotoGallery({ photos: source }: { photos: GalleryPhoto[] }) {
               />
               {photo.provenance ? <Provenance value={photo.provenance} /> : null}
             </button>
-            <DemoReportButton targetType="image" targetId={photo.id} title={photo.caption} />
+            <ReportButton targetType="portfolio_image" targetId={photo.id} />
           </div>
         ))}
       </div>

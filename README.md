@@ -6,6 +6,17 @@ This is an internal educational project for Introduction to Software Engineering
 
 ## Start here
 
+The [FrameRoom Atelier upgrade](plans/tasks/ATELIER-001.md) introduces the
+photographic interface, persisted project boards, guided booking and contact-sheet
+review. Its [verification record](plans/tasks/ATELIER-001-verification.md) separates
+local evidence from remaining Cloud and paid-AI checks. Primary account routes use
+real APIs; the retained simulator is available only at `/sandbox` in development.
+
+The [planning and review tools](plans/tasks/ATELIER-002.md) add a shoot calendar and
+ICS export, printable agreed briefs, private saved providers, notification triage,
+checklist-to-task import, and contact-sheet search/filter/CSV reports. See their
+[verification record](plans/tasks/ATELIER-002-verification.md) for local evidence.
+
 **Agents: Read `agents/README.md` before working.** Supply this instruction explicitly to your assistant; there is intentionally no root AGENTS.md.
 
 - [Product brief](docs/product/brief.md)

@@ -24,7 +24,7 @@ const PROFILE_SQL = `
   where p.id = $1`;
 
 const PHOTOGRAPHER_COLUMNS =
-  'id, user_id, display_name, bio, city, district, genres, styles, contact_email, professional_roles, is_hidden, created_at, updated_at';
+  'id, user_id, display_name, bio, city, district, genres::text[] as genres, styles, contact_email, professional_roles, is_hidden, created_at, updated_at';
 
 export function findProfile(tx: Transaction, userId: string) {
   return tx.optional<Profile>(PROFILE_SQL, [userId]);
@@ -61,7 +61,7 @@ export function findPhotographer(tx: Transaction, userId: string) {
 
 export function insertPhotographer(tx: Transaction, userId: string, input: PhotographerInput) {
   return tx.one<OwnPhotographer>(
-    `insert into photographers (user_id, display_name, bio, city, district, genres, styles, contact_email, professional_roles)
+    `insert into photographers (user_id, display_name, bio, city, district, genres::text[] as genres, styles, contact_email, professional_roles)
      values ($1, $2, $3, $4, $5, $6, $7, $8, $9) returning ${PHOTOGRAPHER_COLUMNS}`,
     [
       userId,

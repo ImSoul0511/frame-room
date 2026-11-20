@@ -1,132 +1,135 @@
-import { NavLink, Outlet, Link, useNavigate } from 'react-router-dom';
-import { Suspense } from 'react';
+import { Suspense, useState } from 'react';
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { supabase } from '../lib/api';
 import { useStrings } from '../lib/i18n';
 import { useTask } from '../lib/hooks';
 import { Action, Feedback } from './ui';
 import { LanguageSwitcher } from './LanguageSwitcher';
-import { UserSearch } from './UserSearch';
-import { useDemo } from '../features/demo/DemoContext';
-import { getNavigation } from '../features/demo/permissions';
-import { WorkspaceControls } from '../features/demo/WorkspaceControls';
-
 export function AppLayout() {
   const t = useStrings();
-  const { profile } = useAuth();
-  const demo = useDemo();
-  const navigate = useNavigate();
+  const { session, profile } = useAuth();
+  const location = useLocation();
+  const [menu, setMenu] = useState(false);
+  const [menuPath, setMenuPath] = useState(location.pathname);
+  if (menuPath !== location.pathname) {
+    setMenuPath(location.pathname);
+    setMenu(false);
+  }
   const logout = useTask(async () => {
-    if (demo.choice !== 'account') {
-      demo.setRole('guest');
-      navigate('/explore');
-      return;
-    }
     const result = await supabase?.auth.signOut({ scope: 'local' });
     if (result?.error) throw result.error;
   });
-  const primaryPages = getNavigation(demo.role);
+  const professional = profile?.roles.includes('photographer');
+  const links = [
+    { to: '/explore', label: t.nav.explore },
+    ...(session
+      ? [
+          { to: '/projects', label: t.atelier.board },
+          { to: '/bookings', label: t.booking.title },
+          { to: '/calendar', label: t.tools.calendar },
+          { to: '/saved', label: t.tools.saved },
+          { to: '/messages', label: t.demo.messages },
+        ]
+      : []),
+    ...(professional
+      ? [
+          { to: '/portfolio', label: t.demo.portfolio },
+          { to: '/studio', label: t.nav.studio },
+        ]
+      : []),
+    ...(profile?.roles.includes('system_admin')
+      ? [{ to: '/admin', label: t.demo.moderation }]
+      : []),
+  ];
   return (
-    <div className="app-layout">
+    <div className="app-layout atelier-layout">
       <a className="skip-link" href="#main">
         {t.discovery.skip}
       </a>
-      <div className="app-body">
-        <header className="site-header">
-          <div className="masthead">
-            <Link className="brand" to="/explore" aria-label="FrameRoom">
-              <svg
-                width="34"
-                height="34"
-                viewBox="0 0 34 34"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.2"
-                aria-hidden="true"
-              >
-                <path d="M1 11V1h10M23 1h10v10M33 23v10H23M11 33H1V23" />
-                <circle cx="17" cy="17" r="8" />
-                <circle cx="17" cy="17" r="3" />
-              </svg>
-              <span>
-                FrameRoom<span className="brand-dot">.</span>
-              </span>
-            </Link>
-            <nav className="top-navigation primary-navigation" aria-label={t.workspace}>
-              {primaryPages.map((key) => (
-                <NavLink
-                  key={key}
-                  to={`/${key}`}
-                  className={({ isActive }) => (isActive ? 'active' : '')}
-                >
-                  {key === 'admin'
-                    ? t.demo.moderation
-                    : key === 'projects'
-                      ? t.nav.projects
-                      : t.demo[key]}
-                </NavLink>
-              ))}
-            </nav>
-            <div className="topbar-actions">
-              <LanguageSwitcher />
-              {demo.role !== 'guest' ? (
-                <>
-                  <Link className="account-link" to="/profile">
-                    <span className="avatar">
-                      {(demo.choice === 'account'
-                        ? (profile?.displayName ?? 'F')
-                        : demo.text(demo.state.profiles[demo.role]?.name ?? 'F')
-                      ).slice(0, 1)}
-                    </span>
-                    <span className="account-name">
-                      {demo.choice === 'account'
-                        ? (profile?.displayName ?? t.profileUi.account)
-                        : demo.text(demo.state.profiles[demo.role]?.name ?? demo.role)}
-                    </span>
-                  </Link>
-                  <Action secondary pending={logout.isPending} onClick={() => logout.mutate()}>
-                    {demo.choice === 'account' ? t.logout : t.demo.exitDemo}
-                  </Action>
-                </>
-              ) : (
-                <>
-                  <Link
-                    className="header-signup"
-                    to="/auth?mode=signup"
-                    onClick={() => demo.setRole('account')}
-                  >
-                    {t.signup}
-                  </Link>
-                  <Link
-                    className="button-link dark"
-                    to="/auth"
-                    onClick={() => demo.setRole('account')}
-                  >
-                    {t.login}
-                  </Link>
-                </>
-              )}
-            </div>
-          </div>
-          <div className="navigation-bar">
-            <WorkspaceControls />
-            <UserSearch />
-          </div>
-          <Feedback error={logout.error} />
-        </header>
-        <main id="main" className="main-content">
-          <Suspense fallback={<p role="status">{t.pending}</p>}>
-            <Outlet />
-          </Suspense>
-        </main>
-        <footer className="page-footer">
-          <Link className="footer-brand" to="/explore">
-            FrameRoom.
+      <header className="atelier-header">
+        <div className="atelier-masthead">
+          <Link className="atelier-brand" to="/explore" aria-label="FrameRoom">
+            <span className="atelier-brand-mark" aria-hidden="true">
+              fr
+            </span>
+            <span>
+              FrameRoom<span className="brand-dot">.</span>
+              <small>{t.atelier.signature}</small>
+            </span>
           </Link>
-          <span>{t.discovery.footer}</span>
-          <span>© {new Date().getFullYear()} FrameRoom</span>
-        </footer>
-      </div>
+          <div className="atelier-account">
+            <LanguageSwitcher />
+            {session ? (
+              <>
+                <Link
+                  className="atelier-inbox"
+                  to="/notifications"
+                  aria-label={t.demo.notifications}
+                >
+                  ↗
+                </Link>
+                <Link className="atelier-avatar" to="/profile" aria-label={t.profileUi.account}>
+                  {(profile?.displayName ?? 'F').slice(0, 1)}
+                </Link>
+              </>
+            ) : (
+              <Link className="atelier-signin" to="/auth">
+                {t.login} <span aria-hidden="true">↗</span>
+              </Link>
+            )}
+            <button
+              className="atelier-menu"
+              aria-expanded={menu}
+              aria-controls="atelier-navigation"
+              onClick={() => setMenu(!menu)}
+            >
+              {menu ? t.atelier.closeMenu : t.atelier.menu}
+            </button>
+          </div>
+        </div>
+        <nav
+          id="atelier-navigation"
+          className={`atelier-navigation ${menu ? 'is-open' : ''}`}
+          aria-label={t.workspace}
+        >
+          <div>
+            {links.map((link) => (
+              <NavLink key={link.to} to={link.to} onClick={() => setMenu(false)}>
+                {link.label}
+              </NavLink>
+            ))}
+          </div>
+          <span className="atelier-nav-note">{t.atelier.frameNote}</span>
+          {session ? (
+            <div className="atelier-mobile-account">
+              <Link to="/settings">{t.profileUi.security}</Link>
+              <Action secondary pending={logout.isPending} onClick={() => logout.mutate()}>
+                {t.logout}
+              </Action>
+            </div>
+          ) : null}
+        </nav>
+        <Feedback error={logout.error} />
+      </header>
+      <main id="main" className="main-content atelier-main">
+        <Suspense
+          fallback={
+            <p className="loading" role="status">
+              {t.pending}
+            </p>
+          }
+        >
+          <Outlet />
+        </Suspense>
+      </main>
+      <footer className="atelier-footer">
+        <Link className="atelier-footer-logo" to="/explore">
+          FrameRoom.
+        </Link>
+        <span>{t.atelier.signature}</span>
+        <span>© {new Date().getFullYear()} FrameRoom</span>
+      </footer>
     </div>
   );
 }

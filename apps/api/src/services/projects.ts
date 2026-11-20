@@ -14,6 +14,11 @@ export async function patchProject(
 ) {
   const current = await projects.findProject(tx, id, true);
   requireCondition(current.ownerId === userId, 403, 'project_owner_required');
+  requireCondition(
+    input.version === undefined || input.version === current.version,
+    409,
+    'stale_version',
+  );
   if (current.bookingId) {
     const booking = await tx.one<{ status: string }>(
       'select status from bookings where id=$1 for update',

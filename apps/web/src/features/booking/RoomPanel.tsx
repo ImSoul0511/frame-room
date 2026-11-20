@@ -1,3 +1,4 @@
+import { ChecklistImport } from './ChecklistImport';
 import { useState } from 'react';
 import type { Workspace } from '../../lib/types';
 import { post, patch, upload, dateTime } from '../../lib/api';
@@ -152,6 +153,11 @@ export function RoomPanel({ workspace: w }: { workspace: Workspace }) {
         </section>
         <section className="panel">
           <h2>{t.booking.milestones}</h2>
+          <p className="task-progress">
+            {w.milestones.filter((item) => item.status === 'done').length} / {w.milestones.length}{' '}
+            {t.tools.taskProgress}
+          </p>
+          {!closed ? <ChecklistImport workspace={w} /> : null}
           {w.milestones.map((m) => (
             <label className="checkbox-row" key={m.id}>
               <input
