@@ -179,6 +179,7 @@ export const briefContentSchema = z.object({
     .optional(),
 });
 export const projectPatchSchema = z.object({
+  version: z.number().int().min(1).optional(),
   selectedArtifactIds: z.array(idSchema).max(12).optional(),
   title: shortText.optional(),
   idea: z.string().trim().min(1).max(4000).optional(),

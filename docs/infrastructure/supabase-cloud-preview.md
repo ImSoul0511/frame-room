@@ -42,8 +42,10 @@ operations use the PostgreSQL connection.
 Account navigation opens persistent routes for profile, Studio, portfolio,
 projects, bookings, messages, notifications and moderation. A public provider
 page uses published packages for booking and returns visitors to their intended
-action after login. The header's **View as** selector explicitly activates an
-in-memory demo role.
+action after login. FrameRoom Atelier keeps primary routes exclusively API-backed.
+The in-memory role simulator is isolated at `/sandbox` in development and is not
+included in primary navigation. Legacy `/bookings/live` URLs redirect to canonical
+booking routes.
 
 After the private portfolio bucket migration, new catalog responses point to
 `/v1/portfolio-media`. Existing direct Supabase public Storage URLs for that

@@ -18,7 +18,9 @@ import {
   Status,
 } from '../components/ui';
 import { BriefEditor } from '../features/projects/BriefEditor';
-import { ChatPanel } from '../features/projects/ChatPanel';
+import { AssistantDrawer } from '../components/AssistantDrawer';
+import { ShootOverview, ShootProgress } from '../features/booking/ShootOverview';
+import { invalidateResources } from '../lib/query-resources';
 import { BookingControls } from '../features/booking/BookingControls';
 import { RoomPanel } from '../features/booking/RoomPanel';
 import { GalleryPanel } from '../features/booking/GalleryPanel';
@@ -27,12 +29,48 @@ import { CompletionStatus } from '../features/booking/CompletionStatus';
 export function BookingsPage() {
   const t = useStrings();
   const list = useApi<Booking[]>('/v1/bookings');
+  const [view, setView] = useState('active');
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 60000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const visible = (list.data ?? [])
+    .filter(
+      (booking) =>
+        view === 'all' ||
+        (['pending', 'confirmed', 'in_progress', 'proofing', 'delivered'].includes(
+          booking.status,
+        ) &&
+          (view !== 'upcoming' || Date.parse(booking.scheduledStart) >= now)),
+    )
+    .sort((a, b) =>
+      view === 'all'
+        ? Date.parse(b.scheduledStart) - Date.parse(a.scheduledStart)
+        : Date.parse(a.scheduledStart) - Date.parse(b.scheduledStart),
+    );
   return (
     <>
-      <PageHeading title={t.booking.liveBookings} />
-      <QueryState query={list} empty={list.data?.length === 0} />
+      <PageHeading title={t.atelier.today} subtitle={t.atelier.todayHint} />
+      <div className="genre-chips" aria-label={t.booking.title}>
+        {[
+          { id: 'active', label: t.atelier.activeShoots },
+          { id: 'upcoming', label: t.atelier.upcoming },
+          { id: 'all', label: t.all },
+        ].map((item) => (
+          <button
+            key={item.id}
+            className="chip"
+            aria-pressed={view === item.id}
+            onClick={() => setView(item.id)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+      <QueryState query={list} empty={visible.length === 0} />
       <div className="booking-list">
-        {list.data?.map((b) => (
+        {visible.map((b) => (
           <Link key={b.id} to={`/bookings/${b.id}`} className="booking-card">
             <div className="booking-date">
               <strong>{new Date(b.scheduledStart).getDate()}</strong>
@@ -54,7 +92,7 @@ export function BookingPage() {
   const t = useStrings();
   const { id = '' } = useParams();
   const data = useApi<Workspace>(`/v1/bookings/${id}/workspace`, true, 30000);
-  const [tab, setTab] = useState('brief');
+  const [tab, setTab] = useState('overview');
   const client = useQueryClient();
   useEffect(() => {
     const roomId = data.data?.room?.id;
@@ -64,29 +102,31 @@ export function BookingPage() {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'room_messages', filter: `room_id=eq.${roomId}` },
-        () => void client.invalidateQueries({ queryKey: ['api'] }),
+        () => void invalidateResources(client, [`/v1/bookings/${id}`]),
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'room_decisions', filter: `room_id=eq.${roomId}` },
-        () => void client.invalidateQueries({ queryKey: ['api'] }),
+        () => void invalidateResources(client, [`/v1/bookings/${id}`]),
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'room_milestones', filter: `room_id=eq.${roomId}` },
-        () => void client.invalidateQueries({ queryKey: ['api'] }),
+        () => void invalidateResources(client, [`/v1/bookings/${id}`]),
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') void invalidateResources(client, [`/v1/bookings/${id}`]);
+      });
     return () => {
       void supabase?.removeChannel(channel);
     };
-  }, [data.data?.room?.id, client]);
+  }, [data.data?.room?.id, client, id]);
   if (!data.data) return <QueryState query={data} />;
   const w = data.data;
   const b = w.booking;
   const hasRoom = Boolean(w.room) && ['confirmed', 'in_progress'].includes(b.status);
   const canProof = ['in_progress', 'proofing', 'delivered', 'completed'].includes(b.status);
-  const tabs = (['brief', 'room', 'gallery', 'delivery', 'assistant'] as const).filter((key) =>
+  const tabs = (['overview', 'brief', 'room', 'gallery', 'delivery'] as const).filter((key) =>
     key === 'room' ? hasRoom : key === 'gallery' || key === 'delivery' ? canProof : true,
   );
   const selected = tabs.find((key) => key === tab) ?? 'brief';
@@ -95,30 +135,39 @@ export function BookingPage() {
       <PageHeading
         title={b.serviceName}
         subtitle={`${dateTime(b.scheduledStart)} — ${currency(b.totalPrice)}`}
-        action={<Status status={b.status} />}
+        action={
+          <div className="row wrap">
+            <Link className="atelier-text-link" to={`/bookings/${id}/brief`}>
+              {t.tools.printBrief}
+            </Link>
+            <Status status={b.status} />
+            <AssistantDrawer projectId={b.projectId} />
+          </div>
+        }
       />
       {b.status === 'delivered' ? <CompletionStatus booking={b} /> : null}
-      <BookingControls key={b.version} workspace={w} />
+      <ShootProgress status={b.status} />
+      <BookingControls workspace={w} />
       <div className="tabs" role="tablist">
         {tabs.map((k) => (
           <button role="tab" key={k} aria-selected={selected === k} onClick={() => setTab(k)}>
-            {k === 'assistant' ? t.project.assistant : t.booking[k]}
+            {k === 'overview' ? t.atelier.overview : t.booking[k]}
           </button>
         ))}
       </div>
-      {selected === 'brief' ? (
+      {selected === 'overview' ? (
+        <ShootOverview workspace={w} onNavigate={setTab} />
+      ) : selected === 'brief' ? (
         <BriefPanel workspace={w} />
       ) : selected === 'room' && w.room ? (
         <RoomPanel workspace={w} />
       ) : selected === 'gallery' ? (
-        <GalleryPanel key={`${w.gallery?.round}-${w.gallery?.status}`} workspace={w} />
+        <GalleryPanel key={w.gallery?.round} workspace={w} />
       ) : selected === 'delivery' ? (
         <DeliveryPanel
           key={w.review?.reassessmentRequestedAt ?? String(w.review?.isHidden)}
           workspace={w}
         />
-      ) : selected === 'assistant' ? (
-        <ChatPanel projectId={b.projectId} />
       ) : null}
     </>
   );
@@ -216,7 +265,7 @@ function BriefPanel({ workspace: w }: { workspace: Workspace }) {
         <section className="panel">
           <h2>{t.booking.proposeBrief}</h2>
           <BriefEditor
-            key={latest?.id ?? w.booking.id}
+            key={w.booking.id}
             initial={{
               ...baseline,
               requirements: {

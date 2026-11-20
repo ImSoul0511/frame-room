@@ -14,6 +14,7 @@ import { profileModule } from './routes/profile.js';
 import { systemModule } from './routes/system.js';
 import { projectsModule } from './routes/projects.js';
 import { uploadsModule } from './routes/uploads.js';
+import { workflowToolsModule } from './routes/workflow-tools.js';
 import { defaultUploadInputLimit } from './services/media.js';
 
 export interface BuildAppOptions {
@@ -66,6 +67,7 @@ export function buildApp(env: ApiEnv, options: BuildAppOptions = {}) {
     projectsModule,
     uploadsModule,
     businessModule,
+    workflowToolsModule,
     ...(options.modules ?? []),
   ]) {
     module.register(app, dependencies);

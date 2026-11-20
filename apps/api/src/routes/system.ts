@@ -1,13 +1,7 @@
-import { healthResponseSchema } from '@frameroom/shared';
+import { healthResponseSchema, runtimeConfigSchema } from '@frameroom/shared';
 import { z } from 'zod';
 
 import { defineRoute, type ApiModule } from '../plugins/route.js';
-
-const configSchema = z.object({
-  authConfigured: z.boolean(),
-  databaseConfigured: z.boolean(),
-  storageConfigured: z.boolean(),
-});
 
 /** Health, public runtime configuration flags and the OpenAPI document. */
 export const systemModule: ApiModule = {
@@ -28,10 +22,12 @@ export const systemModule: ApiModule = {
       url: '/v1/config',
       summary: 'Which backend integrations are configured. Booleans only, never values.',
       access: 'public',
-      response: configSchema,
+      response: runtimeConfigSchema,
       handler: async () => ({
         authConfigured: Boolean(deps.env.SUPABASE_URL && deps.env.SUPABASE_ANON_KEY),
         databaseConfigured: deps.db.isConfigured,
+        aiConfigured: Boolean(deps.env.AI_GATEWAY_API_KEY),
+        aiSearchEnabled: Boolean(deps.env.AI_SEARCH_ENABLED && deps.env.AI_GATEWAY_API_KEY),
         storageConfigured: Boolean(deps.env.SUPABASE_URL && deps.env.SUPABASE_SERVICE_ROLE_KEY),
       }),
     });

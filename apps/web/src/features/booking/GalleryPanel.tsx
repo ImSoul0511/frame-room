@@ -1,8 +1,13 @@
+import { downloadText } from '../../lib/download';
+import { selectionReport } from '../../lib/selection-export';
+import { JobSubmission } from '../../lib/job-submission';
 import { useState } from 'react';
 import { cullingOutputSchema, type AiJob, type Artifact } from '@frameroom/shared';
 import type { Image, PhotoFeedback, Workspace } from '../../lib/types';
 import { post, upload } from '../../lib/api';
 import { useApi, useTask } from '../../lib/hooks';
+import { ContactSheet } from './ContactSheet';
+import { useCapabilities } from '../../lib/capabilities';
 import { useStrings } from '../../lib/i18n';
 import { Action, Area, Feedback, FilePicker, Form, Provenance, Status } from '../../components/ui';
 
@@ -11,6 +16,7 @@ export function GalleryPanel({ workspace: w }: { workspace: Workspace }) {
   const [selection, setSelection] = useState<string[]>(w.selections.map((s) => s.imageId));
   const [prompt, setPrompt] = useState('');
   const b = w.booking;
+  const capabilities = useCapabilities();
   const jobs = useApi<AiJob[]>(`/v1/creative-projects/${b.projectId}/ai-jobs`, w.isProvider, 5000);
   const variants = useApi<Artifact[]>(
     `/v1/creative-projects/${b.projectId}/artifacts`,
@@ -31,18 +37,21 @@ export function GalleryPanel({ workspace: w }: { workspace: Workspace }) {
   const requestRevision = useTask(async () =>
     post(`/v1/bookings/${b.id}/selections/revision-request`),
   );
-  const ai = useTask(async (kind: 'edit' | 'cull') =>
-    post(`/v1/creative-projects/${b.projectId}/ai-jobs`, {
+  const [submission] = useState(() => new JobSubmission());
+  const ai = useTask(async (kind: 'edit' | 'cull') => {
+    const path = `/v1/creative-projects/${b.projectId}/ai-jobs`;
+    const input = {
       kind,
       prompt,
       imageIds:
         kind === 'cull'
-          ? selection.length
-            ? selection
-            : w.images.slice(0, 50).map((i) => i.id)
+          ? (selection.length ? selection : w.images.map((image) => image.id)).slice(0, 50)
           : selection,
-    }),
-  );
+    };
+    const result = await post(path, input, submission.key(path, input));
+    submission.complete();
+    return result;
+  });
   const canSelect = w.isClient && w.gallery?.status === 'open_for_selection';
   const allowPick = canSelect || (w.isProvider && ['in_progress', 'proofing'].includes(b.status));
   return (
@@ -68,43 +77,62 @@ export function GalleryPanel({ workspace: w }: { workspace: Workspace }) {
           {t.demo.selectionHint} {w.proofing.quota}
         </p>
       ) : null}
-      <div className="moodboard gallery-grid">
-        {w.images.map((i) => (
-          <figure key={i.id} className={selection.includes(i.id) ? 'image-selected' : ''}>
+      <ContactSheet
+        images={w.images}
+        selection={selection}
+        canSelect={allowPick && !choose.isPending}
+        maxSelection={canSelect ? w.proofing.quota : 200}
+        feedbackImageIds={w.photoFeedback
+          .filter((note) => note.round === w.gallery?.round)
+          .map((note) => note.imageId)}
+        onExport={() =>
+          downloadText(
+            `FrameRoom-${b.id}-round-${w.gallery?.round ?? 1}.csv`,
+            selectionReport(
+              {
+                images: w.images,
+                selected: selection,
+                feedback: w.photoFeedback,
+                round: w.gallery?.round ?? 1,
+                state:
+                  w.gallery?.status === 'selection_submitted' ||
+                  ['delivered', 'completed'].includes(b.status)
+                    ? t.tools.submitted
+                    : t.tools.draft,
+              },
+              [
+                t.tools.reportFrame,
+                t.tools.reportFilename,
+                t.tools.reportRound,
+                t.tools.reportState,
+                t.tools.reportNotes,
+                t.tools.reportProvenance,
+              ],
+            ),
+            'text/csv;charset=utf-8',
+          )
+        }
+        onChange={setSelection}
+      />
+      <p className="selection-export-hint">{t.tools.exportHint}</p>
+      <section className="atelier-feedback-list">
+        <h2>{t.atelier.feedback}</h2>
+        {w.images.map((image) => (
+          <details key={image.id}>
+            <summary>
+              {image.caption || t.proofing.open} /{' '}
+              {w.photoFeedback.filter((item) => item.imageId === image.id).length}
+            </summary>
             <ProofingPhoto
-              image={i}
-              notes={w.photoFeedback.filter((item) => item.imageId === i.id)}
-              editable={canSelect && selection.includes(i.id)}
+              image={image}
+              notes={w.photoFeedback.filter((item) => item.imageId === image.id)}
+              editable={canSelect && selection.includes(image.id)}
               bookingId={b.id}
               round={w.gallery?.round ?? 1}
             />
-            {allowPick ? (
-              <label className="checkbox-row">
-                <input
-                  type="checkbox"
-                  aria-label={`${t.booking.selected}: ${i.caption || i.id}`}
-                  checked={selection.includes(i.id)}
-                  disabled={
-                    canSelect && selection.length >= w.proofing.quota && !selection.includes(i.id)
-                  }
-                  onChange={(e) =>
-                    setSelection(
-                      e.target.checked
-                        ? [...selection, i.id]
-                        : selection.filter((id) => id !== i.id),
-                    )
-                  }
-                />
-                {t.booking.selected}
-              </label>
-            ) : null}
-            <figcaption>
-              <Provenance value={i.provenance} />
-              {i.caption}
-            </figcaption>
-          </figure>
+          </details>
         ))}
-      </div>
+      </section>
       {canSelect ? (
         <Action
           pending={choose.isPending}
@@ -134,7 +162,9 @@ export function GalleryPanel({ workspace: w }: { workspace: Workspace }) {
           {t.booking.reopen}
         </Action>
       ) : null}
-      {w.isProvider && ['in_progress', 'proofing'].includes(b.status) ? (
+      {w.isProvider &&
+      capabilities.data?.aiConfigured &&
+      ['in_progress', 'proofing'].includes(b.status) ? (
         <section className="panel">
           <h2>✧ {t.booking.cull}</h2>
           <p className="muted">{t.booking.cullHint}</p>

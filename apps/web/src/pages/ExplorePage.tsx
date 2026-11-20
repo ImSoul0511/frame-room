@@ -1,15 +1,12 @@
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { genres } from '@frameroom/shared';
-import { api } from '../lib/api';
+import { useDiscovery } from '../lib/discovery';
 import { useApi } from '../lib/hooks';
 import { Action, Feedback, QueryState, Select } from '../components/ui';
-import { Botanical } from '../components/Botanical';
-import { ProviderCard, type CardProvider } from '../features/catalog/ProviderCard';
+import { AtelierHero } from '../features/catalog/AtelierHero';
+import { VisualSearch } from '../features/catalog/VisualSearch';
+import { ProviderCard } from '../features/catalog/ProviderCard';
 import { useLanguage, useStrings } from '../lib/i18n';
-import { useDemo } from '../features/demo/DemoContext';
-import { getDemoProviderCards } from '../features/demo/public-catalog';
 
 type Tag = {
   id: string;
@@ -21,33 +18,33 @@ type Tag = {
 export function ExplorePage() {
   const t = useStrings();
   const { language } = useLanguage();
-  const [query, setQuery] = useState('');
-  const [genre, setGenre] = useState('');
-  const [city, setCity] = useState('');
-  const [price, setPrice] = useState('');
-  const [sort, setSort] = useState('recommended');
-  const [providerType, setProviderType] = useState('');
-  const [submitted, setSubmitted] = useState<string | null>(null);
-  const [params] = useSearchParams();
-  const demo = useDemo();
-  const providers = useQuery({
-    queryKey: ['api', 'discovery-cards'],
-    queryFn: async ({ signal }) => {
-      const cards: CardProvider[] = [];
-      let page = 1;
-      for (;;) {
-        const batch = await api<CardProvider[]>(`/v1/explore?pageSize=50&page=${page}`, { signal });
-        cards.push(...batch);
-        if (batch.length < 50) return cards;
-        page += 1;
-      }
-    },
-  });
+  const [params, setParams] = useSearchParams();
+  const update = (key: string, value: string) =>
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        if (value) next.set(key, value);
+        else next.delete(key);
+        return next;
+      },
+      { replace: true },
+    );
+  const query = params.get('q') ?? '';
+  const genre = params.get('genre') ?? '';
+  const city = params.get('city') ?? '';
+  const price = params.get('priceMax') ?? '';
+  const sort = params.get('sort') ?? 'recommended';
+  const providerType = params.get('type') ?? '';
+  const submitted = query || null;
+  const setQuery = (value: string) => update('q', value);
+  const setGenre = (value: string) => update('genre', value);
+  const setCity = (value: string) => update('city', value);
+  const setPrice = (value: string) => update('priceMax', value);
+  const setSort = (value: string) => update('sort', value === 'recommended' ? '' : value);
+  const setProviderType = (value: string) => update('type', value);
+  const providers = useDiscovery();
   const tags = useApi<Tag[]>('/v1/tags');
-  const source = [
-    ...(providers.data ?? []),
-    ...(demo.choice === 'account' ? [] : getDemoProviderCards(demo.state, demo.text, demo.image)),
-  ];
+  const source = providers.data ?? [];
   const normalize = (value: string) =>
     value
       .normalize('NFD')
@@ -97,39 +94,33 @@ export function ExplorePage() {
       }
       return 0;
     });
-  const clear = () => {
-    setGenre('');
-    setCity('');
-    setPrice('');
-    setSort('recommended');
-    setQuery('');
-    setSubmitted(null);
-    setProviderType('');
-  };
+  const clear = () =>
+    setParams(
+      (current) => {
+        const next = new URLSearchParams();
+        if (current.get('project')) next.set('project', current.get('project')!);
+        return next;
+      },
+      { replace: true },
+    );
   const chooseGenre = (value: string) => {
     setGenre(value);
   };
   return (
     <>
-      <section className="editorial-hero">
-        <Botanical className="hero-flower-left" />
-        <Botanical className="hero-flower-right" />
-        <div className="hero-content">
-          <p className="eyebrow">{t.discovery.heroKicker}</p>
-          <h1>
-            {t.discovery.heroFirst}
-            <em>{t.discovery.heroSecond}</em>
-          </h1>
-          <p className="hero-description">{t.discovery.heroDescription}</p>
-          <a className="button-link hero-cta" href="#photographers">
-            {t.discovery.browse}
-          </a>
-        </div>
-      </section>
+      <AtelierHero />
+      <div className="saved-directory-link">
+        <Link
+          className="atelier-text-link"
+          to={`/saved${params.get('project') ? `?project=${encodeURIComponent(params.get('project')!)}` : ''}`}
+        >
+          {t.tools.exploreSaved} <span aria-hidden="true">&rarr;</span>
+        </Link>
+      </div>
       <section className="discovery-search" aria-labelledby="provider-search-heading">
         <div className="search-introduction">
-          <p className="eyebrow">{t.discovery.searchKicker}</p>
-          <h2 id="provider-search-heading">{t.discovery.searchTitle}</h2>
+          <p className="eyebrow">{t.atelier.directory}</p>
+          <h2 id="provider-search-heading">{t.atelier.directoryTitle}</h2>
           <p>{t.discovery.searchDescription}</p>
         </div>
         <div className="search-workspace">
@@ -137,7 +128,7 @@ export function ExplorePage() {
             className="search-composer"
             onSubmit={(event) => {
               event.preventDefault();
-              setSubmitted(query.trim() || null);
+              document.getElementById('photographers')?.scrollIntoView({ behavior: 'smooth' });
             }}
           >
             <label htmlFor="provider-search" className="sr-only">
@@ -158,6 +149,14 @@ export function ExplorePage() {
           </form>
         </div>
       </section>
+      <VisualSearch
+        project={params.get('project')}
+        filters={{
+          ...(genre ? { genre } : {}),
+          ...(city ? { city } : {}),
+          ...(price ? { priceMax: Number(price) } : {}),
+        }}
+      />
       <section
         id="photographers"
         className="photographer-collection"
@@ -231,7 +230,7 @@ export function ExplorePage() {
           </span>
         </div>
         <QueryState query={providers} />
-        {!displayed.length && !providers.isLoading ? (
+        {!displayed.length && !providers.isPending && !providers.error ? (
           <p className="empty-state">{t.explore.noResults}</p>
         ) : null}
         <div className="provider-grid">

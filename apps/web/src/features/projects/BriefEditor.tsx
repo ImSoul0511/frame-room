@@ -11,6 +11,7 @@ import {
   NumberField,
   Select,
 } from '../../components/ui';
+import { RequestError } from '../../lib/api';
 import { useStrings } from '../../lib/i18n';
 
 export function BriefEditor({
@@ -18,21 +19,39 @@ export function BriefEditor({
   onSave,
   pending = false,
   error,
+  version,
 }: {
   initial: BriefContent;
-  onSave: (value: BriefContent) => void;
+  onSave: (value: BriefContent, version?: number) => unknown;
+  version?: number;
   pending?: boolean;
   error?: Error | null;
 }) {
   const t = useStrings();
   const [value, setValue] = useState(initial);
+  const [baseVersion, setBaseVersion] = useState(version);
   const [invalid, setInvalid] = useState(false);
   return (
     <Form
       onSubmit={() => {
         const result = briefContentSchema.safeParse(value);
         setInvalid(!result.success);
-        if (result.success) onSave(result.data);
+        if (!result.success) return;
+        void Promise.resolve()
+          .then(() => onSave(result.data, baseVersion))
+          .then((saved) => {
+            if (
+              version !== undefined &&
+              saved &&
+              typeof saved === 'object' &&
+              'version' in saved &&
+              typeof saved.version === 'number'
+            )
+              setBaseVersion(saved.version);
+          })
+          .catch(() => {
+            /* The parent's mutation error is displayed below; retain the draft. */
+          });
       }}
     >
       <Field
@@ -61,6 +80,18 @@ export function BriefEditor({
         />
       ))}
       <Feedback error={error ?? (invalid ? new Error(t.errors.invalid_input) : null)} />
+      {error instanceof RequestError && error.status === 409 ? (
+        <div className="notice">
+          <p>{t.atelier.conflict}</p>
+          <details>
+            <summary>{t.atelier.reload}</summary>
+            <p>{initial.concept}</p>
+          </details>
+          <Action secondary onClick={() => setBaseVersion(version)}>
+            {t.atelier.reload}
+          </Action>
+        </div>
+      ) : null}
       <Action type="submit" pending={pending}>
         {t.project.applyPlan}
       </Action>

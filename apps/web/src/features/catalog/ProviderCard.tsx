@@ -1,3 +1,4 @@
+import { SaveProviderButton } from './SaveProviderButton';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { Provider } from '@frameroom/shared';
@@ -21,6 +22,9 @@ export function ProviderCard({
   const path = `/providers/${provider.type}/${provider.id}${project ? `?project=${encodeURIComponent(project)}` : ''}`;
   return (
     <article className={`provider-card card-tone-${index % 3}`}>
+      {!provider.isDemo ? (
+        <SaveProviderButton type={provider.type} id={provider.id} name={provider.displayName} />
+      ) : null}
       <Link
         to={path}
         className="provider-photo"

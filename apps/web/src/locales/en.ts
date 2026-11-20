@@ -1,5 +1,34 @@
+import { toolsEnglish } from './tools';
+import { atelierEnglish } from './atelier';
 import { workspaceEnglish, demoErrorsEnglish } from './workspace';
 export const english = {
+  tools: toolsEnglish,
+  atelier: atelierEnglish,
+  proofing: {
+    contactSheet: 'THE CONTACT SHEET',
+    hint: 'Find the frames that feel like you.',
+    photos: 'photos',
+    selected: 'selected',
+    allPhotos: 'All photos',
+    selectedOnly: 'Selected only',
+    noPhotos: 'Your contact sheet is waiting.',
+    uploadHint: 'Previews will appear here when your photographer adds them.',
+    noSelected: 'No photos selected yet. Browse all photos to choose your favorites.',
+    open: 'Open photo',
+    previous: 'Previous photo',
+    next: 'Next photo',
+    zoomIn: 'Zoom in',
+    zoomOut: 'Fit to screen',
+    compare: 'Compare with',
+    noCompare: 'Single photo',
+    select: 'Select this photo',
+    deselect: 'Deselect this photo',
+    shortcuts: '← → Navigate · S Select · Esc Close',
+    readOnlyShortcuts: '← → Navigate · Esc Close',
+    readOnly: 'View only',
+    unsaved: 'Submit your selection to share it with your photographer.',
+  },
+
   demo: workspaceEnglish,
   demoErrors: demoErrorsEnglish,
   profileUi: {

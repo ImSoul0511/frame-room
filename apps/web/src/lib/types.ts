@@ -1,4 +1,4 @@
-import type { Booking, BriefContent, CreativeProject, Provider, Service } from '@frameroom/shared';
+import type { BriefContent, Provider, Service } from '@frameroom/shared';
 export interface Studio {
   id: string;
   name: string;
@@ -23,6 +23,7 @@ export interface Image {
   id: string;
   storagePath: string;
   url: string;
+  thumbnailUrl?: string;
   caption: string;
   crewCredits?: string;
   tags?: { id: string; name: string }[];
@@ -87,34 +88,7 @@ export interface Invitation {
   status: string;
   role: string;
 }
-export interface Workspace {
-  booking: Booking;
-  project: CreativeProject;
-  room: { id: string; status: string } | null;
-  isProvider: boolean;
-  canManage: boolean;
-  isClient: boolean;
-  briefs: Brief[];
-  cancellation: { id: string; isClientProposal: boolean; reason: string } | null;
-  messages: Message[];
-  decisions: Decision[];
-  milestones: Milestone[];
-  gallery: { id: string; status: string; round: number; revisionRequestedAt: string | null } | null;
-  proofing: { quota: number; revisions: number };
-  photoFeedback: PhotoFeedback[];
-  images: Image[];
-  selections: { imageId: string }[];
-  deliveries: { id: string; fileName: string; url: string }[];
-  resources: { resourceId: string; name: string }[];
-  review: {
-    rating: number;
-    comment: string;
-    isHidden?: boolean;
-    moderationReason?: string;
-    reassessmentRequestedAt?: string;
-    deletedAt?: string;
-  } | null;
-}
+export type Workspace = import('@frameroom/shared').BookingWorkspace;
 export interface ProviderDetail {
   provider: Provider;
   services: Service[];

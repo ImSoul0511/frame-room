@@ -7,6 +7,14 @@ are in `packages/shared/src/business.ts` and `locale.ts`.
 
 ## Common behavior
 
+Atelier adds optional expected `version` on project PATCH requests (409
+`stale_version` on mismatch), signed `thumbnailUrl` on gallery workspace images,
+and `aiConfigured`/`aiSearchEnabled` booleans on `/v1/config`. The search flag is
+reported enabled only when the server flag and Gateway key are both configured.
+Shared runtime config, booking workspace and notification schemas document these
+responses. Existing clients may continue using full-size URLs and unversioned
+project updates. See the [upgrade contract impact](../../plans/tasks/ATELIER-001.md).
+
 - Business responses use `{ data }`; search additionally returns `parsedQuery`,
   `effectiveFilters`, and `meta`. Health retains its original unenveloped response.
 - Errors retain `{ error: { code, message, details: [{ reason }] } }`. Clients localize
@@ -96,6 +104,45 @@ Apply the completion migration before starting the worker or using the live
 completion screens. Account bookings are under `/bookings`. Existing
 `/bookings/live` links remain available. The administrator queue is at
 `/admin/booking-completions`.
+
+## Planning and review tools
+
+All new endpoints require a verified, onboarded account and use the existing
+`{data}` success and standard error envelopes. Apply
+`20261120000700_saved_providers.sql` before enabling saved-provider actions.
+
+| Method/path                           | Request                                            | Response/behavior                                                                                 |
+| ------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| GET `/v1/me/saved-providers`          | None                                               | Own visible targets: `{id,providerType,providerId,createdAt}[]`                                   |
+| POST `/v1/me/saved-providers`         | `{providerType,providerId}`                        | 200 saved record; per-user target upsert; hidden/missing target 404                               |
+| DELETE `/v1/me/saved-providers/:id`   | Saved-record UUID                                  | 204; owner-scoped, safe to repeat                                                                 |
+| GET `/v1/me/calendar?from=...&to=...` | UTC ISO timestamps, positive range at most 62 days | `{bookings,blocks}`; existing booking response and `{id,label,startsAt,endsAt,resourceId}` blocks |
+| PATCH `/v1/me/notifications/read-all` | `{}`                                               | `{count}`; unread rows for authenticated recipient only                                           |
+| POST `/v1/shoot-rooms/:id/checklist`  | `{}`                                               | 200 `{count}`; current agreed checklist becomes missing milestones in one transaction             |
+
+Calendar overlap uses `start < to && end > from`. Resource blocks require current
+studio management; photographer blocks require ownership. Saving never grants
+access to a provider's private bookings or media. Browser database clients have
+owner-only SELECT on saved records; writes are API-mediated. Supplied owner IDs
+cannot override the authenticated actor.
+
+`GET /v1/me/notifications` keeps its existing array response and accepts optional
+`state=all|unread|read` (default `all`). Filtering happens before the latest-100
+limit. `GET /v1/me/notifications/counts` returns `{unread,total}` for the entire
+authenticated recipient's mailbox. Bulk read covers every unread row, including
+older records outside the displayed window.
+
+Checklist import reuses existing participant/open-room checks and booking/room
+locks. Duplicate trimmed titles and existing milestones are skipped. All items
+must satisfy the existing 120-character milestone limit; failed validation rolls
+back the whole import. Missing agreed brief returns 422; unauthorized/closed-room
+access follows existing room behavior (404 or 422).
+
+Calendar ICS, printable brief and CSV report are client-side exports of authorized
+responses. ICS uses stable UUID identifiers, UTC times and UTF-8 byte folding. The
+print view uses the agreed brief or explicitly labels the latest draft. CSV exports
+selected frames and visible current-round feedback, escapes formula prefixes and
+omits signed URLs/storage paths. These are downloads, not public share links.
 
 ## Selected defaults and compatibility
 
