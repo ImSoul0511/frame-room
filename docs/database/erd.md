@@ -32,6 +32,8 @@ erDiagram
     boolean is_hidden
     timestamptz created_at
     timestamptz updated_at
+    text contact_email
+    text__ professional_roles
   }
   studios {
     uuid id
@@ -46,6 +48,7 @@ erDiagram
     timestamptz deleted_at
     timestamptz created_at
     timestamptz updated_at
+    text contact_email
   }
   studio_members {
     uuid studio_id
@@ -80,6 +83,8 @@ erDiagram
     timestamptz deleted_at
     timestamptz created_at
     timestamptz updated_at
+    integer selection_quota
+    integer revision_limit
   }
   service_add_ons {
     uuid id
@@ -132,6 +137,7 @@ erDiagram
     text license_note
     timestamptz created_at
     timestamptz updated_at
+    text crew_credits
   }
   tags {
     uuid id
@@ -155,6 +161,7 @@ erDiagram
     integer version
     timestamptz created_at
     timestamptz updated_at
+    uuid__ selected_artifact_ids
   }
   bookings {
     uuid id
@@ -176,7 +183,11 @@ erDiagram
     integer agreed_brief_version
     timestamptz created_at
     timestamptz updated_at
-    and check((owner_type='photographer'
+    timestamptz completion_due_at
+    timestamptz completion_hold_at
+    integer completion_remaining_ms
+    uuid conversation_id
+    uuid request_key
   }
   schedule_entries {
     uuid id
@@ -186,13 +197,19 @@ erDiagram
     tstzrange during
     text label
     timestamptz created_at
-    isempty_during_ check(not
   }
   booking_resources {
     uuid booking_id
     uuid resource_id
     text name
     public_resource_type type
+  }
+  booking_add_ons {
+    uuid booking_id
+    uuid add_on_id
+    text name
+    integer quantity
+    integer unit_price
   }
   brief_versions {
     uuid id
@@ -203,6 +220,7 @@ erDiagram
     boolean client_approved
     boolean provider_approved
     timestamptz created_at
+    text status
   }
   shoot_rooms {
     uuid id
@@ -218,6 +236,15 @@ erDiagram
     text storage_path
     text type
     boolean is_hidden
+    timestamptz created_at
+    uuid conversation_id
+    uuid submission_id
+  }
+  conversations {
+    uuid id
+    uuid client_id
+    uuid photographer_id
+    uuid studio_id
     timestamptz created_at
   }
   room_decisions {
@@ -239,6 +266,7 @@ erDiagram
     uuid created_by
     timestamptz created_at
     timestamptz updated_at
+    uuid updated_by
   }
   galleries {
     uuid id
@@ -247,6 +275,7 @@ erDiagram
     integer round
     timestamptz created_at
     timestamptz updated_at
+    timestamptz revision_requested_at
   }
   gallery_images {
     uuid id
@@ -272,6 +301,7 @@ erDiagram
     text file_name
     text mime_type
     timestamptz created_at
+    integer selection_round
   }
   reviews {
     uuid id
@@ -285,6 +315,8 @@ erDiagram
     timestamptz deleted_at
     timestamptz created_at
     timestamptz updated_at
+    text moderation_reason
+    timestamptz reassessment_requested_at
   }
   content_reports {
     uuid id
@@ -296,6 +328,7 @@ erDiagram
     text status
     timestamptz created_at
     timestamptz updated_at
+    text outcome
   }
   ai_messages {
     uuid id
@@ -368,12 +401,44 @@ erDiagram
     timestamptz applied_at
     timestamptz created_at
   }
-  auth_users ||--o{ profiles : "id"
-  profiles ||--o{ user_roles : "user_id"
-  profiles ||--o{ photographers : "user_id"
-  photographers ||--o{ studios : "created_by"
+  notifications {
+    uuid id
+    uuid recipient_id
+    uuid booking_id
+    uuid studio_id
+    text event
+    timestamptz read_at
+    timestamptz created_at
+  }
+
+  booking_cancellations {
+    uuid id
+    uuid booking_id
+    uuid proposed_by
+    boolean is_client_proposal
+    text reason
+    text status
+    uuid decided_by
+    timestamptz decided_at
+    timestamptz created_at
+  }
+
+  photo_feedback {
+    uuid id
+    uuid image_id
+    integer round
+    uuid author_id
+    text note
+    double x
+    double y
+    timestamptz created_at
+  }
+  auth_users ||--o| profiles : "id"
+  profiles ||--o| user_roles : "user_id"
+  profiles ||--o| photographers : "user_id"
+  profiles ||--o{ studios : "created_by"
   studios ||--o{ studio_members : "studio_id"
-  photographers ||--o{ studio_members : "user_id"
+  profiles ||--o{ studio_members : "user_id"
   studios ||--o{ studio_invitations : "studio_id"
   photographers ||--o{ studio_invitations : "photographer_id"
   profiles ||--o{ studio_invitations : "invited_by"
@@ -388,7 +453,7 @@ erDiagram
   tags ||--o{ image_tags : "tag_id"
   profiles ||--o{ creative_projects : "owner_id"
   profiles ||--o{ bookings : "client_id"
-  creative_projects ||--o{ bookings : "project_id"
+  creative_projects ||--o| bookings : "project_id"
   services ||--o{ bookings : "service_id"
   photographers ||--o{ bookings : "photographer_id"
   studios ||--o{ bookings : "studio_id"
@@ -398,22 +463,24 @@ erDiagram
   studio_resources ||--o{ schedule_entries : "resource_id"
   bookings ||--o{ booking_resources : "booking_id"
   studio_resources ||--o{ booking_resources : "resource_id"
+  bookings ||--o{ booking_add_ons : "booking_id"
+  service_add_ons ||--o{ booking_add_ons : "add_on_id"
   bookings ||--o{ brief_versions : "booking_id"
   profiles ||--o{ brief_versions : "created_by"
-  bookings ||--o{ shoot_rooms : "booking_id"
-  shoot_rooms ||--o{ room_messages : "room_id"
+  bookings ||--o| shoot_rooms : "booking_id"
+  shoot_rooms |o--o{ room_messages : "room_id
   profiles ||--o{ room_messages : "sender_id"
   shoot_rooms ||--o{ room_decisions : "room_id"
   profiles ||--o{ room_decisions : "proposed_by"
   shoot_rooms ||--o{ room_milestones : "room_id"
   profiles ||--o{ room_milestones : "created_by"
-  bookings ||--o{ galleries : "booking_id"
+  bookings ||--o| galleries : "booking_id"
   galleries ||--o{ gallery_images : "gallery_id"
   galleries ||--o{ gallery_selections : "gallery_id"
   gallery_images ||--o{ gallery_selections : "image_id"
   profiles ||--o{ gallery_selections : "selected_by"
   bookings ||--o{ deliveries : "booking_id"
-  bookings ||--o{ reviews : "booking_id"
+  bookings ||--o| reviews : "booking_id"
   profiles ||--o{ reviews : "author_id"
   photographers ||--o{ reviews : "photographer_id"
   studios ||--o{ reviews : "studio_id"
@@ -423,14 +490,28 @@ erDiagram
   creative_projects ||--o{ ai_jobs : "project_id"
   profiles ||--o{ ai_jobs : "user_id"
   creative_projects ||--o{ ai_artifacts : "project_id"
-  ai_jobs ||--o{ ai_artifacts : "job_id"
+  ai_jobs ||--o| ai_artifacts : "job_id"
   gallery_images ||--o{ ai_artifacts : "original_image_id"
-  portfolio_images ||--o{ image_embeddings : "image_id"
+  portfolio_images ||--o| image_embeddings : "image_id"
   profiles ||--o{ ai_usage : "user_id"
   ai_jobs ||--o{ ai_usage : "job_id"
   creative_projects ||--o{ ai_actions : "project_id"
   profiles ||--o{ ai_actions : "proposed_for"
   profiles ||--o{ ai_actions : "applied_by"
+  profiles ||--o{ conversations : "client_id"
+  photographers |o--o{ conversations : "photographer_id"
+  studios |o--o{ conversations : "studio_id"
+  conversations |o--o{ bookings : "conversation_id"
+  conversations |o--o{ room_messages : "conversation_id"
+  profiles ||--o{ notifications : "recipient_id"
+  bookings |o--o{ notifications : "booking_id"
+  studios |o--o{ notifications : "studio_id"
+  bookings ||--o{ booking_cancellations : "booking_id"
+  profiles ||--o{ booking_cancellations : "proposed_by"
+  profiles |o--o{ booking_cancellations : "decided_by"
+  gallery_images ||--o{ photo_feedback : "image_id"
+  profiles ||--o{ photo_feedback : "author_id"
+  profiles |o--o{ room_milestones : "updated_by"
 ```
 
 See [relationships.md](relationships.md) for exact referenced columns and table specifications for nullability.

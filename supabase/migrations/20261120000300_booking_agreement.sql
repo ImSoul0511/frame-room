@@ -60,8 +60,7 @@ create trigger notify_booking_status after insert or update of status on public.
   for each row execute function private.notify_booking_status();
 
 alter table public.room_milestones
-  add column updated_by uuid references public.profiles(id),
-  add column updated_at timestamptz;
+  add column updated_by uuid references public.profiles(id);
 
 create or replace function private.provider_side(bid uuid) returns boolean
 language sql stable security definer set search_path = '' as $$

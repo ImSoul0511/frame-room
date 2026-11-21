@@ -46,12 +46,12 @@ create table public.photographers (
 create table public.studios (
  id uuid primary key default public.uuid_generate_v7(), name text not null check(length(name) between 1 and 80),
  description text not null default '', city text not null default '', district text not null default '', address text not null default '',
- genres public.genre[] not null, created_by uuid not null references public.photographers(user_id),
+ genres public.genre[] not null, created_by uuid not null references public.profiles(id),
  is_hidden boolean not null default false, deleted_at timestamptz,
  created_at timestamptz not null default now(), updated_at timestamptz not null default now()
 );
 create table public.studio_members (
- studio_id uuid not null references public.studios(id), user_id uuid not null references public.photographers(user_id),
+ studio_id uuid not null references public.studios(id), user_id uuid not null references public.profiles(id),
  role public.studio_member_role not null, joined_at timestamptz not null default now(), primary key(studio_id,user_id)
 );
 create table public.studio_invitations (
@@ -318,3 +318,4 @@ create index idx_ai_messages_project on public.ai_messages(project_id,created_at
 revoke all on all functions in schema private from public;
 grant execute on function private.is_admin(),private.is_manager(uuid),private.owns_provider(uuid,uuid),private.provider_visible(uuid,uuid),private.provider_side(uuid),private.can_read_booking(uuid),private.can_read_project(uuid),private.can_read_room(uuid),private.can_read_gallery(uuid) to authenticated,anon,service_role;
 grant usage on schema private to anon;
+
