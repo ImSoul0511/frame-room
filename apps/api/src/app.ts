@@ -49,7 +49,11 @@ export function buildApp(env: ApiEnv, options: BuildAppOptions = {}) {
     limits: { fileSize: defaultUploadInputLimit, files: 1, fields: 0, parts: 1 },
   });
   void app.register(cors, {
-    origin: (origin, callback) => callback(null, origin === env.WEB_ORIGIN),
+    origin: (origin, callback) => {
+      const allowedOrigins = [env.WEB_ORIGIN, 'http://tauri.localhost', 'tauri://localhost'];
+      const allow = !origin || allowedOrigins.includes(origin);
+      callback(null, allow);
+    },
   });
 
   const db = options.db ?? new PgDatabase(env.DATABASE_URL);
