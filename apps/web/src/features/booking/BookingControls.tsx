@@ -198,7 +198,7 @@ function AssignmentForm({ workspace: { booking: b } }: { workspace: Workspace })
     });
     setOpen(false);
   });
-  const label = reassign ? t.demo.reassign : t.booking.assign;
+  const label = reassign ? t.workspaceUi.reassign : t.booking.assign;
   return (
     <>
       <Action secondary onClick={() => setOpen(true)}>
@@ -250,14 +250,14 @@ function CancellationForm({ workspace: w }: { workspace: Workspace }) {
         <>
           <p>{w.cancellation.reason}</p>
           {w.cancellation.isClientProposal === w.isClient ? (
-            <p>{t.demo.counterparty}</p>
+            <p>{t.workspaceUi.counterparty}</p>
           ) : (
             <div className="row wrap">
               <Action pending={respond.isPending} onClick={() => respond.mutate(true)}>
-                {t.demo['cancel-agree']}
+                {t.workspaceUi['cancel-agree']}
               </Action>
               <Action secondary pending={respond.isPending} onClick={() => respond.mutate(false)}>
-                {t.demo['cancel-decline']}
+                {t.workspaceUi['cancel-decline']}
               </Action>
             </div>
           )}
@@ -266,7 +266,7 @@ function CancellationForm({ workspace: w }: { workspace: Workspace }) {
         <Form onSubmit={() => submit.mutate()}>
           <Area label={t.booking.reason} value={reason} onChange={setReason} />
           <Action secondary type="submit" pending={submit.isPending} disabled={!reason.trim()}>
-            {t.demo.cancel}
+            {t.workspaceUi.cancel}
           </Action>
         </Form>
       )}

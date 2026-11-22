@@ -25,7 +25,7 @@ export function SettingsPage() {
   const { profile, session } = useAuth();
   return (
     <>
-      <PageHeading title={t.profileUi.account} />
+      <PageHeading title={t.workspaceUi.settings} />
       <div className="two-col">
         <section className="panel">
           <h2>{t.onboarding}</h2>
@@ -135,7 +135,13 @@ function ScheduleBlocks() {
     </section>
   );
 }
-export function ReportButton({ targetType, targetId }: { targetType: string; targetId: string }) {
+export function ReportButton({
+  targetType,
+  targetId,
+}: {
+  targetType: 'portfolio' | 'portfolio_image' | 'review';
+  targetId: string;
+}) {
   const t = useStrings();
   const { profile, onboardingRequired } = useAuth();
   const [open, setOpen] = useState(false);

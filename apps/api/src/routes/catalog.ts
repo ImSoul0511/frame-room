@@ -337,14 +337,16 @@ export const catalogModule: ApiModule = {
     defineRoute(app, deps, {
       method: 'GET',
       url: '/v1/portfolios',
-      summary: 'Browse published portfolios with optional genre and tag filters.',
+      summary: 'Browse published portfolios with genre, tag, keyword and sort filters.',
       access: 'public',
       query: portfolioListQuerySchema,
       response: z.array(publicPortfolioSchema),
       handler: ({ query, transaction }) =>
-        transaction((tx) =>
-          catalog.listPublicPortfolios(tx, query, SUPABASE_URL, API_PUBLIC_ORIGIN),
-        ),
+        cloud
+          ? cloud.portfolios(query)
+          : transaction((tx) =>
+              catalog.listPublicPortfolios(tx, query, SUPABASE_URL, API_PUBLIC_ORIGIN),
+            ),
     });
 
     defineRoute(app, deps, {

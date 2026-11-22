@@ -20,9 +20,6 @@ export function AccountPage() {
           <h1>{profile?.displayName}</h1>
           <p className="muted">@{profile?.userName}</p>
         </div>
-        <Link className="button-link dark" to="/settings">
-          {t.profileUi.editProfile}
-        </Link>
       </header>
       <div className="account-profile-columns">
         <div>
@@ -61,7 +58,7 @@ export function AccountPage() {
             <p className="muted">{t.profileUi.profileLinksDescription}</p>
             <div className="account-quick-links">
               <Link to="/portfolio">{t.portfolio.title}</Link>
-              <Link to="/bookings">{t.demo.bookings}</Link>
+              <Link to="/bookings">{t.workspaceUi.bookings}</Link>
               <Link to="/studio">{t.nav.studio}</Link>
             </div>
           </section>

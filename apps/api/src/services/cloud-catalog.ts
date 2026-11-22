@@ -10,8 +10,14 @@ import type {
   Provider,
   ProviderListQuery,
   ProviderLookup,
+  PortfolioListQuery,
 } from '../schemas/catalog.js';
-import { providerDetailSchema, portfolioDetailSchema, tagSchema } from '../schemas/catalog.js';
+import {
+  providerDetailSchema,
+  portfolioDetailSchema,
+  publicPortfolioSchema,
+  tagSchema,
+} from '../schemas/catalog.js';
 import { buildPublicPortfolioImageUrl, singleDisplayNameMatch } from './catalog.js';
 
 function check(error: PostgrestError | null, conflictReason = 'already_exists') {
@@ -108,6 +114,71 @@ export function createCloudCatalog(env: ApiEnv) {
   return {
     list,
     profile,
+    async portfolios(query: PortfolioListQuery) {
+      const matching = query.tag
+        ? ',matches:portfolio_images!inner(is_hidden,image_tags!inner(tags!inner(slug)))'
+        : '';
+      let request = publicClient
+        .from('portfolios')
+        .select(
+          `*,portfolio_images(storage_path,sort_order,is_hidden,image_tags(tags(*)))${matching}`,
+        )
+        .eq('status', 'published')
+        .is('deleted_at', null);
+      if (query.genre) request = request.eq('genre', query.genre);
+      if (query.tag)
+        request = request
+          .eq('matches.is_hidden', false)
+          .eq('matches.image_tags.tags.slug', query.tag);
+      if (query.q) {
+        const pattern = `%${query.q.replace(/[\\%_]/g, '\\$&')}%`
+          .replace(/\\/g, '\\\\')
+          .replace(/"/g, '\\"');
+        request = request.or(`title.ilike."${pattern}",description.ilike."${pattern}"`);
+      }
+      if (query.sort === 'name') request = request.order('title');
+      else
+        request = request
+          .order('published_at', { ascending: query.sort === 'oldest', nullsFirst: false })
+          .order('created_at', { ascending: query.sort === 'oldest' });
+      const start = (query.page - 1) * query.pageSize;
+      const { data, error } = await request.order('id').range(start, start + query.pageSize - 1);
+      check(error);
+      const rowSchema = publicPortfolioSchema.extend({
+        portfolioImages: z.array(
+          z.object({
+            storagePath: z.string(),
+            sortOrder: z.number(),
+            isHidden: z.boolean(),
+            imageTags: z.array(
+              z.object({ tags: tagSchema.extend({ isActive: z.boolean().optional() }).nullable() }),
+            ),
+          }),
+        ),
+      });
+      return rowSchema
+        .array()
+        .parse(normalizeRow(data ?? []))
+        .map(({ portfolioImages, ...portfolio }) => {
+          const images = portfolioImages
+            .filter((image) => !image.isHidden)
+            .sort((a, b) => a.sortOrder - b.sortOrder);
+          const tags = images.flatMap((image) =>
+            image.imageTags.flatMap((link) =>
+              link.tags && link.tags.isActive !== false ? [link.tags] : [],
+            ),
+          );
+          return {
+            ...portfolio,
+            coverUrl: buildPublicPortfolioImageUrl(
+              env.SUPABASE_URL,
+              images[0]?.storagePath,
+              env.API_PUBLIC_ORIGIN,
+            ),
+            tags: [...new Map(tags.map((tag) => [tag.id, tag])).values()],
+          };
+        });
+    },
     async tags() {
       const { data, error } = await publicClient.from('tags').select('*').order('name');
       check(error);

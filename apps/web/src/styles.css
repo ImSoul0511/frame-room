@@ -55,25 +55,25 @@ p {
   margin: 0;
 }
 h1 {
-  font-size: 32px;
+  font-size: 2rem;
   line-height: 1.2;
   font-weight: 550;
   letter-spacing: -1.2px;
 }
 h2 {
-  font-size: 21px;
+  font-size: 1.3125rem;
   font-weight: 550;
   letter-spacing: -0.5px;
 }
 h3 {
-  font-size: 17px;
+  font-size: 1.0625rem;
   font-weight: 550;
 }
 p {
   line-height: 1.7;
 }
 small {
-  font-size: 12px;
+  font-size: 0.8125rem;
 }
 ul {
   padding-left: 20px;
@@ -86,12 +86,12 @@ fieldset {
 }
 legend {
   padding: 0 8px;
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 pre {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  font-size: 12px;
+  font-size: 0.8125rem;
   background: var(--fr-surface);
   padding: 12px;
   border-radius: 8px;
@@ -101,10 +101,10 @@ details summary {
 }
 .muted {
   color: var(--fr-muted);
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 .eyebrow {
-  font-size: 10px;
+  font-size: 0.8125rem;
   font-weight: 600;
   letter-spacing: 1.5px;
   text-transform: uppercase;
@@ -190,7 +190,7 @@ details summary {
   padding: 11px 18px;
   border: 1px solid var(--fr-line);
   border-radius: 7px;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 500;
   white-space: nowrap;
 }
@@ -206,7 +206,7 @@ details summary {
   border: 0;
   padding: 4px 0;
   background: none;
-  font-size: 12px;
+  font-size: 0.8125rem;
   color: #626853;
   text-decoration: underline;
   text-underline-offset: 4px;
@@ -217,7 +217,7 @@ details summary {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  font-size: 22px;
+  font-size: 1.375rem;
 }
 .native-field {
   display: flex;
@@ -226,7 +226,7 @@ details summary {
   min-width: 0;
 }
 .native-field label {
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 500;
 }
 .native-field input,
@@ -246,14 +246,14 @@ details summary {
   gap: 12px;
   position: relative;
   max-width: 100%;
-  font-size: 12px;
+  font-size: 0.8125rem;
 }
 .file-picker label {
   font-weight: 500;
 }
 .file-picker input {
   max-width: 190px;
-  font-size: 11px;
+  font-size: 0.8125rem;
 }
 .file-picker input::file-selector-button {
   border: 1px solid var(--fr-line);
@@ -268,7 +268,7 @@ details summary {
   align-items: center;
   gap: 10px;
   margin: 12px 0;
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 .checkbox-row input {
   accent-color: #576b35;
@@ -282,7 +282,7 @@ details summary {
 .notice {
   padding: 15px 18px;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: 0.8125rem;
   margin: 16px 0;
   display: flex;
   align-items: center;
@@ -303,7 +303,7 @@ details summary {
   gap: 10px;
   min-height: 100px;
   color: var(--fr-muted);
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 .loading-dot {
   width: 7px;
@@ -316,10 +316,10 @@ details summary {
   padding: 60px 24px;
   text-align: center;
   color: var(--fr-muted);
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 .empty-mark {
-  font-size: 40px;
+  font-size: 2.5rem;
   color: #a4ad93;
 }
 .status {
@@ -327,7 +327,7 @@ details summary {
   border-radius: 5px;
   background: #efefe9;
   display: inline-block;
-  font-size: 11px;
+  font-size: 0.8125rem;
   line-height: 1.4;
   white-space: nowrap;
 }
@@ -356,7 +356,7 @@ details summary {
 }
 .provenance {
   display: inline-block;
-  font-size: 10px;
+  font-size: 0.8125rem;
   background: #e9eedb;
   color: #4c5b31;
   padding: 5px 8px;
@@ -374,7 +374,7 @@ details summary {
   border-bottom: 2px solid transparent;
   background: none;
   padding: 12px 0;
-  font-size: 13px;
+  font-size: 0.8125rem;
   white-space: nowrap;
   color: var(--fr-muted);
 }
@@ -390,7 +390,7 @@ details summary {
   gap: 16px;
   border-bottom: 1px solid var(--fr-line);
   padding: 18px 0;
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 .list-row h3 {
   margin-bottom: 5px;
@@ -446,24 +446,11 @@ details summary {
   display: flex;
   min-height: 100vh;
 }
-.sidebar {
-  width: 226px;
-  flex-shrink: 0;
-  background: #f6f7f2;
-  border-right: 1px solid var(--fr-line);
-  padding: 28px 19px;
-  display: flex;
-  flex-direction: column;
-  position: fixed;
-  height: 100vh;
-  overflow: auto;
-  z-index: 20;
-}
 .brand {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 23px;
+  font-size: 1.4375rem;
   letter-spacing: -1.2px;
   font-weight: 650;
 }
@@ -476,7 +463,7 @@ details summary {
   width: 32px;
   height: 32px;
   border-radius: 7px;
-  font-size: 16px;
+  font-size: 1rem;
   letter-spacing: -5px;
   padding-right: 5px;
 }
@@ -494,12 +481,12 @@ details summary {
   padding: 12px 9px;
   border: 1px solid var(--fr-line);
   border-radius: 7px;
-  font-size: 11px;
+  font-size: 0.8125rem;
   background: #fafbf7;
 }
 .workspace-switch small {
   display: block;
-  font-size: 7px;
+  font-size: 0.8125rem;
   letter-spacing: 1px;
   color: var(--fr-muted);
   margin-top: 5px;
@@ -511,26 +498,21 @@ details summary {
   height: 30px;
   background: #e5e9dc;
   border-radius: 5px;
-  font-size: 15px;
+  font-size: 0.9375rem;
 }
 .nav-caption {
-  font-size: 8px;
+  font-size: 0.8125rem;
   letter-spacing: 1.2px;
   color: #919587;
   padding: 0 10px;
   margin-bottom: 12px;
-}
-.sidebar nav {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
 }
 .nav-item {
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 12px 11px;
-  font-size: 12px;
+  font-size: 0.8125rem;
   color: #6c7163;
   border-radius: 6px;
   transition: background 0.15s;
@@ -544,7 +526,7 @@ details summary {
   font-weight: 550;
 }
 .nav-ai {
-  font-size: 9px;
+  font-size: 0.8125rem;
   background: #d7e3bc;
   border-radius: 4px;
   padding: 3px 5px;
@@ -555,27 +537,22 @@ details summary {
   padding: 24px 12px 12px;
 }
 .sidebar-bottom .sparkle {
-  font-size: 28px;
+  font-size: 1.75rem;
 }
 .sidebar-bottom strong {
   display: block;
-  font-size: 12px;
+  font-size: 0.8125rem;
   line-height: 1.5;
   margin: 10px 0;
 }
 .sidebar-bottom p {
-  font-size: 11px;
+  font-size: 0.8125rem;
   color: var(--fr-muted);
   margin-bottom: 16px;
 }
 .sidebar-bottom a {
-  font-size: 10px;
+  font-size: 0.8125rem;
   font-weight: 550;
-}
-.sidebar-footer {
-  font-size: 9px;
-  color: #a1a692;
-  padding: 18px 12px;
 }
 .app-body {
   margin-left: 226px;
@@ -592,14 +569,14 @@ details summary {
   gap: 15px;
 }
 .topbar-title {
-  font-size: 10px;
+  font-size: 0.8125rem;
   display: flex;
   gap: 12px;
   align-items: center;
   white-space: nowrap;
 }
 .topbar-title > span:last-child {
-  font-size: 8px;
+  font-size: 0.8125rem;
   letter-spacing: 1px;
   color: var(--fr-muted);
 }
@@ -611,16 +588,6 @@ details summary {
   align-items: center;
   gap: 14px;
 }
-.live-indicator {
-  font-size: 9px;
-  color: #78815f;
-}
-.account-name {
-  font-size: 11px;
-  max-width: 120px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 .avatar {
   display: grid;
   place-items: center;
@@ -628,19 +595,19 @@ details summary {
   height: 29px;
   background: #e7ebdc;
   border-radius: 50%;
-  font-size: 11px;
+  font-size: 0.8125rem;
 }
 .language-switcher {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 10px;
+  font-size: 0.8125rem;
   color: var(--fr-muted);
 }
 .language-switcher select {
   width: auto;
   padding: 5px 8px;
-  font-size: 11px;
+  font-size: 0.8125rem;
   min-height: 30px;
 }
 .main-content {
@@ -653,7 +620,7 @@ details summary {
   border-top: 1px solid var(--fr-line);
   margin: 0 40px;
   padding: 20px 0;
-  font-size: 9px;
+  font-size: 0.8125rem;
   color: #a0a392;
   display: flex;
   justify-content: space-between;
@@ -664,7 +631,7 @@ details summary {
   text-align: center;
 }
 .hero-eyebrow {
-  font-size: 9px;
+  font-size: 0.8125rem;
   letter-spacing: 1.6px;
   color: #899575;
   display: flex;
@@ -695,46 +662,10 @@ details summary {
   color: #788368;
 }
 .explore-hero > p {
-  font-size: 12px;
+  font-size: 0.8125rem;
   color: var(--fr-muted);
   margin: 20px auto 26px;
   max-width: 520px;
-}
-.search-composer {
-  background: white;
-  border: 1px solid #dfe3d4;
-  border-radius: 12px;
-  max-width: 690px;
-  margin: auto;
-  padding: 17px 20px;
-  box-shadow: 0 4px 18px #31371e04;
-  text-align: left;
-}
-.search-composer textarea {
-  display: block;
-  width: 100%;
-  border: 0;
-  resize: vertical;
-  min-height: 58px;
-  padding: 4px 0;
-  font-size: 12px;
-  line-height: 1.6;
-  background: none;
-  outline: none;
-}
-.search-composer textarea::placeholder {
-  color: #a2a598;
-}
-.search-composer .row {
-  padding-top: 10px;
-  border-top: 1px solid #f0f1eb;
-}
-.search-composer .file-picker input {
-  width: 93px;
-}
-.search-composer .file-picker label {
-  font-size: 10px;
-  color: #7a806d;
 }
 .genre-chips {
   display: flex;
@@ -751,7 +682,7 @@ details summary {
   border-radius: 6px;
   padding: 7px 12px;
   background: transparent;
-  font-size: 10px;
+  font-size: 0.8125rem;
   color: #757c68;
 }
 .chip:hover {
@@ -762,144 +693,13 @@ details summary {
   border-color: #d3ddc0;
   color: #4b5c30;
 }
-.filter-bar {
-  display: flex;
-  align-items: end;
-  gap: 16px;
-  margin: 20px 0 25px;
-}
-.filter-bar > div {
-  max-width: 200px;
-}
-.filter-bar > .muted {
-  font-size: 10px;
-  max-width: 250px;
-  margin-left: auto;
-  padding: 10px 0;
-}
 .parsed-query {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
   padding: 16px 0;
-  font-size: 12px;
-}
-.provider-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 28px 22px;
-}
-.provider-card {
-  min-width: 0;
-}
-.provider-photo {
-  display: block;
-  position: relative;
-  aspect-ratio: 4/4.4;
-  border-radius: 9px;
-  overflow: hidden;
-  background: #ebece5;
-}
-.provider-photo img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transition: transform 0.5s;
-}
-.provider-photo:hover img {
-  transform: scale(1.04);
-}
-.photo-type {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  background: #ffffffdf;
-  backdrop-filter: blur(6px);
-  padding: 5px 9px;
-  border-radius: 4px;
-  font-size: 9px;
-}
-.provider-photo .provenance {
-  position: absolute;
-  left: 10px;
-  bottom: 10px;
-}
-.photo-arrow {
-  position: absolute;
-  bottom: 12px;
-  right: 12px;
-  display: grid;
-  place-items: center;
-  background: #fff9;
-  border: 1px solid #fff9;
-  border-radius: 50%;
-  width: 29px;
-  height: 29px;
-  font-size: 16px;
-}
-.provider-meta {
-  display: flex;
-  align-items: start;
-  justify-content: space-between;
-  gap: 10px;
-  margin-top: 15px;
-}
-.provider-meta h3 {
-  font-size: 14px;
-  letter-spacing: -0.25px;
-}
-.provider-meta p {
-  font-size: 10px;
-  color: #8a8e81;
-  margin-top: 5px;
-}
-.provider-meta p span {
-  padding: 0 4px;
-}
-.provider-rating {
-  font-size: 10px;
-  color: #818969;
-  margin-top: 3px;
-}
-.provider-bottom {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 10px;
-  color: #94998a;
-  border-top: 1px solid var(--fr-line);
-  padding-top: 11px;
-  margin-top: 12px;
-}
-.provider-bottom strong {
-  color: #515b40;
-  font-weight: 500;
-}
-.provider-bottom details {
-  max-width: 60%;
-}
-.provider-bottom details p {
-  font-size: 10px;
-  overflow-wrap: anywhere;
-}
-.portfolio-placeholder {
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  background: linear-gradient(145deg, #d7ddd1, #aab79e);
-}
-.portfolio-placeholder > span {
-  font-family: Georgia, serif;
-  font-style: italic;
-  font-size: 100px;
-  color: #f8faf3aa;
-}
-.portfolio-placeholder small {
-  font-size: 10px;
-  color: #fff;
+  font-size: 0.8125rem;
 }
 .provider-detail {
   display: grid;
@@ -912,7 +712,7 @@ details summary {
 .long-copy {
   white-space: pre-line;
   color: #73796a;
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 .service-sidebar > h2 {
   margin-bottom: 20px;
@@ -928,11 +728,11 @@ details summary {
   background: #fff;
 }
 .service-card p {
-  font-size: 12px;
+  font-size: 0.8125rem;
   color: var(--fr-muted);
 }
 .service-price {
-  font-size: 23px;
+  font-size: 1.4375rem;
   font-weight: 500;
 }
 .service-card > button {
@@ -947,7 +747,7 @@ details summary {
 .art-placeholder {
   width: 100%;
   aspect-ratio: 4/3;
-  object-fit: cover;
+  object-fit: contain;
   border-radius: 8px;
 }
 .portfolio-tile h3 {
@@ -959,20 +759,20 @@ details summary {
   background: #e5e9dc;
   font-family: Georgia, serif;
   font-style: italic;
-  font-size: 80px;
+  font-size: 5rem;
   color: #a7b196;
 }
 .review {
   border-left: 2px solid #d5dfc3;
   padding: 12px 18px;
   margin: 20px 0;
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 .review > span {
   color: #8a9b68;
 }
 .review cite {
-  font-size: 11px;
+  font-size: 0.8125rem;
   color: var(--fr-muted);
 }
 .project-grid {
@@ -997,12 +797,12 @@ details summary {
 .project-art span {
   font-family: Georgia, serif;
   font-style: italic;
-  font-size: 60px;
+  font-size: 3.75rem;
   line-height: 1;
   color: #71805a66;
 }
 .project-art i {
-  font-size: 26px;
+  font-size: 1.625rem;
   color: #617147;
 }
 .art-1 {
@@ -1015,11 +815,11 @@ details summary {
   padding: 22px;
 }
 .project-card-body h2 {
-  font-size: 18px;
+  font-size: 1.125rem;
   margin: 12px 0;
 }
 .project-card-body p {
-  font-size: 12px;
+  font-size: 0.8125rem;
   color: var(--fr-muted);
   display: -webkit-box;
   -webkit-line-clamp: 3;
@@ -1053,13 +853,15 @@ details summary {
   background: white;
 }
 .moodboard img {
-  width: 100%;
-  aspect-ratio: 1;
-  object-fit: cover;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: min(360px, 48svh);
+  object-fit: contain;
 }
 .moodboard figcaption {
   padding: 13px;
-  font-size: 12px;
+  font-size: 0.8125rem;
   color: var(--fr-muted);
 }
 .moodboard figcaption p {
@@ -1083,10 +885,10 @@ details summary {
 }
 .sparkle {
   color: #7c8b60;
-  font-size: 24px;
+  font-size: 1.5rem;
 }
 .chat-heading p {
-  font-size: 12px;
+  font-size: 0.8125rem;
   color: var(--fr-muted);
   margin-top: 5px;
 }
@@ -1105,7 +907,7 @@ details summary {
   border-radius: 12px;
   background: #f0f3e8;
   white-space: pre-wrap;
-  font-size: 13px;
+  font-size: 0.8125rem;
   align-self: start;
 }
 .chat-message.user {
@@ -1124,7 +926,7 @@ details summary {
 }
 .action-proposal > p {
   margin: 10px 0;
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 .booking-card {
   display: grid;
@@ -1136,21 +938,21 @@ details summary {
 }
 .booking-date strong {
   font-family: Georgia, serif;
-  font-size: 33px;
+  font-size: 2.0625rem;
   font-weight: 400;
 }
 .booking-date small {
   display: block;
   color: var(--fr-muted);
   margin-top: 6px;
-  font-size: 10px;
+  font-size: 0.8125rem;
 }
 .booking-card h2 {
-  font-size: 18px;
+  font-size: 1.125rem;
   margin-bottom: 10px;
 }
 .booking-card > div > span {
-  font-size: 12px;
+  font-size: 0.8125rem;
   color: var(--fr-muted);
 }
 .room-layout {
@@ -1170,19 +972,19 @@ details summary {
   background: #f2f4ec;
   padding: 14px 16px;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: 0.8125rem;
   white-space: pre-wrap;
 }
 .room-message small {
   color: var(--fr-muted);
-  font-size: 9px;
+  font-size: 0.8125rem;
 }
 .room-message.system {
   background: none;
   border-left: 2px solid #dbe3c9;
   border-radius: 0;
   color: var(--fr-muted);
-  font-size: 10px;
+  font-size: 0.8125rem;
 }
 .room-message img {
   max-height: 230px;
@@ -1196,7 +998,7 @@ details summary {
   flex-direction: column;
   align-items: start;
   gap: 12px;
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 .gallery-grid label {
   position: relative;
@@ -1223,7 +1025,7 @@ details summary {
 .job-result {
   border-bottom: 1px solid var(--fr-line);
   padding: 18px 0;
-  font-size: 12px;
+  font-size: 0.8125rem;
 }
 .job-result p {
   margin-top: 10px;
@@ -1247,11 +1049,11 @@ details summary {
   margin-bottom: 20px;
 }
 .studio-card h2 {
-  font-size: 19px;
+  font-size: 1.1875rem;
   margin-bottom: 9px;
 }
 .studio-card p {
-  font-size: 12px;
+  font-size: 0.8125rem;
   color: var(--fr-muted);
   margin-bottom: 16px;
 }
@@ -1268,12 +1070,12 @@ details summary {
   background: #fff;
 }
 .stats-grid span {
-  font-size: 11px;
+  font-size: 0.8125rem;
   color: var(--fr-muted);
 }
 .stats-grid strong {
   display: block;
-  font-size: 28px;
+  font-size: 1.75rem;
   font-weight: 450;
   margin-top: 16px;
 }
@@ -1284,11 +1086,11 @@ details summary {
   gap: 16px;
   padding: 18px 0;
   border-bottom: 1px solid var(--fr-line);
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 .member-row small {
   display: block;
-  font-size: 10px;
+  font-size: 0.8125rem;
   color: var(--fr-muted);
   margin-top: 5px;
 }
@@ -1297,16 +1099,16 @@ details summary {
   padding: 24px 0;
 }
 .portfolio-summary h2 {
-  font-size: 22px;
+  font-size: 1.375rem;
   margin: 12px 0;
 }
 .portfolio-summary p {
-  font-size: 13px;
+  font-size: 0.8125rem;
   color: var(--fr-muted);
   margin: 10px 0;
 }
 .portfolio-summary > span:last-child {
-  font-size: 11px;
+  font-size: 0.8125rem;
   color: #778561;
 }
 .auth-layout {
@@ -1325,17 +1127,17 @@ details summary {
 }
 .auth-story > h1 {
   margin: 24px 0;
-  font-size: 42px;
+  font-size: 2.625rem;
   font-family: Georgia, serif;
   font-style: italic;
   font-weight: 400;
 }
 .auth-story > p {
-  font-size: 13px;
+  font-size: 0.8125rem;
   color: #788267;
 }
 .auth-story > a {
-  font-size: 11px;
+  font-size: 0.8125rem;
   position: relative;
   z-index: 1;
 }
@@ -1347,7 +1149,7 @@ details summary {
   align-items: center;
   color: #8b9c6e;
   font-family: Georgia, serif;
-  font-size: 130px;
+  font-size: 8.125rem;
   letter-spacing: -20px;
   font-style: italic;
 }
@@ -1366,7 +1168,7 @@ details summary {
   gap: 26px;
 }
 .auth-form > h2 {
-  font-size: 26px;
+  font-size: 1.625rem;
 }
 @keyframes pulse {
   50% {
@@ -1378,16 +1180,8 @@ details summary {
     padding-left: 65px;
     padding-right: 65px;
   }
-  .provider-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
 }
 @media (max-width: 1100px) {
-  .sidebar {
-    width: 196px;
-    padding-left: 12px;
-    padding-right: 12px;
-  }
   .app-body {
     margin-left: 196px;
     width: calc(100% - 196px);
@@ -1398,11 +1192,9 @@ details summary {
   .topbar {
     padding: 0 28px;
   }
-  .live-indicator,
   .topbar-title > span:last-child {
     display: none;
   }
-  .provider-grid,
   .project-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1428,23 +1220,13 @@ details summary {
 }
 @media (max-width: 760px) {
   h1 {
-    font-size: 26px;
+    font-size: 1.625rem;
   }
   .app-layout {
     display: block;
   }
-  .sidebar {
-    width: 100%;
-    height: auto;
-    position: relative;
-    overflow: visible;
-    padding: 16px;
-    border-right: 0;
-    border-bottom: 1px solid var(--fr-line);
-    display: block;
-  }
   .brand {
-    font-size: 21px;
+    font-size: 1.3125rem;
   }
   .brand-mark {
     width: 28px;
@@ -1452,20 +1234,13 @@ details summary {
   }
   .workspace-switch,
   .nav-caption,
-  .sidebar-bottom,
-  .sidebar-footer {
+  .sidebar-bottom {
     display: none;
-  }
-  .sidebar nav {
-    flex-direction: row;
-    overflow: auto;
-    margin-top: 18px;
-    gap: 4px;
   }
   .nav-item {
     padding: 9px 11px;
     white-space: nowrap;
-    font-size: 11px;
+    font-size: 0.8125rem;
     gap: 7px;
   }
   .nav-item svg {
@@ -1484,17 +1259,13 @@ details summary {
     padding: 0 20px;
   }
   .topbar-title {
-    font-size: 10px;
+    font-size: 0.8125rem;
   }
   .topbar-title > span {
     display: none;
   }
   .topbar-actions {
     gap: 9px;
-  }
-  .account-name {
-    max-width: 70px;
-    font-size: 10px;
   }
   .avatar {
     display: none;
@@ -1508,101 +1279,39 @@ details summary {
     gap: 20px;
   }
   .page-heading .eyebrow {
-    font-size: 8px;
+    font-size: 0.8125rem;
     margin-bottom: 12px;
   }
   .explore-hero {
     padding-top: 18px;
   }
   .explore-hero h1 {
-    font-size: 36px;
+    font-size: 2.25rem;
     letter-spacing: -1.5px;
   }
   .hero-eyebrow {
-    font-size: 8px;
+    font-size: 0.8125rem;
     letter-spacing: 1px;
     margin-bottom: 22px;
   }
   .explore-hero > p {
-    font-size: 12px;
-  }
-  .search-composer {
-    padding: 15px;
-  }
-  .search-composer .row {
-    gap: 12px;
-    align-items: start;
-  }
-  .search-composer .file-picker {
-    flex-wrap: wrap;
-    gap: 4px;
-    max-width: 140px;
-  }
-  .search-composer .file-picker label {
-    width: 100%;
-  }
-  .search-composer .file-picker input {
-    max-width: 130px;
+    font-size: 0.8125rem;
   }
   .genre-chips {
     gap: 6px;
   }
   .chip {
-    font-size: 10px;
+    font-size: 0.8125rem;
     padding: 7px 9px;
   }
   .section-header h2 {
-    font-size: 19px;
+    font-size: 1.1875rem;
   }
   .section-header .eyebrow {
-    font-size: 8px;
+    font-size: 0.8125rem;
   }
   .section-header {
     align-items: center;
-  }
-  .filter-bar {
-    gap: 12px;
-    flex-wrap: wrap;
-  }
-  .filter-bar > div {
-    flex: 1;
-    max-width: none;
-    min-width: 125px;
-  }
-  .filter-bar > .muted {
-    max-width: none;
-    width: 100%;
-    margin: 0;
-    padding: 0;
-  }
-  .provider-grid {
-    gap: 25px 14px;
-  }
-  .provider-photo {
-    aspect-ratio: 3/4;
-  }
-  .provider-meta h3 {
-    font-size: 12px;
-  }
-  .provider-meta p {
-    font-size: 9px;
-  }
-  .provider-bottom {
-    font-size: 9px;
-    flex-direction: column;
-  }
-  .provider-rating {
-    font-size: 9px;
-  }
-  .photo-type {
-    font-size: 8px;
-    top: 9px;
-    left: 9px;
-  }
-  .photo-arrow {
-    width: 23px;
-    height: 23px;
-    font-size: 13px;
   }
   .project-grid,
   .stats-grid {
@@ -1626,7 +1335,7 @@ details summary {
     gap: 14px;
   }
   .portfolio-tile h3 {
-    font-size: 14px;
+    font-size: 0.875rem;
   }
   .concept-composer {
     grid-template-columns: 1fr;
@@ -1639,7 +1348,7 @@ details summary {
     gap: 14px;
   }
   .moodboard figcaption {
-    font-size: 10px;
+    font-size: 0.8125rem;
     padding: 10px;
   }
   .booking-card {
@@ -1647,23 +1356,23 @@ details summary {
     gap: 14px;
   }
   .booking-date strong {
-    font-size: 29px;
+    font-size: 1.8125rem;
   }
   .booking-date small {
-    font-size: 8px;
+    font-size: 0.8125rem;
   }
   .booking-card > span:last-child {
     display: none;
   }
   .booking-card h2 {
-    font-size: 14px;
+    font-size: 0.875rem;
   }
   .room-layout {
     grid-template-columns: 1fr;
   }
   .chat-message {
     max-width: 96%;
-    font-size: 12px;
+    font-size: 0.8125rem;
   }
   .auth-layout {
     grid-template-columns: 1fr;
@@ -1674,7 +1383,7 @@ details summary {
     padding: 28px;
   }
   .auth-story h1 {
-    font-size: 32px;
+    font-size: 2rem;
   }
   .auth-art {
     display: none;
@@ -1692,7 +1401,7 @@ details summary {
   .page-footer {
     margin: 0 20px;
     flex-direction: column;
-    font-size: 9px;
+    font-size: 0.8125rem;
     gap: 8px;
   }
   .page-footer > span:last-child {
@@ -1705,7 +1414,7 @@ details summary {
     gap: 20px;
   }
   .topbar-actions .button-link {
-    font-size: 11px;
+    font-size: 0.8125rem;
     padding: 8px 12px;
   }
 }

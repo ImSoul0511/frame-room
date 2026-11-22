@@ -23,14 +23,24 @@ import { BookingControls } from '../features/booking/BookingControls';
 import { RoomPanel } from '../features/booking/RoomPanel';
 import { GalleryPanel } from '../features/booking/GalleryPanel';
 import { CompletionStatus } from '../features/booking/CompletionStatus';
+import { BookingCalendar } from '../features/booking/BookingCalendar';
 
 export function BookingsPage() {
   const t = useStrings();
   const list = useApi<Booking[]>('/v1/bookings');
   return (
     <>
-      <PageHeading title={t.booking.liveBookings} />
+      <PageHeading
+        title={t.workspaceUi.bookings}
+        subtitle={t.design.calendarDescription}
+        action={
+          <Link className="button-link dark" to="/explore">
+            {t.workspaceUi.newBooking}
+          </Link>
+        }
+      />
       <QueryState query={list} empty={list.data?.length === 0} />
+      {list.isSuccess ? <BookingCalendar bookings={list.data} /> : null}
       <div className="booking-list">
         {list.data?.map((b) => (
           <Link key={b.id} to={`/bookings/${b.id}`} className="booking-card">
@@ -43,7 +53,7 @@ export function BookingsPage() {
               <span>{currency(b.totalPrice)}</span>
             </div>
             <Status status={b.status} />
-            <span>↗</span>
+            <span className="text-button">{t.design.viewBooking}</span>
           </Link>
         ))}
       </div>
@@ -259,15 +269,15 @@ function BriefRequirements({
   return (
     <>
       <p>
-        {t.genreLabels[scope.genre]} · {t.demo.people} {scope.people}
+        {t.genreLabels[scope.genre]} · {t.workspaceUi.people} {scope.people}
       </p>
       <p>
         {scope.location} · {scope.scheduledStart ? dateTime(scope.scheduledStart) : ''}
         {scope.scheduledEnd ? ` – ${dateTime(scope.scheduledEnd)}` : ''}
       </p>
       <p>
-        {t.demo.photos} {scope.photoCount} · {t.demo.retouched} {scope.retouchedCount} ·{' '}
-        {t.demo.revisions} {scope.revisionLimit} · {currency(scope.budget)}
+        {t.workspaceUi.photos} {scope.photoCount} · {t.workspaceUi.retouched} {scope.retouchedCount}{' '}
+        · {t.workspaceUi.revisions} {scope.revisionLimit} · {currency(scope.budget)}
       </p>
       {scope.crew ? <p>{scope.crew}</p> : null}
       {scope.notes ? <p>{scope.notes}</p> : null}
@@ -346,7 +356,7 @@ function DeliveryPanel({ workspace: w }: { workspace: Workspace }) {
       <Feedback error={add.error} />
       {w.isClient && w.review?.moderationReason ? (
         <p>
-          {t.demo.reviewHidden} · {w.review.moderationReason}
+          {t.workspaceUi.reviewHidden} · {w.review.moderationReason}
         </p>
       ) : null}
       {w.isClient && w.booking.status === 'completed' && (!w.review || canResubmit) ? (
@@ -362,7 +372,7 @@ function DeliveryPanel({ workspace: w }: { workspace: Workspace }) {
           <Area label={t.booking.comment} value={comment} onChange={setComment} />
           <Feedback error={review.error} />
           <Action type="submit" pending={review.isPending}>
-            {canResubmit ? t.demo.resubmitReview : t.booking.submitReview}
+            {canResubmit ? t.workspaceUi.resubmitReview : t.booking.submitReview}
           </Action>
         </Form>
       ) : w.review && !w.review.deletedAt ? (

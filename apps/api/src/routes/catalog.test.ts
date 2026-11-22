@@ -110,6 +110,7 @@ const NONE = undefined as never;
 beforeEach(() => {
   vi.resetAllMocks();
   verifyUpload.mockResolvedValue({ width: 1200, height: 800 });
+  vi.mocked(repo.listTagsForPortfolios).mockResolvedValue([]);
 });
 afterEach(closeTestApps);
 
@@ -716,11 +717,14 @@ describe('GET /v1/me/portfolios and GET /v1/portfolios', () => {
     vi.mocked(repo.listPublicPortfolios).mockResolvedValue([
       { ...OWNED_PORTFOLIO, coverUrl: 'covers/golden.jpg' },
     ]);
+    vi.mocked(repo.listTagsForPortfolios).mockResolvedValue([
+      { ...TAG, portfolioId: PORTFOLIO_ID },
+    ]);
 
     const app = await buildTestApp();
     const res = await app.inject({
       method: 'GET',
-      url: '/v1/portfolios?genre=portrait&tag=warm-tone',
+      url: '/v1/portfolios?genre=portrait&tag=warm-tone&q=golden&sort=name&page=2&pageSize=12',
     });
 
     expect(res.statusCode).toBe(200);
@@ -728,8 +732,24 @@ describe('GET /v1/me/portfolios and GET /v1/portfolios', () => {
       expect.objectContaining({
         id: PORTFOLIO_ID,
         coverUrl: 'covers/golden.jpg',
+        tags: [TAG],
       }),
     ]);
+    expect(repo.listPublicPortfolios).toHaveBeenCalledWith(expect.anything(), {
+      genre: 'portrait',
+      tag: 'warm-tone',
+      q: 'golden',
+      sort: 'name',
+      page: 2,
+      pageSize: 12,
+    });
+    expect(bodyData(res)[0].tags[0]).not.toHaveProperty('portfolioId');
+  });
+  it('rejects unsupported collection ordering before reading data', async () => {
+    const app = await buildTestApp();
+    const res = await app.inject({ method: 'GET', url: '/v1/portfolios?sort=unexpected' });
+    expect(res.statusCode).toBe(400);
+    expect(repo.listPublicPortfolios).not.toHaveBeenCalled();
   });
 });
 

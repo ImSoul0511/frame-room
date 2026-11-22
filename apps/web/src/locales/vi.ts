@@ -1,7 +1,8 @@
-import { workspaceVietnamese, demoErrorsVietnamese } from './workspace';
+import { workspaceVietnamese } from './workspace';
+import { designVietnamese } from './design';
 export const vietnamese = {
-  demo: workspaceVietnamese,
-  demoErrors: demoErrorsVietnamese,
+  design: designVietnamese,
+  workspaceUi: workspaceVietnamese,
   profileUi: {
     account: 'Hồ sơ tài khoản',
     accountDescription: 'Thông tin cá nhân và lựa chọn nhiếp ảnh của bạn.',
@@ -32,7 +33,7 @@ export const vietnamese = {
     messageDraft: 'Đây là bản nháp xem trước. Tin nhắn chưa được gửi.',
     messagePlaceholder: 'Chia sẻ ý tưởng và thời gian chụp bạn mong muốn…',
     profileLinks: 'Hồ sơ của bạn',
-    profileLinksDescription: 'Quản lý thông tin hoặc xem các giao diện hồ sơ mẫu.',
+    profileLinksDescription: 'Quản lý thông tin hồ sơ, bộ ảnh và lịch chụp của bạn.',
   },
   discovery: {
     skip: 'Đến nội dung chính',

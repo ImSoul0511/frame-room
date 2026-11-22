@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { Service } from '@frameroom/shared';
-import type { Portfolio, Image, Studio } from '../lib/types';
+import type { Portfolio, Image, Studio, Tag } from '../lib/types';
 import { api, post, patch, upload, currency } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useApi, useTask } from '../lib/hooks';
@@ -24,6 +24,9 @@ import { PhotographerForm, ServiceForm } from '../features/catalog/ProviderForms
 import { AddOnForm } from './StudioPage';
 import { ReportButton } from './SettingsPage';
 import { PhotoGallery } from '../features/profiles/PhotoGallery';
+import { TagPicker } from '../features/catalog/TagPicker';
+import { ImageTagsEditor } from '../features/catalog/ImageTagsEditor';
+import { FittedImage } from '../components/FittedImage';
 
 export function PortfolioPage() {
   const t = useStrings();
@@ -97,7 +100,7 @@ export function PortfolioPage() {
                 setOpen('service');
               }}
             >
-              {t.demo.edit}
+              {t.workspaceUi.edit}
             </Action>
           </div>
         ))}
@@ -141,7 +144,7 @@ export function PortfolioDetailPage() {
   const detail = useApi<{ portfolio: Portfolio; images: Image[] }>(
     `/v1/${canEdit ? 'me/' : ''}portfolios/${id}`,
   );
-  const availableTags = useApi<{ id: string; name: string }[]>('/v1/tags', canEdit);
+  const availableTags = useApi<Tag[]>('/v1/tags', canEdit);
   const [tagIds, setTagIds] = useState<string[]>([]);
   const [credits, setCredits] = useState('');
   const [caption, setCaption] = useState('');
@@ -190,27 +193,9 @@ export function PortfolioDetailPage() {
                 <option value="manipulated">{t.project.manipulated}</option>
                 <option value="ai_generated">{t.project.aiGenerated}</option>
               </Select>
-              <Field label={t.demo.credits} value={credits} onChange={setCredits} />
-              <fieldset>
-                <legend>{t.demo.tags}</legend>
-                {availableTags.data?.map((tag) => (
-                  <label key={tag.id} className="checkbox-row">
-                    <input
-                      type="checkbox"
-                      checked={tagIds.includes(tag.id)}
-                      disabled={tagIds.length >= 20 && !tagIds.includes(tag.id)}
-                      onChange={(event) =>
-                        setTagIds(
-                          event.target.checked
-                            ? [...tagIds, tag.id]
-                            : tagIds.filter((entry) => entry !== tag.id),
-                        )
-                      }
-                    />
-                    {tag.name}
-                  </label>
-                ))}
-              </fieldset>
+              <Field label={t.workspaceUi.credits} value={credits} onChange={setCredits} />
+              <QueryState query={availableTags} />
+              <TagPicker tags={availableTags.data ?? []} selected={tagIds} onChange={setTagIds} />
               <FilePicker
                 label={t.portfolio.upload}
                 onFile={(file) => uploadTask.mutate(file)}
@@ -247,16 +232,17 @@ export function PortfolioDetailPage() {
         <div className="moodboard">
           {detail.data.images.map((i) => (
             <figure key={i.id}>
-              <img src={i.url} alt={i.caption || p.title} />
+              <FittedImage src={i.url} alt={i.caption || p.title} loading="lazy" decoding="async" />
               <figcaption>
                 <Provenance value={i.provenance} />
                 <p>{i.caption}</p>
                 {i.crewCredits ? (
                   <p>
-                    {t.demo.credits} · {i.crewCredits}
+                    {t.workspaceUi.credits} · {i.crewCredits}
                   </p>
                 ) : null}
                 {i.tags?.length ? <p>{i.tags.map((tag) => tag.name).join(' · ')}</p> : null}
+                <ImageTagsEditor image={i} tags={availableTags.data ?? []} />
               </figcaption>
             </figure>
           ))}

@@ -129,7 +129,7 @@ export function BookingForm({ service, project }: { service: Service; project?: 
         error={submittedAt && !name.trim() ? t.booking.titleRequired : undefined}
       />
       <Field
-        label={t.demo.concept}
+        label={t.workspaceUi.concept}
         value={idea}
         onChange={setIdea}
         required
@@ -137,7 +137,7 @@ export function BookingForm({ service, project }: { service: Service; project?: 
       />
       <div className="two-col">
         <Select
-          label={t.demo.genre}
+          label={t.workspaceUi.genre}
           value={scope.genre}
           onChange={(value) => set('genre', value as Service['genre'])}
         >
@@ -148,23 +148,23 @@ export function BookingForm({ service, project }: { service: Service; project?: 
           ))}
         </Select>
         <Select
-          label={t.demo.locationType}
+          label={t.workspaceUi.locationType}
           value={scope.locationType}
           onChange={(value) => set('locationType', value as typeof scope.locationType)}
           error={submittedAt && !scope.locationType ? t.booking.locationRequired : undefined}
         >
           <option value="">—</option>
-          <option value="outdoor">{t.demo.outdoor}</option>
-          <option value="indoor">{t.demo.indoor}</option>
-          <option value="studio">{t.demo.studioLocation}</option>
+          <option value="outdoor">{t.workspaceUi.outdoor}</option>
+          <option value="indoor">{t.workspaceUi.indoor}</option>
+          <option value="studio">{t.workspaceUi.studioLocation}</option>
         </Select>
         <Field
-          label={t.demo.location}
+          label={t.workspaceUi.location}
           value={scope.location}
           onChange={(value) => set('location', value)}
         />
         <NumberField
-          label={t.demo.people}
+          label={t.workspaceUi.people}
           value={scope.people}
           min={1}
           onChange={(value) => set('people', value)}
@@ -184,27 +184,31 @@ export function BookingForm({ service, project }: { service: Service; project?: 
           error={submittedAt && endInvalid ? t.errors.invalid_interval : undefined}
         />
         <NumberField
-          label={t.demo.photos}
+          label={t.workspaceUi.photos}
           value={scope.photoCount}
           onChange={(value) => set('photoCount', value)}
         />
         <NumberField
-          label={t.demo.retouched}
+          label={t.workspaceUi.retouched}
           value={scope.retouchedCount}
           onChange={(value) => set('retouchedCount', value)}
         />
         <NumberField
-          label={t.demo.revisions}
+          label={t.workspaceUi.revisions}
           value={scope.revisionLimit}
           onChange={(value) => set('revisionLimit', value)}
         />
         <NumberField
-          label={t.demo.budget}
+          label={t.workspaceUi.budget}
           value={scope.budget}
           onChange={(value) => set('budget', value)}
         />
       </div>
-      <Area label={t.demo.crew} value={scope.crew} onChange={(value) => set('crew', value)} />
+      <Area
+        label={t.workspaceUi.crew}
+        value={scope.crew}
+        onChange={(value) => set('crew', value)}
+      />
       <FilePicker
         label={t.project.addReference}
         onFile={(file) => reference.mutate(file)}

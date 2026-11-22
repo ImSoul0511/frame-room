@@ -282,7 +282,10 @@ export async function listVisibleReviewsByProvider(
 
 /** Lists all taxonomy tags ordered by kind and name. */
 export async function listTags(tx: Transaction): Promise<Tag[]> {
-  return tx.rows<Tag>('select id, name, slug, kind from tags order by kind, name');
+  return tx.rows<Tag>(`select id, name, slug, kind,
+    to_jsonb(tags)->>'name_vi' as name_vi, to_jsonb(tags)->>'category' as category
+    from tags where coalesce((to_jsonb(tags)->>'is_active')::boolean,true)
+    order by kind, name`);
 }
 
 // ---------- 102b: Studios & Team ----------
@@ -622,6 +625,10 @@ export async function listPublicPortfolios(
     params.push(query.genre);
     conditions.push(`pf.genre = $${params.length}::genre`);
   }
+  if (query.q) {
+    params.push(`%${query.q.replace(/[\\%_]/g, '\\$&')}%`);
+    conditions.push(`(pf.title ilike $${params.length} or pf.description ilike $${params.length})`);
+  }
   if (query.tag) {
     params.push(query.tag);
     conditions.push(
@@ -652,9 +659,23 @@ export async function listPublicPortfolios(
        order by sort_order, created_at limit 1
      ) cover on true
      where ${conditions.join(' and ')}
-     order by pf.published_at desc nulls last, pf.created_at desc
+     order by ${query.sort === 'name' ? 'pf.title asc' : query.sort === 'oldest' ? 'pf.published_at asc nulls last, pf.created_at asc' : 'pf.published_at desc nulls last, pf.created_at desc'}, pf.id
      limit $${limitParam} offset $${offsetParam}`,
     params,
+  );
+}
+
+export async function listTagsForPortfolios(tx: Transaction, portfolioIds: string[]) {
+  if (!portfolioIds.length) return [];
+  return tx.rows<Tag & { portfolioId: string }>(
+    `select distinct pi.portfolio_id, t.id, t.name, t.slug, t.kind,
+       to_jsonb(t)->>'name_vi' as name_vi, to_jsonb(t)->>'category' as category
+     from portfolio_images pi join image_tags it on it.portfolio_image_id=pi.id
+     join tags t on t.id=it.tag_id
+     where pi.portfolio_id=any($1::uuid[]) and not pi.is_hidden
+       and coalesce((to_jsonb(t)->>'is_active')::boolean,true)
+     order by t.kind,t.name`,
+    [portfolioIds],
   );
 }
 
@@ -722,7 +743,8 @@ export async function listTagsForImages(tx: Transaction, imageIds: string[]) {
   if (imageIds.length === 0) return grouped;
 
   const rows = await tx.rows<Tag & { portfolioImageId: string }>(
-    `select pit.portfolio_image_id, t.id, t.name, t.slug, t.kind
+    `select pit.portfolio_image_id, t.id, t.name, t.slug, t.kind,
+       to_jsonb(t)->>'name_vi' as name_vi, to_jsonb(t)->>'category' as category
      from image_tags pit
      join tags t on t.id = pit.tag_id
      where pit.portfolio_image_id = any($1::uuid[])

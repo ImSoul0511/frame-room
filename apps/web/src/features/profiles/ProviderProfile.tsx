@@ -5,8 +5,8 @@ import type { ProviderDetail } from '../../lib/types';
 import { currency } from '../../lib/api';
 import { useStrings } from '../../lib/i18n';
 import { Action } from '../../components/ui';
-import { useDemo } from '../demo/DemoContext';
-import { DemoReportButton } from '../demo/ReportButton';
+import { FittedImage } from '../../components/FittedImage';
+import { ReportButton } from '../../pages/SettingsPage';
 
 export function ProviderProfile({
   detail,
@@ -20,21 +20,14 @@ export function ProviderProfile({
   canRequest?: boolean;
 }) {
   const t = useStrings();
-  const demo = useDemo();
-  const { provider, services } = detail;
-  const portfolios = detail.portfolios.filter(
-    (value) => demo.choice === 'account' || !demo.state.hiddenTargets.includes(value.id),
-  );
-  const reviews = detail.reviews.filter(
-    (value) => demo.choice === 'account' || !demo.state.hiddenTargets.includes(value.id),
-  );
+  const { provider, services, portfolios, reviews } = detail;
   const [tab, setTab] = useState('works');
   const cover = portfolios.find((portfolio) => portfolio.coverUrl)?.coverUrl;
   return (
     <div className="public-profile">
       <div className={`profile-cover ${!cover ? 'profile-cover-empty' : ''}`}>
         {cover ? (
-          <img src={cover} alt={provider.displayName} />
+          <FittedImage src={cover} alt={provider.displayName} />
         ) : (
           <span aria-hidden="true">FrameRoom.</span>
         )}
@@ -97,7 +90,12 @@ export function ProviderProfile({
                       to={`/portfolios/${portfolio.id}`}
                     >
                       {portfolio.coverUrl ? (
-                        <img src={portfolio.coverUrl} alt={portfolio.title} loading="lazy" />
+                        <FittedImage
+                          src={portfolio.coverUrl}
+                          alt={portfolio.title}
+                          loading="lazy"
+                          decoding="async"
+                        />
                       ) : (
                         <div className="profile-album-placeholder">
                           {portfolio.title.slice(0, 1)}
@@ -189,11 +187,7 @@ export function ProviderProfile({
                     </span>
                     <p>{review.comment}</p>
                     <cite>{review.authorName}</cite>
-                    <DemoReportButton
-                      targetType="review"
-                      targetId={review.id}
-                      title={review.comment}
-                    />
+                    <ReportButton targetType="review" targetId={review.id} />
                   </blockquote>
                 ))
               ) : (

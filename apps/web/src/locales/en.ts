@@ -1,7 +1,8 @@
-import { workspaceEnglish, demoErrorsEnglish } from './workspace';
+import { workspaceEnglish } from './workspace';
+import { designEnglish } from './design';
 export const english = {
-  demo: workspaceEnglish,
-  demoErrors: demoErrorsEnglish,
+  design: designEnglish,
+  workspaceUi: workspaceEnglish,
   profileUi: {
     account: 'Account profile',
     accountDescription: 'Your personal details and photography preferences.',

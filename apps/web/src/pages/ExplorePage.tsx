@@ -1,251 +1,217 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { genres } from '@frameroom/shared';
 import { api } from '../lib/api';
 import { useApi } from '../lib/hooks';
+import type { Portfolio, Tag } from '../lib/types';
 import { Action, Feedback, QueryState, Select } from '../components/ui';
-import { Botanical } from '../components/Botanical';
-import { ProviderCard, type CardProvider } from '../features/catalog/ProviderCard';
+import { Botanical, WatercolorWash } from '../components/Botanical';
+import { Reveal } from '../components/Reveal';
+import { PortfolioCard } from '../features/catalog/PortfolioCard';
+import { ExploreIntro } from '../features/catalog/ExploreIntro';
 import { useLanguage, useStrings } from '../lib/i18n';
-import { useDemo } from '../features/demo/DemoContext';
-import { getDemoProviderCards } from '../features/demo/public-catalog';
 
-type Tag = {
-  id: string;
-  slug: string;
-  name: string;
-  nameVi?: string | null;
-  category?: string | null;
-};
+const PAGE_SIZE = 12;
 export function ExplorePage() {
   const t = useStrings();
   const { language } = useLanguage();
-  const [query, setQuery] = useState('');
-  const [genre, setGenre] = useState('');
-  const [city, setCity] = useState('');
-  const [price, setPrice] = useState('');
-  const [sort, setSort] = useState('recommended');
-  const [providerType, setProviderType] = useState('');
-  const [submitted, setSubmitted] = useState<string | null>(null);
   const [params] = useSearchParams();
-  const demo = useDemo();
-  const providers = useQuery({
-    queryKey: ['api', 'discovery-cards'],
-    queryFn: async ({ signal }) => {
-      const cards: CardProvider[] = [];
-      let page = 1;
-      for (;;) {
-        const batch = await api<CardProvider[]>(`/v1/explore?pageSize=50&page=${page}`, { signal });
-        cards.push(...batch);
-        if (batch.length < 50) return cards;
-        page += 1;
-      }
-    },
-  });
+  const [draft, setDraft] = useState('');
+  const [keyword, setKeyword] = useState('');
+  const [genre, setGenre] = useState('');
+  const [tag, setTag] = useState('');
+  const [sort, setSort] = useState('newest');
   const tags = useApi<Tag[]>('/v1/tags');
-  const source = [
-    ...(providers.data ?? []),
-    ...(demo.choice === 'account' ? [] : getDemoProviderCards(demo.state, demo.text, demo.image)),
-  ];
-  const normalize = (value: string) =>
-    value
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/đ/gi, 'd')
-      .toLocaleLowerCase(language);
-  const availableTags = (tags.data ?? []).filter((tag) =>
-    genres.includes(tag.slug as (typeof genres)[number]),
-  );
-  const genreOptions = availableTags.length
-    ? availableTags.map((tag) => ({
-        slug: tag.slug,
-        label:
-          language === 'vi'
-            ? (tag.nameVi ?? t.genreLabels[tag.slug as (typeof genres)[number]])
-            : tag.name,
-      }))
-    : [...new Set(source.flatMap((p) => p.genres))].map((slug) => ({
-        slug,
-        label: t.genreLabels[slug],
-      }));
-  const displayed = source
-    .filter(
-      (provider) =>
-        (!providerType || provider.type === providerType) &&
-        (!submitted ||
-          normalize(
-            [
-              provider.displayName,
-              provider.bio,
-              provider.city,
-              ...provider.styles,
-              ...provider.genres.flatMap((value) => [value, t.genreLabels[value]]),
-            ].join(' '),
-          ).includes(normalize(submitted.trim()))) &&
-        (!genre || provider.genres.includes(genre as (typeof genres)[number])) &&
-        (!city || provider.city === city) &&
-        (!price || (provider.priceFrom !== null && provider.priceFrom <= Number(price))),
-    )
-    .sort((a, b) => {
-      if (sort === 'name') return a.displayName.localeCompare(b.displayName, language);
-      if (sort === 'rating') return (b.ratingAvg ?? -1) - (a.ratingAvg ?? -1);
-      if (sort === 'priceLow' || sort === 'priceHigh') {
-        if (a.priceFrom === null) return b.priceFrom === null ? 0 : 1;
-        if (b.priceFrom === null) return -1;
-        return sort === 'priceLow' ? a.priceFrom - b.priceFrom : b.priceFrom - a.priceFrom;
-      }
-      return 0;
-    });
-  const clear = () => {
-    setGenre('');
-    setCity('');
-    setPrice('');
-    setSort('recommended');
-    setQuery('');
-    setSubmitted(null);
-    setProviderType('');
-  };
+  const introduction = useApi<Portfolio[]>('/v1/portfolios?pageSize=9');
+  const collection = useInfiniteQuery({
+    queryKey: ['api', 'explore-portfolios', keyword, genre, tag, sort],
+    initialPageParam: 1,
+    queryFn: ({ pageParam, signal }) => {
+      const query = new URLSearchParams({
+        page: String(pageParam),
+        pageSize: String(PAGE_SIZE),
+        sort,
+      });
+      if (keyword) query.set('q', keyword);
+      if (genre) query.set('genre', genre);
+      if (tag) query.set('tag', tag);
+      return api<Portfolio[]>(`/v1/portfolios?${query}`, { signal });
+    },
+    getNextPageParam: (last, pages) => (last.length === PAGE_SIZE ? pages.length + 1 : undefined),
+  });
+  const displayed = collection.data?.pages.flat() ?? [];
+  const tagCategories = [...new Set(tags.data?.map((value) => value.category || value.kind) ?? [])];
   const chooseGenre = (value: string) => {
     setGenre(value);
+    document.getElementById('collections')?.scrollIntoView({
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        ? 'instant'
+        : 'smooth',
+    });
+  };
+  const labelTag = (value: Tag) => (language === 'vi' ? value.nameVi || value.name : value.name);
+  const clear = () => {
+    setGenre('');
+    setTag('');
+    setDraft('');
+    setKeyword('');
+    setSort('newest');
   };
   return (
-    <>
+    <div className="explore-page">
       <section className="editorial-hero">
-        <Botanical className="hero-flower-left" />
-        <Botanical className="hero-flower-right" />
-        <div className="hero-content">
+        <WatercolorWash />
+        <Botanical className="hero-flower-left" meadow />
+        <Botanical className="hero-flower-right" meadow />
+        <Reveal className="hero-content">
           <p className="eyebrow">{t.discovery.heroKicker}</p>
           <h1>
             {t.discovery.heroFirst}
             <em>{t.discovery.heroSecond}</em>
           </h1>
           <p className="hero-description">{t.discovery.heroDescription}</p>
-          <a className="button-link hero-cta" href="#photographers">
-            {t.discovery.browse}
+          <a className="button-link hero-cta emphasis-link" href="#collections">
+            {t.design.browsePhotos}
           </a>
-        </div>
+        </Reveal>
       </section>
-      <section className="discovery-search" aria-labelledby="provider-search-heading">
-        <div className="search-introduction">
-          <p className="eyebrow">{t.discovery.searchKicker}</p>
-          <h2 id="provider-search-heading">{t.discovery.searchTitle}</h2>
-          <p>{t.discovery.searchDescription}</p>
-        </div>
-        <div className="search-workspace">
-          <form
-            className="search-composer"
-            onSubmit={(event) => {
-              event.preventDefault();
-              setSubmitted(query.trim() || null);
-            }}
-          >
-            <label htmlFor="provider-search" className="sr-only">
-              {t.explore.search}
-            </label>
-            <textarea
-              id="provider-search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={t.explore.placeholder}
-              maxLength={300}
-            />
-            <div className="row">
-              <Action type="submit" disabled={!query.trim() && submitted === null}>
-                {t.explore.search}
-              </Action>
-            </div>
-          </form>
-        </div>
-      </section>
+      <ExploreIntro portfolios={introduction.data ?? []} onGenre={chooseGenre} />
       <section
-        id="photographers"
+        id="collections"
         className="photographer-collection"
         aria-labelledby="collection-title"
       >
-        <div className="section-header">
-          <div>
-            <p className="eyebrow">{t.discovery.collectionKicker}</p>
-            <h2 id="collection-title">
-              {submitted !== null ? t.explore.results : t.discovery.collectionTitle}
-            </h2>
+        <Reveal>
+          <div className="section-header">
+            <div>
+              <p className="eyebrow">{t.design.collectionKicker}</p>
+              <h2 id="collection-title">
+                <span className="section-highlight">{t.design.collectionTitle}</span>
+              </h2>
+              <p className="section-description">{t.design.collectionDescription}</p>
+            </div>
+            <button className="text-button" onClick={clear}>
+              {t.explore.clear}
+            </button>
           </div>
-          <button className="text-button" onClick={clear}>
-            {t.explore.clear}
-          </button>
-        </div>
+        </Reveal>
+        <form
+          className="collection-search"
+          role="search"
+          onSubmit={(event) => {
+            event.preventDefault();
+            setKeyword(draft.trim());
+          }}
+        >
+          <label className="sr-only" htmlFor="collection-search">
+            {t.explore.search}
+          </label>
+          <input
+            id="collection-search"
+            type="search"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            placeholder={t.design.searchPlaceholder}
+            maxLength={120}
+          />
+          <Action type="submit">{t.explore.search}</Action>
+        </form>
         <div className="genre-chips" aria-label={t.genres}>
           <button
-            className={genre ? 'chip' : 'chip selected'}
+            className={!genre ? 'chip selected' : 'chip'}
             aria-pressed={!genre}
-            onClick={() => chooseGenre('')}
+            onClick={() => setGenre('')}
           >
             {t.all}
           </button>
-          {genreOptions.map((tag) => (
+          {genres.map((value) => (
             <button
-              key={tag.slug}
-              className={genre === tag.slug ? 'chip selected' : 'chip'}
-              aria-pressed={genre === tag.slug}
-              onClick={() => chooseGenre(tag.slug)}
+              key={value}
+              className={genre === value ? 'chip selected' : 'chip'}
+              aria-pressed={genre === value}
+              onClick={() => setGenre(value)}
             >
-              {tag.label}
+              {t.genreLabels[value]}
             </button>
           ))}
         </div>
-        <Feedback error={tags.error} />
-        <div className="filter-bar">
-          <Select label={t.demo.providerType} value={providerType} onChange={setProviderType}>
-            <option value="">{t.all}</option>
-            <option value="photographer">{t.explore.photographer}</option>
-            <option value="studio">{t.explore.studio}</option>
-          </Select>
-          <Select label={t.city} value={city} onChange={setCity}>
-            <option value="">{t.discovery.allCities}</option>
-            {[...new Set(source.map((p) => p.city).filter(Boolean))].map((value) => (
-              <option key={value}>{value}</option>
-            ))}
-          </Select>
-          <div className="native-field">
-            <label htmlFor="max-price">{t.explore.priceMax}</label>
-            <input
-              id="max-price"
-              type="number"
-              min="0"
-              step="100000"
-              inputMode="numeric"
-              value={price}
-              onChange={(event) => setPrice(event.target.value)}
-              placeholder="VND"
-            />
-          </div>
+        <div className="collection-toolbar">
+          <details className="taxonomy-filter">
+            <summary>
+              {t.design.filterTags}
+              {tag
+                ? ` · ${labelTag(tags.data?.find((value) => value.slug === tag) ?? { id: '', slug: tag, name: tag, kind: 'mood' })}`
+                : ''}
+            </summary>
+            <div className="taxonomy-groups">
+              <button
+                className={!tag ? 'chip selected' : 'chip'}
+                onClick={() => setTag('')}
+                aria-pressed={!tag}
+              >
+                {t.all}
+              </button>
+              {tagCategories.map((category) => (
+                <fieldset key={category}>
+                  <legend>
+                    {t.design.tagCategories[category as keyof typeof t.design.tagCategories] ??
+                      category}
+                  </legend>
+                  <div className="genre-chips">
+                    {tags.data
+                      ?.filter((value) => (value.category || value.kind) === category)
+                      .map((value) => (
+                        <button
+                          key={value.id}
+                          className={tag === value.slug ? 'chip selected' : 'chip'}
+                          aria-pressed={tag === value.slug}
+                          onClick={() => setTag(tag === value.slug ? '' : value.slug)}
+                        >
+                          {labelTag(value)}
+                        </button>
+                      ))}
+                  </div>
+                </fieldset>
+              ))}
+              <QueryState query={tags} />
+            </div>
+          </details>
           <Select label={t.discovery.sort} value={sort} onChange={setSort}>
-            {(['recommended', 'name', 'priceLow', 'priceHigh', 'rating'] as const).map((value) => (
-              <option key={value} value={value}>
-                {t.discovery[value]}
-              </option>
-            ))}
+            <option value="newest">{t.design.newest}</option>
+            <option value="oldest">{t.design.oldest}</option>
+            <option value="name">{t.discovery.name}</option>
           </Select>
-          <span className="result-count" role="status" aria-live="polite">
-            {displayed.length} {t.discovery.count}
-          </span>
         </div>
-        <QueryState query={providers} />
-        {!displayed.length && !providers.isLoading ? (
+        <QueryState query={collection} />
+        {!displayed.length && collection.isSuccess ? (
           <p className="empty-state">{t.explore.noResults}</p>
         ) : null}
-        <div className="provider-grid">
-          {displayed.map((provider, index) => (
-            <ProviderCard
-              key={provider.id}
-              provider={provider}
-              index={index}
-              project={params.get('project')}
-              onGenre={chooseGenre}
-            />
+        <div className="collection-grid">
+          {displayed.map((portfolio, index) => (
+            <Reveal key={portfolio.id} delay={(index % 3) * 70}>
+              <PortfolioCard portfolio={portfolio} project={params.get('project')} />
+            </Reveal>
           ))}
         </div>
+        <div className="load-more">
+          <span className="muted" role="status" aria-live="polite">
+            {displayed.length} {t.design.collectionsLoaded}
+          </span>
+          {collection.hasNextPage ? (
+            <Action
+              secondary
+              pending={collection.isFetchingNextPage}
+              onClick={() => {
+                void collection.fetchNextPage();
+              }}
+            >
+              {t.design.loadMore}
+            </Action>
+          ) : null}
+          <Feedback error={collection.isFetchNextPageError ? collection.error : null} />
+        </div>
       </section>
-    </>
+    </div>
   );
 }

@@ -17,6 +17,72 @@ const settings = envSchema.parse({
 afterEach(() => vi.unstubAllGlobals());
 
 describe('Cloud catalog without a direct Postgres connection', () => {
+  it('paginates filtered collections and excludes hidden-image and inactive tags', async () => {
+    const fetch = vi.fn(async (url: string, init: RequestInit) => {
+      const query = new URL(url);
+      expect(new Headers(init.headers).get('apikey')).toBe('public-test-key');
+      expect(query.searchParams.get('status')).toBe('eq.published');
+      expect(query.searchParams.get('deleted_at')).toBe('is.null');
+      expect(query.searchParams.get('offset')).toBe('12');
+      expect(query.searchParams.get('limit')).toBe('12');
+      expect(query.searchParams.get('order')).toBe('title.asc,id.asc');
+      expect(query.searchParams.get('or')).toBe(
+        '(title.ilike."%portrait%",description.ilike."%portrait%")',
+      );
+      expect(query.searchParams.get('matches.image_tags.tags.slug')).toBe('eq.soft');
+      expect(query.searchParams.get('matches.is_hidden')).toBe('eq.false');
+      const tag = {
+        id: USER,
+        name: 'Soft',
+        name_vi: 'Dịu',
+        category: 'mood',
+        slug: 'soft',
+        kind: 'mood',
+      };
+      return Response.json([
+        {
+          id: USER,
+          title: 'Portrait',
+          description: 'Natural light',
+          genre: 'portrait',
+          status: 'published',
+          owner_type: 'photographer',
+          photographer_id: USER,
+          studio_id: null,
+          published_at: '2026-11-19T00:00:00Z',
+          created_at: '2026-11-19T00:00:00Z',
+          updated_at: '2026-11-19T00:00:00Z',
+          portfolio_images: [
+            {
+              storage_path: 'hidden.webp',
+              sort_order: 0,
+              is_hidden: true,
+              image_tags: [
+                { tags: { ...tag, id: '22222222-2222-4222-8222-222222222222', name: 'Hidden' } },
+              ],
+            },
+            {
+              storage_path: 'visible.webp',
+              sort_order: 1,
+              is_hidden: false,
+              image_tags: [{ tags: tag }, { tags: { ...tag, is_active: false } }],
+            },
+          ],
+        },
+      ]);
+    });
+    vi.stubGlobal('fetch', fetch);
+    const data = await createCloudCatalog(settings)!.portfolios({
+      page: 2,
+      pageSize: 12,
+      q: 'portrait',
+      sort: 'name',
+      tag: 'soft',
+    });
+    expect(data[0].coverUrl).toContain('/visible.webp');
+    expect(data[0].tags).toMatchObject([{ id: USER, nameVi: 'Dịu', category: 'mood' }]);
+    expect(data[0].tags).toHaveLength(1);
+  });
   it('uses public credentials and exact name matching in Cloud', async () => {
     const displayName = 'Nguyễn _ 100% *';
     const fetch = vi.fn(async (url: string, init: RequestInit) => {

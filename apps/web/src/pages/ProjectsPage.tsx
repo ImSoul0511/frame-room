@@ -20,6 +20,7 @@ import {
 } from '../components/ui';
 import { BriefEditor } from '../features/projects/BriefEditor';
 import { ChatPanel } from '../features/projects/ChatPanel';
+import { Botanical } from '../components/Botanical';
 
 export function ProjectsPage() {
   const t = useStrings();
@@ -44,8 +45,7 @@ export function ProjectsPage() {
         {projects.data?.map((p, i) => (
           <Link className="project-card" key={p.id} to={`/projects/${p.id}`}>
             <div className={`project-art art-${i % 3}`}>
-              <span>0{i + 1}</span>
-              <i>↗</i>
+              <Botanical />
             </div>
             <div className="project-card-body">
               <span className="eyebrow">{p.bookingId ? t.booking.room : t.project.overview}</span>

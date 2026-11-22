@@ -18,6 +18,16 @@ export interface Portfolio {
   ownerType: 'photographer' | 'studio';
   studioId: string | null;
   coverUrl?: string | null;
+  photographerId?: string | null;
+  tags?: Tag[];
+}
+export interface Tag {
+  id: string;
+  slug: string;
+  name: string;
+  nameVi?: string | null;
+  kind: 'tone' | 'setting' | 'mood';
+  category?: string | null;
 }
 export interface Image {
   id: string;
@@ -25,7 +35,7 @@ export interface Image {
   url: string;
   caption: string;
   crewCredits?: string;
-  tags?: { id: string; name: string }[];
+  tags?: { id: string; name: string; nameVi?: string | null }[];
   provenance: 'captured' | 'manipulated' | 'ai_generated';
 }
 export interface PhotoFeedback {

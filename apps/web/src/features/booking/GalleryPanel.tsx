@@ -65,7 +65,7 @@ export function GalleryPanel({ workspace: w }: { workspace: Workspace }) {
       />
       {canSelect ? (
         <p>
-          {t.demo.selectionHint} {w.proofing.quota}
+          {t.workspaceUi.selectionHint} {w.proofing.quota}
         </p>
       ) : null}
       <div className="moodboard gallery-grid">
@@ -244,7 +244,7 @@ function ProofingPhoto({
           <button
             type="button"
             className="proofing-photo-button"
-            aria-label={t.demo.pin}
+            aria-label={t.workspaceUi.pin}
             onClick={(event) => {
               const bounds = event.currentTarget.getBoundingClientRect();
               const point =
@@ -302,11 +302,11 @@ function ProofingPhoto({
               setPosition(null);
             }}
           >
-            {pinMode ? t.demo.feedback : t.demo.pin}
+            {pinMode ? t.workspaceUi.feedback : t.workspaceUi.pin}
           </Action>
-          {pinMode && !position ? <p role="status">{t.demo.pinHint}</p> : null}
+          {pinMode && !position ? <p role="status">{t.workspaceUi.pinHint}</p> : null}
           <Area
-            label={pinMode ? t.demo.pinNote : t.demo.feedback}
+            label={pinMode ? t.workspaceUi.pinNote : t.workspaceUi.feedback}
             value={note}
             onChange={setNote}
           />

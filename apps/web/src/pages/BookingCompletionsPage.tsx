@@ -26,7 +26,7 @@ export function BookingCompletionsPage() {
       reason: reason.trim(),
     }),
   );
-  if (!isAdmin) return <p role="alert">{t.demo.forbidden}</p>;
+  if (!isAdmin) return <p role="alert">{t.workspaceUi.forbidden}</p>;
 
   return (
     <>
@@ -46,7 +46,7 @@ export function BookingCompletionsPage() {
                 setSelected(booking);
               }}
             >
-              {booking.completionHoldAt ? t.demo.releaseHold : t.booking.placeHold}
+              {booking.completionHoldAt ? t.workspaceUi.releaseHold : t.booking.placeHold}
             </Action>
           </article>
         ))}
@@ -63,7 +63,7 @@ export function BookingCompletionsPage() {
       ) : null}
       {selected ? (
         <Modal
-          title={selected.completionHoldAt ? t.demo.releaseHold : t.booking.placeHold}
+          title={selected.completionHoldAt ? t.workspaceUi.releaseHold : t.booking.placeHold}
           onClose={() => {
             if (!change.isPending) setSelected(null);
           }}
@@ -76,7 +76,7 @@ export function BookingCompletionsPage() {
               pending={change.isPending}
               disabled={!reason.trim() || reason.trim().length > 1000}
             >
-              {selected.completionHoldAt ? t.demo.releaseHold : t.booking.placeHold}
+              {selected.completionHoldAt ? t.workspaceUi.releaseHold : t.booking.placeHold}
             </Action>
           </Form>
         </Modal>

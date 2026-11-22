@@ -4,6 +4,7 @@ import { TextInput } from '@astryxdesign/core/TextInput';
 import { TextArea } from '@astryxdesign/core/TextArea';
 import { genres } from '@frameroom/shared';
 import { useStrings } from '../lib/i18n';
+import { Botanical } from './Botanical';
 
 export function PageHeading({
   title,
@@ -17,6 +18,7 @@ export function PageHeading({
   const t = useStrings();
   return (
     <header className="page-heading">
+      <Botanical className="page-heading-flower" />
       <div>
         <p className="eyebrow">
           {t.eyebrow} / {t.personal}

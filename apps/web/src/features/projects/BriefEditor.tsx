@@ -87,21 +87,21 @@ function ScopeFields({ value, onChange }: { value: Scope; onChange: (value: Scop
           onChange={(genre) => change('genre', genre as Scope['genre'])}
         />
         <Select
-          label={t.demo.locationType}
+          label={t.workspaceUi.locationType}
           value={value.locationType}
           onChange={(location) => change('locationType', location as Scope['locationType'])}
         >
-          <option value="outdoor">{t.demo.outdoor}</option>
-          <option value="indoor">{t.demo.indoor}</option>
-          <option value="studio">{t.demo.studioLocation}</option>
+          <option value="outdoor">{t.workspaceUi.outdoor}</option>
+          <option value="indoor">{t.workspaceUi.indoor}</option>
+          <option value="studio">{t.workspaceUi.studioLocation}</option>
         </Select>
         <Field
-          label={t.demo.location}
+          label={t.workspaceUi.location}
           value={value.location}
           onChange={(location) => change('location', location)}
         />
         <NumberField
-          label={t.demo.people}
+          label={t.workspaceUi.people}
           value={value.people}
           min={1}
           onChange={(number) => change('people', number)}
@@ -117,28 +117,36 @@ function ScopeFields({ value, onChange }: { value: Scope; onChange: (value: Scop
           onChange={(date) => change('scheduledEnd', iso(date))}
         />
         <NumberField
-          label={t.demo.photos}
+          label={t.workspaceUi.photos}
           value={value.photoCount}
           onChange={(number) => change('photoCount', number)}
         />
         <NumberField
-          label={t.demo.retouched}
+          label={t.workspaceUi.retouched}
           value={value.retouchedCount}
           onChange={(number) => change('retouchedCount', number)}
         />
         <NumberField
-          label={t.demo.revisions}
+          label={t.workspaceUi.revisions}
           value={value.revisionLimit}
           onChange={(number) => change('revisionLimit', number)}
         />
         <NumberField
-          label={t.demo.budget}
+          label={t.workspaceUi.budget}
           value={value.budget}
           onChange={(number) => change('budget', number)}
         />
       </div>
-      <Area label={t.demo.crew} value={value.crew} onChange={(crew) => change('crew', crew)} />
-      <Area label={t.demo.notes} value={value.notes} onChange={(notes) => change('notes', notes)} />
+      <Area
+        label={t.workspaceUi.crew}
+        value={value.crew}
+        onChange={(crew) => change('crew', crew)}
+      />
+      <Area
+        label={t.workspaceUi.notes}
+        value={value.notes}
+        onChange={(notes) => change('notes', notes)}
+      />
     </>
   );
 }

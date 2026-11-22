@@ -45,10 +45,10 @@ export function MessagesPage() {
   if (!session) return null;
   return (
     <>
-      <PageHeading title={t.demo.messages} />
+      <PageHeading title={t.workspaceUi.messages} />
       <QueryState query={list} empty={list.data?.length === 0} />
       <div className="two-col">
-        <nav className="panel" aria-label={t.demo.messages}>
+        <nav className="panel" aria-label={t.workspaceUi.messages}>
           {list.data?.map((item) => (
             <Link
               className="list-row"

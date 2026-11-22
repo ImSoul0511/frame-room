@@ -112,7 +112,7 @@ export function StudioPage() {
         >
           {discard ? (
             <div>
-              <p>{t.demo.discardedDraft}</p>
+              <p>{t.workspaceUi.discardedDraft}</p>
               <Action
                 onClick={() => {
                   setName('');
@@ -136,9 +136,9 @@ export function StudioPage() {
               <Field label={t.studio.name} value={name} onChange={setName} required />
               <Area label={t.studio.description} value={description} onChange={setDescription} />
               <Field label={t.city} value={city} onChange={setCity} required />
-              <Field label={t.demo.address} value={address} onChange={setAddress} required />
+              <Field label={t.workspaceUi.address} value={address} onChange={setAddress} required />
               <Field
-                label={t.demo.contactInfo}
+                label={t.workspaceUi.contactInfo}
                 type="email"
                 value={contactEmail}
                 onChange={setContactEmail}
@@ -341,11 +341,11 @@ function StudioManager({ studio }: { studio: Studio }) {
         </div>
       ) : null}
       {memberToRemove ? (
-        <Modal title={t.demo.removeMember} onClose={() => setMemberToRemove(undefined)}>
+        <Modal title={t.workspaceUi.removeMember} onClose={() => setMemberToRemove(undefined)}>
           <p>
             {memberToRemove.displayName} · @{memberToRemove.userName}
           </p>
-          <p>{t.demo.removeMemberNote}</p>
+          <p>{t.workspaceUi.removeMemberNote}</p>
           <Feedback error={change.error} />
           {removalBlocked ? <QueryState query={affected} /> : null}
           {removalBlocked
@@ -364,7 +364,7 @@ function StudioManager({ studio }: { studio: Studio }) {
               )
             }
           >
-            {t.demo.removeMember}
+            {t.workspaceUi.removeMember}
           </Action>
         </Modal>
       ) : null}

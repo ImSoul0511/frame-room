@@ -55,7 +55,7 @@ export function UserSearch() {
         <input
           id="user-search"
           type="search"
-          placeholder={t.discovery.userSearch}
+          placeholder={t.explore.search}
           value={draft}
           onChange={(event) => {
             setDraft(event.target.value);

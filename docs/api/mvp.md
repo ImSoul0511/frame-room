@@ -120,6 +120,19 @@ that is not evidence of named team reviewers' approval.
 
 ## Failure and privacy limits
 
+Public discovery displays database-backed portfolio photographs, descriptions and assigned tags.
+`GET /v1/portfolios` accepts `genre`, `tag` (slug), `q` (literal substring of title or description),
+`sort` (`newest`, `oldest`, `name`), `page` and `pageSize`. Ordering includes an ID tie-breaker.
+Responses include visible-image tags with optional Vietnamese names and taxonomy categories.
+Anonymous Cloud reads retain RLS, publication, deletion and hidden-image checks; direct PostgreSQL
+reads apply the same visibility conditions. Existing schemas without extended taxonomy columns
+retain their original kind/name labels. No schema migration is required.
+
+The browser has no role switcher, seeded fallback state or simulated workflow. Existing account
+routes use authenticated APIs. Bookings include a month calendar and owned schedule blocks;
+the notification bell uses the same account feed as the notification page. Explore loads twelve
+collections per request, offers explicit loading of the next page and lazy-loads photographs.
+
 Unknown paid-provider outcomes remain uncertain and are not automatically repeated.
 The worker rechecks project access before reading private inputs. Originals are
 preserved when generating edited derivatives. AI secrets remain server-only.

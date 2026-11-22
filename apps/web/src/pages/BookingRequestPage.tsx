@@ -29,7 +29,7 @@ export function BookingRequestPage() {
   return (
     <div className="narrow-page">
       <PageHeading
-        title={t.demo.newBooking}
+        title={t.workspaceUi.newBooking}
         subtitle={`${provider.data.provider.displayName} · ${service.name}`}
       />
       <BookingForm

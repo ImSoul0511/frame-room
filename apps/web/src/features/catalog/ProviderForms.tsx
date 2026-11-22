@@ -71,7 +71,7 @@ function PhotographerEditor({ initial }: { initial: OwnPhotographer | null }) {
         <Field label={t.district} value={district} onChange={setDistrict} />
       </div>
       <Field
-        label={t.demo.contactInfo}
+        label={t.workspaceUi.contactInfo}
         type="email"
         value={contact}
         onChange={setContact}
@@ -98,7 +98,7 @@ function PhotographerEditor({ initial }: { initial: OwnPhotographer | null }) {
         ))}
       </fieldset>
       <fieldset>
-        <legend>{t.demo.professionalRoles}</legend>
+        <legend>{t.workspaceUi.professionalRoles}</legend>
         {(['photographer', 'retoucher', 'art_director'] as const).map((role) => (
           <label className="checkbox-row" key={role}>
             <input
@@ -111,9 +111,9 @@ function PhotographerEditor({ initial }: { initial: OwnPhotographer | null }) {
               }
             />
             {role === 'art_director'
-              ? t.demo.artDirector
+              ? t.workspaceUi.artDirector
               : role === 'retoucher'
-                ? t.demo.retoucher
+                ? t.workspaceUi.retoucher
                 : t.photographer}
           </label>
         ))}
@@ -175,8 +175,8 @@ export function ServiceForm({
         <NumberField label={t.studio.duration} value={duration} onChange={setDuration} min={15} />
         <NumberField label={t.studio.photos} value={photos} onChange={setPhotos} />
         <NumberField label={t.studio.retouched} value={retouched} onChange={setRetouched} />
-        <NumberField label={t.demo.quota} value={quota} onChange={setQuota} min={1} />
-        <NumberField label={t.demo.revisions} value={revisions} onChange={setRevisions} />
+        <NumberField label={t.workspaceUi.quota} value={quota} onChange={setQuota} min={1} />
+        <NumberField label={t.workspaceUi.revisions} value={revisions} onChange={setRevisions} />
       </div>
       <Select
         label={t.portfolio.status}

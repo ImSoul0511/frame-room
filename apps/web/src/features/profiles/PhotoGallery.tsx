@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Modal, Provenance } from '../../components/ui';
-import { useStrings } from '../../lib/i18n';
-import { useDemo } from '../demo/DemoContext';
-import { DemoReportButton } from '../demo/ReportButton';
+import { useLanguage, useStrings } from '../../lib/i18n';
+import { ReportButton } from '../../pages/SettingsPage';
+import { FittedImage } from '../../components/FittedImage';
 
 export type GalleryPhoto = {
   id: string;
@@ -10,14 +10,13 @@ export type GalleryPhoto = {
   caption?: string;
   provenance?: string;
   crewCredits?: string;
-  tags?: { id: string; name: string }[];
+  tags?: { id: string; name: string; nameVi?: string | null }[];
 };
-export function PhotoGallery({ photos: source }: { photos: GalleryPhoto[] }) {
+export function PhotoGallery({ photos }: { photos: GalleryPhoto[] }) {
   const t = useStrings();
-  const demo = useDemo();
-  const photos = source.filter(
-    (photo) => demo.choice === 'account' || !demo.state.hiddenTargets.includes(photo.id),
-  );
+  const { language } = useLanguage();
+  const tagLabel = (tag: NonNullable<GalleryPhoto['tags']>[number]) =>
+    language === 'vi' ? tag.nameVi || tag.name : tag.name;
   const [selected, setSelected] = useState<number | null>(null);
   const current = selected === null ? null : photos[selected];
   const previous = () =>
@@ -33,14 +32,23 @@ export function PhotoGallery({ photos: source }: { photos: GalleryPhoto[] }) {
               onClick={() => setSelected(index)}
               aria-label={`${t.view}: ${photo.caption || `${t.profileUi.photo} ${index + 1}`}`}
             >
-              <img
+              <FittedImage
                 src={photo.url}
                 alt={photo.caption || `${t.profileUi.photo} ${index + 1}`}
                 loading="lazy"
+                decoding="async"
               />
               {photo.provenance ? <Provenance value={photo.provenance} /> : null}
             </button>
-            <DemoReportButton targetType="image" targetId={photo.id} title={photo.caption} />
+            {photo.caption ? <p className="photo-caption">{photo.caption}</p> : null}
+            <div className="profile-tags">
+              {photo.tags?.map((tag) => (
+                <span className="card-tag" key={tag.id}>
+                  {tagLabel(tag)}
+                </span>
+              ))}
+            </div>
+            <ReportButton targetType="portfolio_image" targetId={photo.id} />
           </div>
         ))}
       </div>
@@ -54,12 +62,13 @@ export function PhotoGallery({ photos: source }: { photos: GalleryPhoto[] }) {
             }}
           >
             <img src={current.url} alt={current.caption || t.profileUi.photo} />
+            {current.caption ? <p className="photo-caption">{current.caption}</p> : null}
             {current.crewCredits ? (
               <p>
-                {t.demo.credits} · {current.crewCredits}
+                {t.workspaceUi.credits} · {current.crewCredits}
               </p>
             ) : null}
-            {current.tags?.length ? <p>{current.tags.map((tag) => tag.name).join(' · ')}</p> : null}
+            {current.tags?.length ? <p>{current.tags.map(tagLabel).join(' · ')}</p> : null}
             <div className="row between wrap">
               <button className="text-button" onClick={previous}>
                 {t.profileUi.previous}

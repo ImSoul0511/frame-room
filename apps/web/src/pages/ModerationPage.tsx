@@ -46,7 +46,7 @@ export function ModerationPage() {
   return (
     <>
       <PageHeading
-        title={t.demo.moderation}
+        title={t.workspaceUi.moderation}
         action={<Link to="/admin/booking-completions">{t.booking.liveBookings}</Link>}
       />
       <div className="two-col">
@@ -66,9 +66,9 @@ export function ModerationPage() {
               </span>
               <span>
                 {report.outcome
-                  ? t.demo[report.outcome]
+                  ? t.workspaceUi[report.outcome]
                   : report.status === 'open'
-                    ? t.demo.pending
+                    ? t.workspaceUi.pending
                     : t.admin.legacyResolved}
               </span>
             </button>
@@ -77,7 +77,7 @@ export function ModerationPage() {
         {current ? <ReportPanel key={current} id={current} /> : null}
       </div>
       <section className="panel">
-        <h2>{t.demo.reassessment}</h2>
+        <h2>{t.workspaceUi.reassessment}</h2>
         <QueryState query={reviews} empty={reviews.data?.length === 0} />
         {reviews.data?.map((review) => (
           <ReviewPanel key={review.id} review={review} />
@@ -113,21 +113,22 @@ function ReportPanel({ id }: { id: string }) {
         {history.map((event) => (
           <li key={event.id}>
             {dateTime(event.createdAt)} ·{' '}
-            {t.demo[event.action as keyof typeof t.demo] ?? event.action} · {event.actorId}
+            {t.workspaceUi[event.action as keyof typeof t.workspaceUi] ?? event.action} ·{' '}
+            {event.actorId}
             <p>{event.reason}</p>
           </li>
         ))}
       </ul>
       {report.status === 'open' ? (
         <Form onSubmit={() => undefined}>
-          <Area label={t.demo.decisionReason} value={reason} onChange={setReason} />
+          <Area label={t.workspaceUi.decisionReason} value={reason} onChange={setReason} />
           <div className="row wrap">
             <Action
               disabled={!reason.trim() || !target}
               pending={decide.isPending}
               onClick={() => decide.mutate('actioned')}
             >
-              {t.demo.hide}
+              {t.workspaceUi.hide}
             </Action>
             <Action
               secondary
@@ -135,7 +136,7 @@ function ReportPanel({ id }: { id: string }) {
               pending={decide.isPending}
               onClick={() => decide.mutate('dismissed')}
             >
-              {t.demo.dismiss}
+              {t.workspaceUi.dismiss}
             </Action>
             <Action
               secondary
@@ -143,7 +144,7 @@ function ReportPanel({ id }: { id: string }) {
               pending={decide.isPending}
               onClick={() => decide.mutate('deferred')}
             >
-              {t.demo.defer}
+              {t.workspaceUi.defer}
             </Action>
           </div>
           <Feedback error={decide.error} success={decide.isSuccess ? t.saved : null} />
@@ -170,7 +171,7 @@ function ReviewPanel({ review }: { review: Review }) {
         {review.history.map((event) => (
           <li key={event.id}>
             {dateTime(event.createdAt)} ·{' '}
-            {t.demo[event.action as keyof typeof t.demo] ?? event.action}
+            {t.workspaceUi[event.action as keyof typeof t.workspaceUi] ?? event.action}
             {event.reason ? <p>{event.reason}</p> : null}
             {event.previousReview ? (
               <p>
@@ -180,14 +181,14 @@ function ReviewPanel({ review }: { review: Review }) {
           </li>
         ))}
       </ul>
-      <Area label={t.demo.decisionReason} value={reason} onChange={setReason} />
+      <Area label={t.workspaceUi.decisionReason} value={reason} onChange={setReason} />
       <div className="row wrap">
         <Action
           disabled={!reason.trim()}
           pending={decide.isPending}
           onClick={() => decide.mutate(true)}
         >
-          {t.demo.restore}
+          {t.workspaceUi.restore}
         </Action>
         <Action
           secondary
@@ -195,7 +196,7 @@ function ReviewPanel({ review }: { review: Review }) {
           pending={decide.isPending}
           onClick={() => decide.mutate(false)}
         >
-          {t.demo.keepHidden}
+          {t.workspaceUi.keepHidden}
         </Action>
       </div>
       <Feedback error={decide.error} />

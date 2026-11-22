@@ -275,9 +275,14 @@ export async function listPublicPortfolios(
   apiOrigin?: string,
 ): Promise<PublicPortfolio[]> {
   const rows = await repo.listPublicPortfolios(tx, query);
+  const tags = await repo.listTagsForPortfolios(
+    tx,
+    rows.map((row) => row.id),
+  );
   return rows.map((row) => ({
     ...row,
     coverUrl: buildPublicPortfolioImageUrl(supabaseUrl, row.coverUrl, apiOrigin),
+    tags: tags.filter((tag) => tag.portfolioId === row.id),
   }));
 }
 

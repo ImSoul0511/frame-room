@@ -72,7 +72,18 @@ export const exploreProviderSchema = providerSchema.extend({
 
 export const portfolioStatusSchema = z.enum(['draft', 'published', 'hidden']);
 
-/** Published portfolio shown on a public provider detail page. */
+/** Database tag taxonomy, including optional localized metadata. */
+export const tagKindSchema = z.enum(['tone', 'setting', 'mood']);
+export const tagSchema = z.object({
+  id: idSchema,
+  name: z.string(),
+  slug: z.string(),
+  kind: tagKindSchema,
+  nameVi: z.string().nullish(),
+  category: z.string().nullish(),
+});
+
+/** Published portfolio shown on public discovery and provider pages. */
 export const publicPortfolioSchema = z.object({
   id: idSchema,
   title: shortText,
@@ -86,6 +97,7 @@ export const publicPortfolioSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   coverUrl: z.string().nullable().optional(),
+  tags: z.array(tagSchema).optional(),
 });
 
 /** Publicly visible review shown on a provider detail page. */
@@ -100,17 +112,6 @@ export const publicReviewSchema = z.object({
   comment: z.string(),
   createdAt: z.string(),
   updatedAt: z.string(),
-});
-
-/** Tag taxonomy (bảng public.tags). */
-export const tagKindSchema = z.enum(['tone', 'setting', 'mood']);
-export const tagSchema = z.object({
-  id: idSchema,
-  name: z.string(),
-  slug: z.string(),
-  kind: tagKindSchema,
-  nameVi: z.string().nullish(),
-  category: z.string().nullish(),
 });
 
 /** Response payload for GET /v1/photographers/:id and GET /v1/studios/:id. */
@@ -177,6 +178,8 @@ export type OwnedService = z.infer<typeof ownedServiceSchema>;
 export const portfolioListQuerySchema = paginationSchema.extend({
   genre: genreSchema.optional(),
   tag: z.string().trim().min(1).max(60).optional(),
+  q: z.string().trim().min(1).max(120).optional(),
+  sort: z.enum(['newest', 'oldest', 'name']).optional(),
 });
 
 export const ownedPortfolioSchema = z.object({
