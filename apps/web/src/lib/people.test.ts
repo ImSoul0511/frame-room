@@ -15,9 +15,16 @@ describe('public user search results', () => {
         .photographerId,
     ).toBeNull();
   });
+  it('uses the visible photographer display name when available', () => {
+    expect(
+      parsePeople([
+        { ...person, photographers: { id: ID, is_hidden: false, display_name: 'Studio Name' } },
+      ])?.[0].displayName,
+    ).toBe('Studio Name');
+  });
   it('keeps clients in name results without inventing a public photographer page', () => {
     expect(parsePeople([{ ...person, photographers: null }])).toEqual([
-      { id: ID, displayName: 'Demo', userName: 'demo', photographerId: null },
+      { id: ID, displayName: 'Demo', userName: 'demo', avatarPath: null, photographerId: null },
     ]);
   });
 });

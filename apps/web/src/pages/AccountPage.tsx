@@ -4,21 +4,32 @@ import { useAuth } from '../lib/auth';
 import { useApi } from '../lib/hooks';
 import { useStrings } from '../lib/i18n';
 import { QueryState } from '../components/ui';
+import { UserAvatar } from '../components/UserAvatar';
 
 export function AccountPage() {
   const t = useStrings();
   const { profile, session } = useAuth();
   const isPhotographer = Boolean(profile?.roles.includes('photographer'));
+  const isProfessional = Boolean(
+    profile?.roles.some((role) => role === 'photographer' || role === 'studio_manager'),
+  );
   const photographer = useApi<OwnPhotographer | null>('/v1/photographers/me', isPhotographer);
   const own = photographer.data;
   return (
     <div className="account-page">
       <header className="account-profile-heading">
-        <div className="profile-monogram">{profile?.displayName.slice(0, 1)}</div>
+        <UserAvatar
+          name={profile?.displayName ?? ''}
+          avatarPath={profile?.avatarPath}
+          className="profile-monogram"
+        />
         <div>
           <p className="eyebrow">{t.profileUi.account}</p>
           <h1>{profile?.displayName}</h1>
           <p className="muted">@{profile?.userName}</p>
+          <Link className="text-button" to="/settings">
+            {t.profileUi.chooseAvatar}
+          </Link>
         </div>
       </header>
       <div className="account-profile-columns">
@@ -53,15 +64,17 @@ export function AccountPage() {
               </div>
             ) : null}
           </section>
-          <section className="profile-section">
-            <h2>{t.profileUi.profileLinks}</h2>
-            <p className="muted">{t.profileUi.profileLinksDescription}</p>
-            <div className="account-quick-links">
-              <Link to="/portfolio">{t.portfolio.title}</Link>
-              <Link to="/bookings">{t.workspaceUi.bookings}</Link>
-              <Link to="/studio">{t.nav.studio}</Link>
-            </div>
-          </section>
+          {isProfessional ? (
+            <section className="profile-section">
+              <h2>{t.profileUi.profileLinks}</h2>
+              <p className="muted">{t.profileUi.profileLinksDescription}</p>
+              <div className="account-quick-links">
+                <Link to="/portfolio">{t.portfolio.title}</Link>
+                <Link to="/bookings">{t.workspaceUi.bookings}</Link>
+                <Link to="/studio">{t.nav.studio}</Link>
+              </div>
+            </section>
+          ) : null}
         </div>
         <aside className="profile-aside">
           <section className="profile-summary">

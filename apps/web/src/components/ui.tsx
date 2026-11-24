@@ -100,13 +100,26 @@ export function Area({
   value,
   onChange,
   placeholder,
+  required = false,
+  error,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
+  required?: boolean;
+  error?: string;
 }) {
-  return <TextArea label={label} value={value} onChange={onChange} placeholder={placeholder} />;
+  return (
+    <TextArea
+      label={label}
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+      isRequired={required}
+      status={error ? { type: 'error', message: error } : undefined}
+    />
+  );
 }
 export function Select({
   label,
@@ -308,10 +321,19 @@ export function FilePicker({
     </div>
   );
 }
-export function Form({ children, onSubmit }: { children: ReactNode; onSubmit: () => void }) {
+export function Form({
+  children,
+  onSubmit,
+  noValidate = false,
+}: {
+  children: ReactNode;
+  onSubmit: () => void;
+  noValidate?: boolean;
+}) {
   return (
     <form
       className="form-stack"
+      noValidate={noValidate}
       onSubmit={(e: FormEvent) => {
         e.preventDefault();
         onSubmit();
@@ -366,9 +388,7 @@ export function Modal({
     <dialog ref={ref} onCancel={onClose} aria-labelledby={id} className="modal">
       <div className="row between">
         <h2 id={id}>{title}</h2>
-        <button className="icon-button" onClick={onClose} aria-label={t.close}>
-          ×
-        </button>
+        <button type="button" className="icon-button" onClick={onClose} aria-label={t.close} />
       </div>
       {children}
     </dialog>

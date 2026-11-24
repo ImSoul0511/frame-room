@@ -1,219 +1,105 @@
-import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  Action,
-  Area,
-  Feedback,
-  FilePicker,
-  Form,
-  PageHeading,
-  QueryState,
-} from '../components/ui';
-import { api, dateTime, post, supabase, upload } from '../lib/api';
+import { QueryState } from '../components/ui';
+import { UserAvatar } from '../components/UserAvatar';
+import { ConversationThread } from '../features/messaging/ConversationThread';
+import type { Conversation } from '../features/messaging/types';
 import { useAuth } from '../lib/auth';
-import { useApi, useTask } from '../lib/hooks';
+import { useApi } from '../lib/hooks';
 import { useStrings } from '../lib/i18n';
-import { MessageAttachment } from '../features/booking/MessageAttachment';
-
-type Conversation = {
-  id: string;
-  clientId: string;
-  clientName: string;
-  providerName: string;
-  photographerId: string | null;
-  studioId: string | null;
-};
-type Message = {
-  id: string;
-  senderId: string | null;
-  senderName: string | null;
-  bookingId: string | null;
-  text: string;
-  type: 'text' | 'image' | 'system';
-  createdAt: string;
-  storagePath: string | null;
-};
-type Messages = { items: Message[]; before: string | null };
+import { useMessageReadState } from '../features/messaging/readState';
 
 export function MessagesPage() {
   const t = useStrings();
-  const { session } = useAuth();
+  const { session, profile } = useAuth();
   const [params] = useSearchParams();
   const list = useApi<Conversation[]>('/v1/conversations', true, 15000);
+  const readMessages = useMessageReadState(session?.user.id);
   const active = list.data?.find((entry) => entry.id === params.get('conversation'));
   if (!session) return null;
+  const currentUserName =
+    profile?.displayName ?? session.user.email?.split('@')[0] ?? t.messaging.you;
+
   return (
     <>
-      <PageHeading title={t.workspaceUi.messages} />
-      <QueryState query={list} empty={list.data?.length === 0} />
-      <div className="two-col">
-        <nav className="panel" aria-label={t.workspaceUi.messages}>
-          {list.data?.map((item) => (
-            <Link
-              className="list-row"
-              key={item.id}
-              to={`?conversation=${item.id}`}
-              aria-current={active?.id === item.id ? 'page' : undefined}
-            >
-              {item.clientId === session.user.id ? item.providerName : item.clientName}
-            </Link>
-          ))}
-        </nav>
-        {active ? (
-          <ConversationThread key={active.id} conversation={active} userId={session.user.id} />
-        ) : null}
-      </div>
+      {list.data?.length ? (
+        <div className={`messenger-layout ${active ? 'has-active-conversation' : ''}`}>
+          <aside className="messenger-sidebar">
+            <header className="messenger-sidebar-header">
+              <Link className="messenger-home" to="/explore" aria-label={t.workspaceUi.explore}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path
+                    d="M19 12H5m0 0 7-7m-7 7 7 7"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </Link>
+              <h2>{t.messaging.conversations}</h2>
+              <span>{list.data.length}</span>
+            </header>
+            <nav className="messenger-conversations" aria-label={t.messaging.conversations}>
+              {list.data.map((conversation) => {
+                const name =
+                  conversation.clientId === session.user.id
+                    ? conversation.providerName
+                    : conversation.clientName;
+                const selected = active?.id === conversation.id;
+                return (
+                  <Link
+                    key={conversation.id}
+                    className={`messenger-conversation ${selected ? 'is-selected' : ''}`}
+                    to={`?conversation=${encodeURIComponent(conversation.id)}`}
+                    aria-current={selected ? 'page' : undefined}
+                  >
+                    <UserAvatar
+                      name={name}
+                      avatarPath={
+                        conversation.clientId === session.user.id
+                          ? conversation.providerAvatarPath
+                          : conversation.clientAvatarPath
+                      }
+                      className="messenger-avatar"
+                    />
+                    <span className="messenger-conversation-name">{name}</span>
+                    {conversation.latestIncomingMessageId &&
+                    readMessages[conversation.id] !== conversation.latestIncomingMessageId ? (
+                      <span
+                        className="message-unread-dot"
+                        aria-label={t.messaging.unreadMessages}
+                      />
+                    ) : null}
+                  </Link>
+                );
+              })}
+            </nav>
+          </aside>
+          {active ? (
+            <ConversationThread
+              key={active.id}
+              conversation={active}
+              userId={session.user.id}
+              currentUserName={currentUserName}
+              currentUserAvatarPath={profile?.avatarPath}
+            />
+          ) : (
+            <section className="messenger-empty-selection" aria-live="polite">
+              <span className="messenger-empty-icon" aria-hidden="true">
+                <span />
+              </span>
+              <p>{t.messaging.selectConversation}</p>
+            </section>
+          )}
+        </div>
+      ) : (
+        <div className="messenger-list-state">
+          <Link className="button-link" to="/explore">
+            {t.workspaceUi.explore}
+          </Link>
+          <QueryState query={list} empty={list.data?.length === 0} />
+        </div>
+      )}
     </>
-  );
-}
-
-function ConversationThread({
-  conversation,
-  userId,
-}: {
-  conversation: Conversation;
-  userId: string;
-}) {
-  const t = useStrings();
-  const client = useQueryClient();
-  const id = conversation.id;
-  const queryKey = ['conversation', userId, id];
-  const [connected, setConnected] = useState(false);
-  const [submissionId, setSubmissionId] = useState(() => crypto.randomUUID());
-  const [text, setText] = useState('');
-  const [attachment, setAttachment] = useState<string | null>(null);
-  const messages = useInfiniteQuery({
-    queryKey,
-    initialPageParam: '',
-    queryFn: ({ pageParam, signal }) =>
-      api<Messages>(`/v1/conversations/${id}/messages${pageParam ? `?before=${pageParam}` : ''}`, {
-        signal,
-      }),
-    getNextPageParam: (page) => page.before ?? undefined,
-    refetchInterval: connected ? false : 5000,
-  });
-  useEffect(() => {
-    if (!supabase) return;
-    const refresh = () => void client.invalidateQueries({ queryKey: ['conversation', userId, id] });
-    const channel = supabase
-      .channel(`conversation:${id}`)
-      .on(
-        'postgres_changes',
-        {
-          schema: 'public',
-          table: 'room_messages',
-          event: 'INSERT',
-          filter: `conversation_id=eq.${id}`,
-        },
-        refresh,
-      )
-      .subscribe((status) => {
-        setConnected(status === 'SUBSCRIBED');
-        if (status === 'SUBSCRIBED') refresh();
-      });
-    return () => {
-      void supabase?.removeChannel(channel);
-    };
-  }, [client, id, userId]);
-  const send = useTask(async () => {
-    await post(`/v1/conversations/${id}/messages`, { submissionId, text, storagePath: attachment });
-    setText('');
-    setAttachment(null);
-    setSubmissionId(crypto.randomUUID());
-    await client.invalidateQueries({ queryKey });
-  });
-  const file = useTask(async (image: File) => {
-    const result = await upload(image, 'conversation-files', id);
-    setAttachment(result.storagePath);
-    setSubmissionId(crypto.randomUUID());
-  });
-  const isClient = conversation.clientId === userId;
-  const provider = conversation.studioId
-    ? `studio/${conversation.studioId}`
-    : `photographer/${conversation.photographerId}`;
-  const items = messages.data?.pages.flatMap((page) => page.items).reverse() ?? [];
-  return (
-    <section className="panel">
-      <h2>{isClient ? conversation.providerName : conversation.clientName}</h2>
-      {isClient ? <Link to={`/providers/${provider}`}>{t.discovery.viewProfile}</Link> : null}
-      {!connected ? <p role="status">{t.discovery.messageUpdatesDelayed}</p> : null}
-      <QueryState query={messages} empty={items.length === 0} />
-      {messages.hasNextPage ? (
-        <Action
-          secondary
-          pending={messages.isFetchingNextPage}
-          onClick={() => void messages.fetchNextPage()}
-        >
-          {t.discovery.loadEarlierMessages}
-        </Action>
-      ) : null}
-      <div className="room-messages" aria-live="polite">
-        {items.map((message) => (
-          <MessageRow key={message.id} message={message} own={message.senderId === userId} />
-        ))}
-      </div>
-      <Form
-        onSubmit={() => {
-          if (!send.isPending && !file.isPending) send.mutate();
-        }}
-      >
-        <fieldset disabled={send.isPending}>
-          <Area
-            label={t.booking.messages}
-            value={text}
-            onChange={(value) => {
-              setText(value);
-              setSubmissionId(crypto.randomUUID());
-            }}
-          />
-          <FilePicker
-            label={attachment ? t.explore.referenceReady : t.project.addReference}
-            onFile={(image) => file.mutate(image)}
-            disabled={file.isPending || send.isPending}
-          />
-          {attachment ? (
-            <Action
-              secondary
-              onClick={() => {
-                setAttachment(null);
-                setSubmissionId(crypto.randomUUID());
-              }}
-            >
-              {t.delete}
-            </Action>
-          ) : null}
-        </fieldset>
-        <Action
-          type="submit"
-          pending={send.isPending}
-          disabled={file.isPending || (!text.trim() && !attachment)}
-        >
-          {t.booking.send}
-        </Action>
-      </Form>
-      <Feedback error={send.error ?? file.error} />
-    </section>
-  );
-}
-
-function MessageRow({ message, own }: { message: Message; own: boolean }) {
-  const t = useStrings();
-  return (
-    <article className={`room-message ${own ? 'mine' : ''}`}>
-      <small>
-        {message.senderName ? `${message.senderName} · ` : ''}
-        {dateTime(message.createdAt)}
-      </small>
-      {message.bookingId ? (
-        <Link to={`/bookings/${message.bookingId}`}>{t.booking.title}</Link>
-      ) : null}
-      <p>
-        {message.type === 'system'
-          ? (t.statuses[message.text as keyof typeof t.statuses] ?? message.text)
-          : message.text}
-      </p>
-      {message.storagePath ? <MessageAttachment messageId={message.id} /> : null}
-    </article>
   );
 }

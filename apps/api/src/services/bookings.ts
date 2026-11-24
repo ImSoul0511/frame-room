@@ -67,6 +67,12 @@ export async function createBooking(
       input.note,
     ],
   );
+  for (const addon of addons) {
+    await tx.execute(
+      'insert into booking_add_ons(booking_id,add_on_id,name,quantity,unit_price) values($1,$2,$3,1,$4)',
+      [result.id, addon.id, addon.name, addon.price],
+    );
+  }
   await tx.execute('update creative_projects set version=version+1 where id=$1', [p.id]);
   return result;
 }

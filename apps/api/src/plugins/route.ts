@@ -34,6 +34,15 @@ export class Respond<T> {
   ) {}
 }
 
+/** Validates a database-backed response before the transaction commits. */
+export function validateResponse<T extends z.ZodTypeAny>(schema: T, value: unknown): z.output<T> {
+  const result = schema.safeParse(value);
+  if (!result.success) {
+    throw new ApiError(500, 'INTERNAL_ERROR', 'internal_error', 'Unexpected server error');
+  }
+  return result.data;
+}
+
 export interface RouteContext<A extends Access, P, Q, B> {
   actor: A extends 'verified' ? Identity : null;
   params: P;

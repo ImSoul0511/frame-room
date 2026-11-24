@@ -6,6 +6,7 @@ import { api, post, patch } from '../lib/api';
 import { useApi, useTask } from '../lib/hooks';
 import { useStrings } from '../lib/i18n';
 import { PhotographerForm, ProfileForm } from '../features/catalog/ProviderForms';
+import { AvatarEditor } from '../features/catalog/AvatarEditor';
 import { LanguageSwitcher } from '../components/LanguageSwitcher';
 import {
   Action,
@@ -29,6 +30,7 @@ export function SettingsPage() {
       <div className="two-col">
         <section className="panel">
           <h2>{t.onboarding}</h2>
+          {profile ? <AvatarEditor profile={profile} /> : null}
           {profile ? <ProfileForm profile={profile} /> : null}
           <p className="muted">{session?.user.email}</p>
           <LanguageSwitcher />

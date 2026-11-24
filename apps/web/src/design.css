@@ -39,10 +39,75 @@ body {
 .user-search-results {
   z-index: 30;
 }
+.people-search-page {
+  padding: 28px 0 50px;
+}
+.people-search-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr));
+  gap: 18px;
+  margin: 24px 0;
+}
+.people-search-card {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 16px;
+  padding: 22px;
+  border: 1px solid var(--fr-line);
+  border-radius: 12px;
+  background: #fff;
+}
+.people-search-card:hover {
+  border-color: #8794b0;
+  background: #faf9fd;
+}
+.people-search-avatar {
+  width: 56px;
+  height: 56px;
+  background: #e4dfed;
+  color: #485b82;
+}
+.people-search-card-info {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+}
+.people-search-card-info strong,
+.people-search-card-info small {
+  overflow-wrap: anywhere;
+}
+.people-search-card-info small {
+  color: var(--fr-muted);
+}
+.people-search-card-link {
+  color: #536894;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+@media (max-width: 480px) {
+  .people-search-card {
+    flex-wrap: wrap;
+  }
+  .people-search-card-link {
+    margin-left: 72px;
+  }
+}
 .navigation-bar {
   justify-content: space-between;
   gap: 24px;
   min-height: 74px;
+}
+.navigation-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  flex: 0 0 auto;
+  padding: 0 4.5%;
+  background: var(--fr-paper);
+  border-bottom: 1px solid var(--fr-line);
 }
 .top-navigation {
   min-width: 0;
@@ -104,17 +169,104 @@ body {
 .notification-bell:hover {
   background: var(--fr-surface);
 }
-.notification-count {
+.notification-dropdown {
+  position: relative;
+}
+.notification-preview {
   position: absolute;
-  right: -7px;
-  top: -7px;
-  min-width: 22px;
-  padding: 1px 5px;
-  text-align: center;
-  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  z-index: 50;
+  top: calc(100% + 10px);
+  right: 0;
+  width: min(370px, calc(100vw - 32px));
+  max-height: min(360px, 50dvh);
+  overflow: hidden;
+  border: 1px solid var(--fr-line);
+  border-radius: 14px;
+  background: #fffdf9;
+  box-shadow: 0 12px 36px #35456826;
+}
+.notification-preview-header {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 17px 18px;
+  border-bottom: 1px solid var(--fr-line);
+}
+.notification-preview-header a {
+  color: #536894;
+  font-size: 0.8125rem;
+}
+.notification-preview-list {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.notification-preview-list > p {
+  padding: 18px;
+  color: #68748d;
+  font-size: 0.875rem;
+}
+.notification-preview-item {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 18px;
+  border: 0;
+  border-bottom: 1px solid var(--fr-line);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+.notification-preview-item:hover,
+.notification-preview-item.is-unread {
+  background: #f2f0f8;
+}
+.notification-preview-item strong,
+.notification-preview-item small {
+  display: block;
+}
+.notification-preview-item strong {
+  font-size: 0.875rem;
+}
+.notification-preview-item small {
+  margin-top: 5px;
+  color: #68748d;
   font-size: 0.75rem;
-  background: var(--fr-accent);
-  color: #fff;
+}
+.notification-preview-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  margin-top: 6px;
+  border-radius: 50%;
+}
+.notification-preview-item.is-unread .notification-preview-dot {
+  background: #536894;
+}
+.notification-unread-dot {
+  position: absolute;
+  right: 1px;
+  top: 1px;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--fr-paper);
+  border-radius: 50%;
+  background: #c53030;
+}
+.message-unread-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  flex: 0 0 9px;
+  margin-left: 7px;
+  border-radius: 50%;
+  background: #c53030;
+  vertical-align: middle;
 }
 .avatar {
   width: 44px;
@@ -533,6 +685,7 @@ body {
 }
 .collection-search {
   display: flex;
+  align-items: center;
   gap: 12px;
   padding: 9px;
   margin: 30px 0 25px;
@@ -992,9 +1145,12 @@ body {
   .navigation-bar .top-navigation a {
     font-size: 0.9375rem;
   }
-  .topbar-actions .notification-bell {
+  .topbar-actions .notification-dropdown {
     grid-column: 2;
     grid-row: 1;
+  }
+  .notification-preview {
+    right: -56px;
   }
   .topbar-actions > .avatar-trigger,
   .topbar-actions > .button-link {
@@ -1173,6 +1329,94 @@ body {
   }
   .page-footer > span:last-of-type {
     margin-left: 0;
+  }
+}
+.app-layout.app-layout-messages {
+  position: fixed;
+  inset: 0;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  padding: 24px;
+  background: var(--fr-frame-background);
+}
+.app-layout-messages .app-body {
+  display: flex;
+  width: 100%;
+  max-width: 1640px;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  margin: 0 auto;
+}
+.app-layout-messages .page-footer {
+  display: none;
+}
+.app-layout-messages .site-header {
+  flex: 0 0 auto;
+}
+.app-layout-messages .main-content {
+  display: flex;
+  width: 100%;
+  max-width: none;
+  min-height: 0;
+  flex: 1;
+  margin: 0;
+  overflow: hidden;
+  padding: 0 4.5% 24px;
+}
+.app-layout-messages .messenger-layout {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  border: 1px solid var(--fr-line);
+  border-radius: 12px;
+  box-shadow: none;
+}
+.messenger-sidebar-header h2 {
+  flex: 1;
+}
+.messenger-home {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  place-items: center;
+  border-radius: 50%;
+  background: #f0eff6;
+  color: #53658b;
+}
+.messenger-conversations {
+  overscroll-behavior: contain;
+}
+.messenger-list-state {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 24px;
+  padding: 24px;
+}
+@media (max-width: 1100px) {
+  .app-layout.app-layout-messages {
+    padding: 16px;
+  }
+}
+@media (max-width: 760px) {
+  .app-layout-messages .messenger-layout:not(.has-active-conversation) .messenger-empty-selection {
+    display: none;
+  }
+}
+@media (max-width: 480px) {
+  .navigation-sticky {
+    padding-inline: 20px;
+  }
+  .app-layout.app-layout-messages {
+    padding: 8px;
+  }
+  .app-layout-messages .main-content {
+    padding: 0 20px 8px;
   }
 }
 @media (prefers-reduced-motion: reduce) {

@@ -10,6 +10,10 @@ export const genres = [
   'food',
   'event',
   'cosplay',
+  'drink',
+  'yearbook',
+  'outdoor',
+  'tet_holiday',
 ] as const;
 export const genreSchema = z.enum(genres);
 export const providerTypeSchema = z.enum(['photographer', 'studio']);
@@ -50,6 +54,7 @@ export const profileInputSchema = z.object({
 });
 export const profileSchema = profileInputSchema.extend({
   id: idSchema,
+  avatarPath: z.string().nullable().optional(),
   roles: z.array(z.string()),
   createdAt: z.string(),
 });

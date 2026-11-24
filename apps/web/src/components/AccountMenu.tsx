@@ -3,9 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/api';
 import { useTask } from '../lib/hooks';
 import { useStrings } from '../lib/i18n';
+import { UserAvatar } from './UserAvatar';
 import { Feedback } from './ui';
 
-export function AccountMenu({ displayName }: { displayName: string }) {
+export function AccountMenu({
+  displayName,
+  avatarPath,
+}: {
+  displayName: string;
+  avatarPath?: string | null;
+}) {
   const t = useStrings();
   const navigate = useNavigate();
   const logout = useTask(async () => {
@@ -27,9 +34,7 @@ export function AccountMenu({ displayName }: { displayName: string }) {
             aria-label={t.design.accountMenu}
             disabled={logout.isPending}
           >
-            <span className="avatar" aria-hidden="true">
-              {displayName.slice(0, 1)}
-            </span>
+            <UserAvatar name={displayName} avatarPath={avatarPath} className="avatar" />
           </button>
         )}
         items={[

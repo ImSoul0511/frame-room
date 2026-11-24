@@ -46,9 +46,18 @@ export async function readConversation(tx: Transaction, id: string) {
 
 export function listConversations(tx: Transaction) {
   return tx.rows(
-    `select c.*, p.display_name as client_name, coalesce(s.name, ph.display_name) as provider_name
+    `select c.*, p.display_name as client_name, p.avatar_path as client_avatar_path,
+       coalesce(s.name, ph.display_name) as provider_name, pp.avatar_path as provider_avatar_path,
+       latest_incoming.id as latest_incoming_message_id
      from conversations c join profiles p on p.id=c.client_id
      left join studios s on s.id=c.studio_id left join photographers ph on ph.id=c.photographer_id
+     left join profiles pp on pp.id=ph.user_id
+     left join lateral (
+       select m.id from room_messages m
+       where m.conversation_id=c.id and m.sender_id <> auth.uid()
+         and m.type <> 'system' and private.can_read_conversation_message(m.id)
+       order by m.created_at desc, m.id desc limit 1
+     ) latest_incoming on true
      where private.can_read_conversation(c.id)
      order by coalesce((select max(m.created_at) from room_messages m where m.conversation_id=c.id),
        c.created_at) desc, c.id desc limit 100`,
@@ -67,7 +76,7 @@ export type ConversationMessage = {
 export async function listMessages(tx: Transaction, id: string, before: string | null) {
   await readConversation(tx, id);
   const rows = await tx.rows<ConversationMessage & { bookingId: string | null }>(
-    `select m.*, r.booking_id, p.display_name as sender_name
+    `select m.*, r.booking_id, p.display_name as sender_name, p.avatar_path as sender_avatar_path
      from room_messages m left join shoot_rooms r on r.id=m.room_id
      left join profiles p on p.id=m.sender_id
      where m.conversation_id=$1 and private.can_read_conversation_message(m.id)

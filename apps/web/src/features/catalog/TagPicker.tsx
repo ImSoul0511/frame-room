@@ -6,10 +6,12 @@ export function TagPicker({
   tags,
   selected,
   onChange,
+  disabled = false,
 }: {
   tags: Tag[];
   selected: string[];
   onChange: (ids: string[]) => void;
+  disabled?: boolean;
 }) {
   const t = useStrings();
   const { language } = useLanguage();
@@ -22,7 +24,7 @@ export function TagPicker({
   );
   const categories = [...new Set(matches.map((tag) => tag.category || tag.kind))];
   return (
-    <fieldset className="tag-picker">
+    <fieldset className="tag-picker" disabled={disabled}>
       <legend>
         {t.design.allTags} · {selected.length}/20
       </legend>

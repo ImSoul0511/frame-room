@@ -40,7 +40,6 @@ export function BookingsPage() {
         }
       />
       <QueryState query={list} empty={list.data?.length === 0} />
-      {list.isSuccess ? <BookingCalendar bookings={list.data} /> : null}
       <div className="booking-list">
         {list.data?.map((b) => (
           <Link key={b.id} to={`/bookings/${b.id}`} className="booking-card">
@@ -57,6 +56,7 @@ export function BookingsPage() {
           </Link>
         ))}
       </div>
+      {list.isSuccess ? <BookingCalendar bookings={list.data} /> : null}
     </>
   );
 }

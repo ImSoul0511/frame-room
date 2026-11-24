@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { createPortfolioUploadVerifier } from '../lib/portfolio-upload.js';
-import { defineRoute, type ApiModule } from '../plugins/route.js';
+import { defineRoute, validateResponse, type ApiModule } from '../plugins/route.js';
 import {
   exploreProviderSchema,
   exploreQuerySchema,
@@ -185,7 +185,9 @@ export const catalogModule: ApiModule = {
       response: studioSchema,
       errors: [403],
       handler: ({ actor, body, transaction }) =>
-        transaction((tx) => catalog.createStudio(tx, actor.id, body)),
+        transaction(async (tx) =>
+          validateResponse(studioSchema, await catalog.createStudio(tx, actor.id, body)),
+        ),
     });
 
     defineRoute(app, deps, {
@@ -198,7 +200,9 @@ export const catalogModule: ApiModule = {
       response: studioSchema,
       errors: [403],
       handler: ({ actor, params, body, transaction }) =>
-        transaction((tx) => catalog.updateStudio(tx, actor.id, params.id, body)),
+        transaction(async (tx) =>
+          validateResponse(studioSchema, await catalog.updateStudio(tx, actor.id, params.id, body)),
+        ),
     });
 
     defineRoute(app, deps, {
@@ -521,7 +525,9 @@ export const catalogModule: ApiModule = {
       errors: [403, 409],
       handler: ({ actor, params, body, transaction }) =>
         transaction((tx) =>
-          catalog.updateStudioMemberRole(tx, actor.id, params.id, params.userId, body.role),
+          catalog
+            .updateStudioMemberRole(tx, actor.id, params.id, params.userId, body.role)
+            .then((member) => validateResponse(studioTeamMemberSchema, member)),
         ),
     });
 
@@ -608,6 +614,33 @@ export const catalogModule: ApiModule = {
       errors: [404],
       handler: ({ params, transaction }) =>
         transaction((tx) => catalog.listServiceAddOns(tx, params.id)),
+    });
+
+    defineRoute(app, deps, {
+      method: 'GET',
+      url: '/v1/me/services/:id/add-ons',
+      summary: 'List active and inactive add-ons for an owned service.',
+      access: 'verified',
+      params: idParamsSchema,
+      response: z.array(serviceAddOnSchema),
+      errors: [403, 404],
+      handler: ({ actor, params, transaction }) =>
+        transaction((tx) => catalog.listOwnedAddOns(tx, actor.id, params.id)),
+    });
+
+    defineRoute(app, deps, {
+      method: 'PATCH',
+      url: '/v1/services/:id/add-ons/:addOnId',
+      summary: 'Update an add-on for an owned service.',
+      access: 'verified',
+      params: z.object({ id: idSchema, addOnId: idSchema }),
+      body: serviceAddOnInputSchema,
+      response: serviceAddOnSchema,
+      errors: [403, 404],
+      handler: ({ actor, params, body, transaction }) =>
+        transaction((tx) =>
+          catalog.updateServiceAddOn(tx, actor.id, params.id, params.addOnId, body),
+        ),
     });
 
     defineRoute(app, deps, {

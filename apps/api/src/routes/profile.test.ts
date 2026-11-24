@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AUTH, bodyData, buildTestApp, closeTestApps } from '../../test/helpers/build-test-app.js';
 import * as repo from '../repositories/profiles.js';
+import { MediaService } from '../services/media.js';
 
 vi.mock('../repositories/profiles.js');
 
@@ -165,5 +166,53 @@ describe('PATCH /v1/me', () => {
     const app = await buildTestApp();
     const res = await app.inject({ method: 'PATCH', url: '/v1/me', payload: PROFILE_INPUT });
     expect(res.statusCode).toBe(401);
+  });
+});
+
+describe('PATCH /v1/me/avatar', () => {
+  it('validates ownership of the uploaded image before updating the profile', async () => {
+    const verify = vi.spyOn(MediaService.prototype, 'verify').mockResolvedValue({
+      width: 100,
+      height: 100,
+      mimeType: 'image/webp',
+    });
+    vi.mocked(repo.updateAvatar).mockResolvedValue(true);
+    vi.mocked(repo.findProfile).mockResolvedValue({ ...PROFILE, avatarPath: 'user-1/photo.webp' });
+    const app = await buildTestApp();
+    const response = await app.inject({
+      method: 'PATCH',
+      url: '/v1/me/avatar',
+      headers: AUTH,
+      payload: { avatarPath: 'user-1/photo.webp' },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(verify).toHaveBeenCalledWith('avatars', 'user-1/photo.webp', 'user-1');
+    expect(repo.updateAvatar).toHaveBeenCalledWith(
+      expect.anything(),
+      'user-1',
+      'user-1/photo.webp',
+    );
+    verify.mockRestore();
+  });
+  it('rejects another user’s path and supports clearing the avatar', async () => {
+    const app = await buildTestApp();
+    const denied = await app.inject({
+      method: 'PATCH',
+      url: '/v1/me/avatar',
+      headers: AUTH,
+      payload: { avatarPath: 'someone/photo.webp' },
+    });
+    expect(denied.statusCode).toBe(403);
+    expect(repo.updateAvatar).not.toHaveBeenCalled();
+    vi.mocked(repo.updateAvatar).mockResolvedValue(true);
+    vi.mocked(repo.findProfile).mockResolvedValue({ ...PROFILE, avatarPath: null });
+    const cleared = await app.inject({
+      method: 'PATCH',
+      url: '/v1/me/avatar',
+      headers: AUTH,
+      payload: { avatarPath: null },
+    });
+    expect(cleared.statusCode).toBe(200);
+    expect(repo.updateAvatar).toHaveBeenCalledWith(expect.anything(), 'user-1', null);
   });
 });

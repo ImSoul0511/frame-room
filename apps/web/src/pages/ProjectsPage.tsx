@@ -1,6 +1,12 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import type { AiJob, Artifact, BriefContent, CreativeProject } from '@frameroom/shared';
+import {
+  projectInputSchema,
+  type AiJob,
+  type Artifact,
+  type BriefContent,
+  type CreativeProject,
+} from '@frameroom/shared';
 import { api, patch, post, upload } from '../lib/api';
 import { useApi, useTask } from '../lib/hooks';
 import { useStrings } from '../lib/i18n';
@@ -28,6 +34,7 @@ export function ProjectsPage() {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [idea, setIdea] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<{ title?: string; idea?: string }>({});
   const navigate = useNavigate();
   const create = useTask(async () => {
     const p = await post<CreativeProject>('/v1/creative-projects', { title, idea });
@@ -57,13 +64,51 @@ export function ProjectsPage() {
       </div>
       {open ? (
         <Modal title={t.project.new} onClose={() => setOpen(false)}>
-          <Form onSubmit={() => create.mutate()}>
-            <Field label={t.project.name} value={title} onChange={setTitle} required />
+          <Form
+            noValidate
+            onSubmit={() => {
+              if (create.isPending) return;
+              const result = projectInputSchema.safeParse({ title, idea });
+              if (!result.success) {
+                const fields = result.error.flatten().fieldErrors;
+                setFieldErrors({
+                  title: fields.title
+                    ? title.trim()
+                      ? t.project.nameTooLong
+                      : t.project.nameRequired
+                    : undefined,
+                  idea: fields.idea
+                    ? idea.trim()
+                      ? t.project.ideaTooLong
+                      : t.project.ideaRequired
+                    : undefined,
+                });
+                return;
+              }
+              setFieldErrors({});
+              create.mutate();
+            }}
+          >
+            <Field
+              label={t.project.name}
+              value={title}
+              onChange={(value) => {
+                setTitle(value);
+                setFieldErrors((errors) => ({ ...errors, title: undefined }));
+              }}
+              required
+              error={fieldErrors.title}
+            />
             <Area
               label={t.project.idea}
               value={idea}
-              onChange={setIdea}
+              onChange={(value) => {
+                setIdea(value);
+                setFieldErrors((errors) => ({ ...errors, idea: undefined }));
+              }}
               placeholder={t.project.placeholder}
+              required
+              error={fieldErrors.idea}
             />
             <Feedback error={create.error} />
             <Action type="submit" pending={create.isPending}>
@@ -193,7 +238,11 @@ export function ProjectPage() {
                     <label className="checkbox-row">
                       <input
                         type="checkbox"
-                        checked={p.selectedArtifactIds.includes(a.id)}
+                        checked={
+                          selectConcept.isPending && selectConcept.variables?.id === a.id
+                            ? selectConcept.variables.selected
+                            : p.selectedArtifactIds.includes(a.id)
+                        }
                         disabled={selectConcept.isPending}
                         onChange={(event) =>
                           selectConcept.mutate({ id: a.id, selected: event.target.checked })

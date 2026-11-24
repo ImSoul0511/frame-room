@@ -10,7 +10,7 @@ type PhotographerInput = z.output<typeof photographerInputSchema>;
 // Roles are derived from rows, never stored from signup metadata or request bodies:
 // photographer from its row, studio_manager from current membership, admin from user_roles.
 const PROFILE_SQL = `
-  select p.id, p.user_name, p.display_name, p.created_at,
+  select p.id, p.user_name, p.display_name, p.avatar_path, p.created_at,
     array_remove(array[
       'client',
       case when exists (select 1 from photographers where user_id = p.id) then 'photographer' end,
@@ -24,10 +24,19 @@ const PROFILE_SQL = `
   where p.id = $1`;
 
 const PHOTOGRAPHER_COLUMNS =
-  'id, user_id, display_name, bio, city, district, genres, styles, contact_email, professional_roles, is_hidden, created_at, updated_at';
+  'id, user_id, display_name, bio, city, district, genres::text[] as genres, styles, contact_email, professional_roles, is_hidden, created_at, updated_at';
 
 export function findProfile(tx: Transaction, userId: string) {
   return tx.optional<Profile>(PROFILE_SQL, [userId]);
+}
+
+export async function updateAvatar(tx: Transaction, userId: string, avatarPath: string | null) {
+  return Boolean(
+    await tx.optional<{ id: string }>(
+      'update profiles set avatar_path = $2 where id = $1 returning id',
+      [userId, avatarPath],
+    ),
+  );
 }
 
 /** Serializes concurrent creation by the same user until the transaction ends. */

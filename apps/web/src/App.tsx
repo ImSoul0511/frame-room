@@ -18,6 +18,9 @@ const OnboardingPage = lazy(() =>
 const ExplorePage = lazy(() =>
   import('./pages/ExplorePage').then((m) => ({ default: m.ExplorePage })),
 );
+const SearchPage = lazy(() =>
+  import('./pages/SearchPage').then((m) => ({ default: m.SearchPage })),
+);
 const ProviderPage = lazy(() =>
   import('./pages/ProviderPage').then((m) => ({ default: m.ProviderPage })),
 );
@@ -38,6 +41,12 @@ const StudioDetailPage = lazy(() =>
 );
 const PortfolioPage = lazy(() =>
   import('./pages/PortfolioPage').then((m) => ({ default: m.PortfolioPage })),
+);
+const PortfolioCreatePage = lazy(() =>
+  import('./pages/PortfolioCreatePage').then((m) => ({ default: m.PortfolioCreatePage })),
+);
+const ServiceEditPage = lazy(() =>
+  import('./pages/ServiceEditPage').then((m) => ({ default: m.ServiceEditPage })),
 );
 const PortfolioDetailPage = lazy(() =>
   import('./pages/PortfolioPage').then((m) => ({ default: m.PortfolioDetailPage })),
@@ -83,6 +92,7 @@ export function App() {
                 <Route element={<AppLayout />}>
                   <Route path="/" element={<Navigate to="/explore" replace />} />
                   <Route path="/explore" element={<ExplorePage />} />
+                  <Route path="/search" element={<SearchPage />} />
                   <Route path="/auth" element={<AuthPage />} />
                   <Route path="/auth/callback" element={<AuthPage callback />} />
                   <Route path="/reset-password" element={<AuthPage recovery />} />
@@ -184,6 +194,22 @@ export function App() {
                     element={
                       <RequireAuth roles={['photographer', 'studio_manager']}>
                         <PortfolioPage />
+                      </RequireAuth>
+                    }
+                  />
+                  <Route
+                    path="/portfolio/services/:id/edit"
+                    element={
+                      <RequireAuth roles={['photographer']}>
+                        <ServiceEditPage />
+                      </RequireAuth>
+                    }
+                  />
+                  <Route
+                    path="/portfolio/new"
+                    element={
+                      <RequireAuth roles={['photographer']}>
+                        <PortfolioCreatePage />
                       </RequireAuth>
                     }
                   />

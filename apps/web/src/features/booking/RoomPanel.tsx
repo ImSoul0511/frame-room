@@ -16,16 +16,18 @@ export function RoomPanel({ workspace: w }: { workspace: Workspace }) {
   const [decision, setDecision] = useState('');
   const room = w.room!;
   const closed = room.status === 'closed';
-  const send = useTask(async () => {
-    await post(
-      `/v1/shoot-rooms/${room.id}/messages`,
-      { text, storagePath: attachment },
-      submissionId,
-    );
-    setText('');
-    setAttachment(null);
-    setSubmissionId(crypto.randomUUID());
-  });
+  const send = useTask(
+    async (draft: { submissionId: string; text: string; storagePath: string | null }) => {
+      await post(
+        `/v1/shoot-rooms/${room.id}/messages`,
+        { text: draft.text, storagePath: draft.storagePath },
+        draft.submissionId,
+      );
+      setText('');
+      setAttachment(null);
+      setSubmissionId(crypto.randomUUID());
+    },
+  );
   const file = useTask(async (image: File) => {
     const result = await upload(image, 'room-files', room.id);
     setAttachment(result.storagePath);
@@ -46,6 +48,17 @@ export function RoomPanel({ workspace: w }: { workspace: Workspace }) {
   const update = useTask(async (value: { path: string; body: unknown }) =>
     patch(value.path, value.body),
   );
+  const confirmed = Boolean(
+    send.variables &&
+    w.messages.some((message) => message.submissionId === send.variables?.submissionId),
+  );
+  const pendingMessage =
+    (send.isPending || send.isError) &&
+    send.variables &&
+    (send.isPending || send.variables.submissionId === submissionId) &&
+    !w.messages.some((message) => message.submissionId === send.variables?.submissionId)
+      ? send.variables
+      : null;
   return (
     <div className="room-layout">
       <section className="panel">
@@ -62,13 +75,23 @@ export function RoomPanel({ workspace: w }: { workspace: Workspace }) {
               {m.storagePath ? <MessageAttachment messageId={m.id} /> : null}
             </article>
           ))}
+          {pendingMessage ? (
+            <article className="room-message mine">
+              <small role="status">
+                {send.isError ? t.messaging.sendFailed : t.messaging.sending}
+              </small>
+              <p>{pendingMessage.text}</p>
+              {pendingMessage.storagePath ? <small>{t.messaging.imageAttached}</small> : null}
+            </article>
+          ) : null}
         </div>
         {closed ? (
           <p>{t.booking.closed}</p>
         ) : (
           <Form
             onSubmit={() => {
-              if (!send.isPending && !file.isPending) send.mutate();
+              if (!send.isPending && !file.isPending)
+                send.mutate({ submissionId, text, storagePath: attachment });
             }}
           >
             <fieldset disabled={send.isPending}>
@@ -98,7 +121,7 @@ export function RoomPanel({ workspace: w }: { workspace: Workspace }) {
             </fieldset>
           </Form>
         )}
-        <Feedback error={send.error ?? file.error} />
+        <Feedback error={(confirmed ? null : send.error) ?? file.error} />
       </section>
       <aside>
         <section className="panel">
@@ -156,7 +179,12 @@ export function RoomPanel({ workspace: w }: { workspace: Workspace }) {
             <label className="checkbox-row" key={m.id}>
               <input
                 type="checkbox"
-                checked={m.status === 'done'}
+                checked={
+                  update.isPending &&
+                  update.variables?.path === `/v1/shoot-rooms/${room.id}/milestones/${m.id}`
+                    ? (update.variables.body as { status: string }).status === 'done'
+                    : m.status === 'done'
+                }
                 disabled={closed || update.isPending}
                 onChange={(e) =>
                   update.mutate({

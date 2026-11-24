@@ -6,11 +6,20 @@ import { LanguageSwitcher } from './LanguageSwitcher';
 import { UserSearch } from './UserSearch';
 import { NotificationBell } from './NotificationBell';
 import { AccountMenu } from './AccountMenu';
+import { useApi } from '../lib/hooks';
+import { useMessageReadState } from '../features/messaging/readState';
+import type { Conversation } from '../features/messaging/types';
 
 export function AppLayout() {
   const t = useStrings();
   const { profile, session } = useAuth();
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
+  const conversations = useApi<Conversation[]>('/v1/conversations', Boolean(session), 15000);
+  const readMessages = useMessageReadState(session?.user.id);
+  const hasUnreadMessages = conversations.data?.some(
+    (item) =>
+      item.latestIncomingMessageId && readMessages[item.id] !== item.latestIncomingMessageId,
+  );
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, [pathname]);
@@ -37,7 +46,7 @@ export function AppLayout() {
       : []),
   ];
   return (
-    <div className="app-layout">
+    <div className={`app-layout ${pathname === '/messages' ? 'app-layout-messages' : ''}`}>
       <a className="skip-link" href="#main">
         {t.discovery.skip}
       </a>
@@ -64,10 +73,14 @@ export function AppLayout() {
             </Link>
             <div className="topbar-actions">
               <LanguageSwitcher />
-              <UserSearch />
+              <UserSearch key={pathname === '/search' ? search : 'other'} />
               <NotificationBell />
               {session ? (
-                <AccountMenu key={pathname} displayName={profile?.displayName ?? 'F'} />
+                <AccountMenu
+                  key={pathname}
+                  displayName={profile?.displayName ?? 'F'}
+                  avatarPath={profile?.avatarPath}
+                />
               ) : (
                 <Link className="button-link dark" to="/auth">
                   {t.login}
@@ -75,6 +88,8 @@ export function AppLayout() {
               )}
             </div>
           </div>
+        </header>
+        <div className="navigation-sticky">
           <div className="navigation-bar">
             <nav className="top-navigation primary-navigation" aria-label={t.workspace}>
               {pages.map((page) => (
@@ -84,6 +99,9 @@ export function AppLayout() {
                   className={({ isActive }) => (isActive ? 'active' : '')}
                 >
                   {page.label}
+                  {page.path === 'messages' && hasUnreadMessages ? (
+                    <span className="message-unread-dot" aria-label={t.messaging.unreadMessages} />
+                  ) : null}
                 </NavLink>
               ))}
             </nav>
@@ -93,7 +111,7 @@ export function AppLayout() {
               </Link>
             ) : null}
           </div>
-        </header>
+        </div>
         <main id="main" className="main-content">
           <Suspense fallback={<p role="status">{t.pending}</p>}>
             <Outlet />

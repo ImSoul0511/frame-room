@@ -1,10 +1,15 @@
 import { z } from 'zod';
 
-const photographerSchema = z.object({ id: z.string().uuid(), is_hidden: z.boolean() });
+const photographerSchema = z.object({
+  id: z.string().uuid(),
+  is_hidden: z.boolean(),
+  display_name: z.string().optional(),
+});
 const personSchema = z.object({
   id: z.string().uuid(),
   display_name: z.string(),
   user_name: z.string(),
+  avatar_path: z.string().nullable().optional(),
   photographers: z.union([photographerSchema, z.array(photographerSchema)]).nullable(),
 });
 
@@ -17,11 +22,13 @@ export function parsePeople(value: unknown) {
       : person.photographers
         ? [person.photographers]
         : [];
+    const photographer = photographers.find((item) => !item.is_hidden);
     return {
       id: person.id,
-      displayName: person.display_name,
+      displayName: photographer?.display_name ?? person.display_name,
       userName: person.user_name,
-      photographerId: photographers.find((photographer) => !photographer.is_hidden)?.id ?? null,
+      avatarPath: person.avatar_path ?? null,
+      photographerId: photographer?.id ?? null,
     };
   });
 }

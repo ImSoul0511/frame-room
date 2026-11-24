@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   genres,
   photographerInputSchema,
@@ -32,7 +32,7 @@ export function PhotographerForm() {
 
 function PhotographerEditor({ initial }: { initial: OwnPhotographer | null }) {
   const t = useStrings();
-  const { profile } = useAuth();
+  const { profile, session } = useAuth();
   const client = useQueryClient();
   const [name, setName] = useState(initial?.displayName ?? profile?.displayName ?? '');
   const [bio, setBio] = useState(initial?.bio ?? '');
@@ -58,8 +58,26 @@ function PhotographerEditor({ initial }: { initial: OwnPhotographer | null }) {
         .map((s) => s.trim())
         .filter(Boolean),
     });
-    if (initial) await patch('/v1/photographers/me', input);
-    else await post('/v1/photographers/me', input);
+    if (initial) {
+      const queryKey = ['api', session?.user.id ?? 'public', '/v1/photographers/me'];
+      await client.cancelQueries({ queryKey });
+      const previous = client.getQueryData<OwnPhotographer | null>(queryKey);
+      client.setQueryData<OwnPhotographer | null>(
+        queryKey,
+        (current) => current && { ...current, ...input },
+      );
+      try {
+        await patch('/v1/photographers/me', input);
+      } catch (error) {
+        client.setQueryData<OwnPhotographer | null>(queryKey, (current) =>
+          current && current.displayName === input.displayName && current.bio === input.bio
+            ? previous
+            : current,
+        );
+        await client.invalidateQueries({ queryKey });
+        throw error;
+      }
+    } else await post('/v1/photographers/me', input);
     await client.invalidateQueries({ queryKey: ['profile'] });
   });
   return (
@@ -136,6 +154,8 @@ export function ServiceForm({
   onDone?: () => void;
 }) {
   const t = useStrings();
+  const { session } = useAuth();
+  const client = useQueryClient();
   const [name, setName] = useState(initial?.name ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
   const [genre, setGenre] = useState(initial?.genre ?? 'portrait');
@@ -161,8 +181,32 @@ export function ServiceForm({
       selectionQuota: quota,
       revisionLimit: revisions,
     });
-    if (initial) await patch(`/v1/services/${initial.id}`, input);
-    else await post(studioId ? `/v1/studios/${studioId}/services` : '/v1/services', input);
+    if (initial) {
+      const queryKey = ['api', session?.user.id ?? 'public', '/v1/me/services'];
+      await client.cancelQueries({ queryKey });
+      const previous = client
+        .getQueryData<Service[]>(queryKey)
+        ?.find((item) => item.id === initial.id);
+      client.setQueryData<Service[]>(queryKey, (items) =>
+        items?.map((item) => (item.id === initial.id ? { ...item, ...input } : item)),
+      );
+      try {
+        await patch(`/v1/services/${initial.id}`, input);
+      } catch (error) {
+        client.setQueryData<Service[]>(queryKey, (items) =>
+          items?.map((item) =>
+            item.id === initial.id &&
+            item.name === input.name &&
+            item.price === input.price &&
+            previous
+              ? previous
+              : item,
+          ),
+        );
+        await client.invalidateQueries({ queryKey });
+        throw error;
+      }
+    } else await post(studioId ? `/v1/studios/${studioId}/services` : '/v1/services', input);
     onDone?.();
   });
   return (
@@ -186,7 +230,7 @@ export function ServiceForm({
         <option value="true">{t.studio.active}</option>
         <option value="false">{t.studio.inactive}</option>
       </Select>
-      <Feedback error={task.error} />
+      <Feedback error={task.error} success={task.isSuccess && !onDone ? t.saved : null} />
       <Action type="submit" pending={task.isPending}>
         {t.save}
       </Action>
@@ -198,12 +242,31 @@ export function ProfileForm({ profile }: { profile: Profile }) {
   const client = useQueryClient();
   const [name, setName] = useState(profile.displayName);
   const [username, setUsername] = useState(profile.userName);
-  const task = useTask(async () => {
-    await patch('/v1/me', { displayName: name, userName: username });
-    await client.invalidateQueries({ queryKey: ['profile'] });
+  const task = useMutation({
+    mutationFn: (input: { displayName: string; userName: string }) =>
+      patch<Profile>('/v1/me', input),
+    onMutate: async (input) => {
+      const queryKey = ['profile', profile.id];
+      await client.cancelQueries({ queryKey });
+      const previous = client.getQueryData<Profile>(queryKey);
+      client.setQueryData<Profile>(queryKey, (current) => current && { ...current, ...input });
+      return { previous, queryKey };
+    },
+    onError: (_error, input, context) => {
+      client.setQueryData<Profile>(context?.queryKey ?? [], (current) =>
+        current && current.displayName === input.displayName && current.userName === input.userName
+          ? (context?.previous ?? current)
+          : current,
+      );
+    },
+    onSettled: () =>
+      Promise.all([
+        client.invalidateQueries({ queryKey: ['profile', profile.id] }),
+        client.invalidateQueries({ queryKey: ['api', profile.id, '/v1/me'] }),
+      ]),
   });
   return (
-    <Form onSubmit={() => task.mutate()}>
+    <Form onSubmit={() => task.mutate({ displayName: name, userName: username })}>
       <Field label={t.displayName} value={name} onChange={setName} />
       <Field label={t.userName} value={username} onChange={setUsername} />
       <Feedback error={task.error} success={task.isSuccess ? t.saved : null} />

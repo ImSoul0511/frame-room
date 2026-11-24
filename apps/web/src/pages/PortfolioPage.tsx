@@ -1,19 +1,17 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { Service } from '@frameroom/shared';
-import type { Portfolio, Image, Studio, Tag } from '../lib/types';
+import type { Portfolio, Image, Tag } from '../lib/types';
 import { api, post, patch, upload, currency } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useApi, useTask } from '../lib/hooks';
 import { useStrings } from '../lib/i18n';
 import {
   Action,
-  Area,
   Feedback,
   Field,
   FilePicker,
-  Form,
-  GenreSelect,
   Modal,
   PageHeading,
   Provenance,
@@ -21,7 +19,6 @@ import {
   Select,
 } from '../components/ui';
 import { PhotographerForm, ServiceForm } from '../features/catalog/ProviderForms';
-import { AddOnForm } from './StudioPage';
 import { ReportButton } from './SettingsPage';
 import { PhotoGallery } from '../features/profiles/PhotoGallery';
 import { TagPicker } from '../features/catalog/TagPicker';
@@ -32,22 +29,8 @@ export function PortfolioPage() {
   const t = useStrings();
   const { profile } = useAuth();
   const list = useApi<Portfolio[]>('/v1/me/portfolios');
-  const studios = useApi<Studio[]>('/v1/me/studios');
   const services = useApi<Service[]>('/v1/me/services');
-  const [open, setOpen] = useState<'portfolio' | 'service' | null>(null);
-  const [editingService, setEditingService] = useState<Service>();
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [genre, setGenre] = useState('portrait');
-  const [studio, setStudio] = useState('');
-  const nav = useNavigate();
-  const create = useTask(async () => {
-    const p = await post<Portfolio>(
-      studio ? `/v1/studios/${studio}/portfolios` : '/v1/portfolios',
-      { title, description, genre, status: 'draft' },
-    );
-    nav(`/portfolios/${p.id}?edit=1`);
-  });
+  const [open, setOpen] = useState(false);
   if (!profile?.roles.includes('photographer'))
     return (
       <>
@@ -62,7 +45,11 @@ export function PortfolioPage() {
       <PageHeading
         title={t.portfolio.title}
         subtitle={t.portfolio.subtitle}
-        action={<Action onClick={() => setOpen('portfolio')}>{t.portfolio.new}</Action>}
+        action={
+          <Link className="button-link dark" to="/portfolio/new">
+            {t.portfolio.new}
+          </Link>
+        }
       />
       <QueryState query={list} empty={list.data?.length === 0} />
       <div className="project-grid">
@@ -77,59 +64,41 @@ export function PortfolioPage() {
       </div>
       <div className="section-header">
         <h2>{t.portfolio.services}</h2>
-        <Action
-          secondary
-          onClick={() => {
-            setEditingService(undefined);
-            setOpen('service');
-          }}
-        >
+        <Action secondary onClick={() => setOpen(true)}>
           {t.studio.newService}
         </Action>
       </div>
-      {services.data
-        ?.filter((s) => s.ownerType === 'photographer')
-        .map((s) => (
-          <div className="list-row" key={s.id}>
-            <h3>{s.name}</h3>
-            <span>{currency(s.price)}</span>
-            <Action
-              secondary
-              onClick={() => {
-                setEditingService(s);
-                setOpen('service');
-              }}
-            >
-              {t.workspaceUi.edit}
-            </Action>
-          </div>
-        ))}
-      <AddOnForm services={services.data?.filter((s) => s.ownerType === 'photographer') ?? []} />
-      {open === 'service' ? (
-        <Modal title={t.studio.newService} onClose={() => setOpen(null)}>
-          <ServiceForm initial={editingService} onDone={() => setOpen(null)} />
-        </Modal>
-      ) : open === 'portfolio' ? (
-        <Modal title={t.portfolio.new} onClose={() => setOpen(null)}>
-          <Form onSubmit={() => create.mutate()}>
-            <Field label={t.portfolio.name} value={title} onChange={setTitle} />
-            <Area label={t.portfolio.description} value={description} onChange={setDescription} />
-            <GenreSelect value={genre} onChange={setGenre} />
-            <Select label={t.nav.studio} value={studio} onChange={setStudio}>
-              <option value="">{t.portfolio.own}</option>
-              {studios.data
-                ?.filter((s) => s.role === 'manager')
-                .map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-            </Select>
-            <Feedback error={create.error} />
-            <Action type="submit" pending={create.isPending}>
-              {t.create}
-            </Action>
-          </Form>
+      <QueryState
+        query={services}
+        empty={services.data?.every((s) => s.ownerType !== 'photographer')}
+      />
+      <div className="owned-service-grid">
+        {services.data
+          ?.filter((s) => s.ownerType === 'photographer')
+          .map((s) => (
+            <article className="owned-service-card" key={s.id}>
+              <div className="owned-service-card-heading">
+                <h3>{s.name}</h3>
+                <span className="owned-service-status">
+                  {s.isActive ? t.studio.active : t.studio.inactive}
+                </span>
+              </div>
+              {s.description ? <p>{s.description}</p> : null}
+              <div className="owned-service-details">
+                <strong>{currency(s.price)}</strong>
+                <span>
+                  {t.studio.duration}: {s.durationMinutes}
+                </span>
+              </div>
+              <Link className="button-link" to={`/portfolio/services/${s.id}/edit`}>
+                {t.workspaceUi.edit}
+              </Link>
+            </article>
+          ))}
+      </div>
+      {open ? (
+        <Modal title={t.studio.newService} onClose={() => setOpen(false)}>
+          <ServiceForm onDone={() => setOpen(false)} />
         </Modal>
       ) : null}
     </>
@@ -138,7 +107,8 @@ export function PortfolioPage() {
 export function PortfolioDetailPage() {
   const t = useStrings();
   const { id = '' } = useParams();
-  const { profile } = useAuth();
+  const { profile, session } = useAuth();
+  const client = useQueryClient();
   const [params] = useSearchParams();
   const canEdit = Boolean(profile && params.get('edit') === '1');
   const detail = useApi<{ portfolio: Portfolio; images: Image[] }>(
@@ -149,10 +119,22 @@ export function PortfolioDetailPage() {
   const [credits, setCredits] = useState('');
   const [caption, setCaption] = useState('');
   const [provenance, setProvenance] = useState('captured');
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState<'' | Portfolio['status']>('');
+  const [preview, setPreview] = useState<{ file: File; url: string } | null>(null);
+  const uploaded = useRef<{ file: File; storagePath: string } | null>(null);
+  useEffect(
+    () => () => {
+      if (preview) URL.revokeObjectURL(preview.url);
+    },
+    [preview],
+  );
   const nav = useNavigate();
   const uploadTask = useTask(async (file: File) => {
-    const result = await upload(file, 'portfolio-images', id);
+    const result =
+      uploaded.current?.file === file
+        ? uploaded.current
+        : await upload(file, 'portfolio-images', id);
+    uploaded.current = { file, storagePath: result.storagePath };
     return post(`/v1/portfolios/${id}/images`, {
       storagePath: result.storagePath,
       caption: caption || file.name,
@@ -163,12 +145,29 @@ export function PortfolioDetailPage() {
   });
   const update = useTask(async () => {
     const p = detail.data!.portfolio;
-    await patch(`/v1/portfolios/${id}`, {
+    const input = {
       title: p.title,
       description: p.description,
       genre: p.genre,
       status: status || p.status,
-    });
+    };
+    const key = ['api', session?.user.id ?? 'public', '/v1/me/portfolios'];
+    await client.cancelQueries({ queryKey: key });
+    const previous = client.getQueryData<Portfolio[]>(key)?.find((item) => item.id === id);
+    client.setQueryData<Portfolio[]>(key, (items) =>
+      items?.map((item) => (item.id === id ? { ...item, status: input.status } : item)),
+    );
+    try {
+      await patch(`/v1/portfolios/${id}`, input);
+    } catch (error) {
+      client.setQueryData<Portfolio[]>(key, (items) =>
+        items?.map((item) =>
+          item.id === id && item.status === input.status && previous ? previous : item,
+        ),
+      );
+      await client.invalidateQueries({ queryKey: key });
+      throw error;
+    }
   });
   const remove = useTask(async () => {
     await api(`/v1/portfolios/${id}`, { method: 'DELETE' });
@@ -198,12 +197,54 @@ export function PortfolioDetailPage() {
               <TagPicker tags={availableTags.data ?? []} selected={tagIds} onChange={setTagIds} />
               <FilePicker
                 label={t.portfolio.upload}
-                onFile={(file) => uploadTask.mutate(file)}
+                onFile={(file) => {
+                  uploaded.current = null;
+                  setPreview({ file, url: URL.createObjectURL(file) });
+                  uploadTask.mutate(file, {
+                    onSuccess: () => {
+                      uploaded.current = null;
+                      setPreview(null);
+                    },
+                  });
+                }}
                 disabled={uploadTask.isPending}
               />
+              {preview ? (
+                <figure>
+                  <img
+                    src={preview.url}
+                    alt={preview.file.name}
+                    style={{ maxWidth: '100%', maxHeight: 240 }}
+                  />
+                  <figcaption role="status">
+                    {uploadTask.isError
+                      ? t.messaging.imageUploadFailed
+                      : t.messaging.imageUploading}
+                  </figcaption>
+                  {uploadTask.isError ? (
+                    <Action
+                      secondary
+                      onClick={() =>
+                        uploadTask.mutate(preview.file, {
+                          onSuccess: () => {
+                            uploaded.current = null;
+                            setPreview(null);
+                          },
+                        })
+                      }
+                    >
+                      {t.retry}
+                    </Action>
+                  ) : null}
+                </figure>
+              ) : null}
             </div>
             <div>
-              <Select label={t.portfolio.status} value={status || p.status} onChange={setStatus}>
+              <Select
+                label={t.portfolio.status}
+                value={status || p.status}
+                onChange={(value) => setStatus(value as Portfolio['status'])}
+              >
                 <option value="draft">{t.portfolio.draft}</option>
                 <option value="published">{t.portfolio.published}</option>
               </Select>

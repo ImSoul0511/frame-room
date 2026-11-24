@@ -115,6 +115,18 @@ beforeEach(() => {
 afterEach(closeTestApps);
 
 describe('GET /v1/explore', () => {
+  it('accepts the additional genres present in the database', async () => {
+    vi.mocked(repo.discoverProviders).mockResolvedValue([
+      { ...PHOTOGRAPHER_PROVIDER, genres: ['drink'], coverUrl: null },
+    ]);
+
+    const app = await buildTestApp();
+    const res = await app.inject({ method: 'GET', url: '/v1/explore?genre=drink' });
+
+    expect(res.statusCode).toBe(200);
+    expect(bodyData(res)).toEqual([expect.objectContaining({ genres: ['drink'] })]);
+  });
+
   it('returns public providers with coverUrl and applies default pagination without auth', async () => {
     vi.mocked(repo.discoverProviders).mockResolvedValue([
       { ...PHOTOGRAPHER_PROVIDER, coverUrl: 'user-1/port-1/cover.webp' },
@@ -1220,6 +1232,7 @@ describe('Studio member role updates and removal guards', () => {
   it('acquires studio member lock and blocks demoting the last manager under concurrent requests', async () => {
     vi.mocked(repo.isStudioManager).mockResolvedValue(true);
     vi.mocked(repo.findStudioMemberRole).mockResolvedValue('manager');
+    vi.mocked(repo.findPhotographerIdByUser).mockResolvedValue(PHOTOGRAPHER_ID);
     vi.mocked(repo.countStudioManagers).mockResolvedValueOnce(2).mockResolvedValueOnce(1);
     vi.mocked(repo.updateStudioMemberRole).mockResolvedValue({
       studioId: STUDIO_ID,
@@ -1249,6 +1262,25 @@ describe('Studio member role updates and removal guards', () => {
 
     expect(repo.lockStudioMembers).toHaveBeenCalledTimes(2);
     expect([first.statusCode, second.statusCode].sort()).toEqual([200, 409]);
+  });
+
+  it('rejects a photographer role when the member has no photographer profile', async () => {
+    vi.mocked(repo.isStudioManager).mockResolvedValue(true);
+    vi.mocked(repo.findStudioMemberRole).mockResolvedValue('manager');
+    vi.mocked(repo.countStudioManagers).mockResolvedValue(2);
+    vi.mocked(repo.findPhotographerIdByUser).mockResolvedValue(undefined);
+
+    const app = await buildTestApp();
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/v1/studios/${STUDIO_ID}/members/${TARGET_USER_ID}`,
+      payload: { role: 'photographer' },
+      headers: AUTH,
+    });
+
+    expect(res.statusCode).toBe(422);
+    expect(res.body).toContain('photographer_profile_required');
+    expect(repo.updateStudioMemberRole).not.toHaveBeenCalled();
   });
 
   it('blocks removing a member with active studio booking assignments (409)', async () => {
@@ -1389,5 +1421,53 @@ describe('Studio resources and service add-ons', () => {
     });
     expect(createRes.statusCode).toBe(201);
     expect(bodyData(createRes)).toMatchObject({ id: ADDON_ID, price: 500000 });
+  });
+
+  it('restricts add-on management to the service owner and allows updates of inactive add-ons', async () => {
+    vi.mocked(repo.findServiceOwnership).mockResolvedValue({
+      id: SERVICE_ID,
+      photographerId: PHOTOGRAPHER_ID,
+      studioId: null,
+    });
+    vi.mocked(repo.findPhotographerIdByUser).mockResolvedValue(PHOTOGRAPHER_ID);
+    vi.mocked(repo.listOwnedServiceAddOns).mockResolvedValue([{ ...ADDON, isActive: false }]);
+    vi.mocked(repo.updateServiceAddOn).mockResolvedValue({ ...ADDON, isActive: false });
+    const app = await buildTestApp();
+    const list = await app.inject({
+      method: 'GET',
+      url: `/v1/me/services/${SERVICE_ID}/add-ons`,
+      headers: AUTH,
+    });
+    expect(list.statusCode).toBe(200);
+    expect(bodyData(list)).toEqual([expect.objectContaining({ isActive: false })]);
+    const payload = {
+      name: ADDON.name,
+      description: ADDON.description,
+      price: ADDON.price,
+      isActive: false,
+    };
+    const update = await app.inject({
+      method: 'PATCH',
+      url: `/v1/services/${SERVICE_ID}/add-ons/${ADDON_ID}`,
+      headers: AUTH,
+      payload,
+    });
+    expect(update.statusCode).toBe(200);
+    expect(repo.updateServiceAddOn).toHaveBeenCalledWith(
+      expect.anything(),
+      SERVICE_ID,
+      ADDON_ID,
+      payload,
+    );
+    vi.mocked(repo.findPhotographerIdByUser).mockResolvedValue(NONE);
+    vi.mocked(repo.updateServiceAddOn).mockClear();
+    const denied = await app.inject({
+      method: 'PATCH',
+      url: `/v1/services/${SERVICE_ID}/add-ons/${ADDON_ID}`,
+      headers: AUTH,
+      payload,
+    });
+    expect(denied.statusCode).toBe(403);
+    expect(repo.updateServiceAddOn).not.toHaveBeenCalled();
   });
 });

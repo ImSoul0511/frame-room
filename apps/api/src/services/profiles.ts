@@ -11,6 +11,11 @@ type PhotographerInput = z.output<typeof photographerInputSchema>;
 
 const profileRequired = () => new ApiError(404, 'NOT_FOUND', 'profile_required');
 
+export async function updateAvatar(tx: Transaction, userId: string, path: string | null) {
+  if (!(await profiles.updateAvatar(tx, userId, path))) throw profileRequired();
+  return getOwnProfile(tx, userId);
+}
+
 /** Read-only: a missing profile is reported, never created implicitly. */
 export async function getOwnProfile(tx: Transaction, userId: string): Promise<Profile> {
   const profile = await profiles.findProfile(tx, userId);

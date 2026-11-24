@@ -102,7 +102,7 @@ export async function discoverProviders(
 
   if (query.genre) {
     params.push(query.genre);
-    conditions.push(`$${params.length}::genre = any(p.genres)`);
+    conditions.push(`$${params.length}::text = any(p.genres)`);
   }
   if (query.city) {
     params.push(query.city);
@@ -157,7 +157,7 @@ export async function listProvidersByType(
 
   if (query.genre) {
     params.push(query.genre);
-    conditions.push(`$${params.length}::genre = any(p.genres)`);
+    conditions.push(`$${params.length}::text = any(p.genres)`);
   }
   if (query.city) {
     params.push(query.city);
@@ -313,7 +313,7 @@ export async function isStudioManager(
 export async function listStudiosForUser(tx: Transaction, userId: string): Promise<MyStudio[]> {
   return tx.rows<MyStudio>(
     `select s.id, s.name, s.description, s.city, s.district, s.address,
-            s.genres, s.created_by, s.is_hidden, s.created_at, s.updated_at, s.contact_email,
+            s.genres::text[] as genres, s.created_by, s.is_hidden, s.created_at, s.updated_at, s.contact_email,
             m.role
      from studios s
      join studio_members m on m.studio_id = s.id
@@ -333,7 +333,7 @@ export async function insertStudio(
     `insert into studios (name, description, city, district, address, genres, created_by, contact_email)
      values ($1, $2, $3, $4, $5, $6::genre[], $7, $8)
      returning id, name, description, city, district, address,
-               genres, created_by, is_hidden, created_at, updated_at, contact_email`,
+               genres::text[] as genres, created_by, is_hidden, created_at, updated_at, contact_email`,
     [
       input.name,
       input.description,
@@ -371,10 +371,10 @@ export async function updateStudio(
   return tx.one<Studio>(
     `update studios
      set name = $2, description = $3, city = $4, district = $5,
-         address = $6, genres = $7::genre[], contact_email = coalesce($8, contact_email), updated_at = now()
+         address = $6, genres = $7::genre[], contact_email = case when $9 then $8 else contact_email end, updated_at = now()
      where id = $1 and deleted_at is null
      returning id, name, description, city, district, address,
-               genres, created_by, is_hidden, created_at, updated_at, contact_email`,
+               genres::text[] as genres, created_by, is_hidden, created_at, updated_at, contact_email`,
     [
       studioId,
       input.name,
@@ -384,6 +384,7 @@ export async function updateStudio(
       input.address,
       input.genres,
       input.contactEmail ?? null,
+      input.contactEmail !== undefined,
     ],
   );
 }
@@ -537,7 +538,8 @@ export async function updateService(
     `update services
      set name = $2, description = $3, genre = $4::genre, duration_minutes = $5,
          price = $6, photo_count = $7, retouched_count = $8, is_active = $9,
-         selection_quota = coalesce($10, selection_quota), revision_limit = coalesce($11, revision_limit),
+         selection_quota = case when $12 then $10 else selection_quota end,
+         revision_limit = case when $13 then $11 else revision_limit end,
          updated_at = now()
      where id = $1 and deleted_at is null
      returning id, name, description, genre, duration_minutes, price,
@@ -556,6 +558,8 @@ export async function updateService(
       input.isActive,
       input.selectionQuota ?? null,
       input.revisionLimit ?? null,
+      input.selectionQuota !== undefined,
+      input.revisionLimit !== undefined,
     ],
   );
   return coerceOwnedService(row);
@@ -1225,6 +1229,31 @@ export async function listActivePublicServiceAddOns(
 }
 
 /** Inserts a new add-on for a service. */
+export async function listOwnedServiceAddOns(tx: Transaction, serviceId: string) {
+  const rows = await tx.rows<ServiceAddOn>(
+    `select id, service_id, name, description, price, is_active, created_at, updated_at
+     from service_add_ons where service_id = $1 and deleted_at is null order by name, id`,
+    [serviceId],
+  );
+  return rows.map(coerceServiceAddOn);
+}
+
+export async function updateServiceAddOn(
+  tx: Transaction,
+  serviceId: string,
+  addOnId: string,
+  input: ServiceAddOnInput,
+) {
+  const row = await tx.optional<ServiceAddOn>(
+    `update service_add_ons set name = $3, description = $4, price = $5,
+       is_active = $6, updated_at = now()
+     where service_id = $1 and id = $2 and deleted_at is null
+     returning id, service_id, name, description, price, is_active, created_at, updated_at`,
+    [serviceId, addOnId, input.name, input.description, input.price, input.isActive],
+  );
+  return row ? coerceServiceAddOn(row) : undefined;
+}
+
 export async function insertServiceAddOn(
   tx: Transaction,
   serviceId: string,

@@ -538,6 +538,10 @@ export async function updateStudioMemberRole(
     }
   }
 
+  if (role === 'photographer' && !(await repo.findPhotographerIdByUser(tx, targetUserId))) {
+    throw new ApiError(422, 'UNPROCESSABLE', 'photographer_profile_required');
+  }
+
   return repo.updateStudioMemberRole(tx, studioId, targetUserId, role);
 }
 
@@ -638,6 +642,28 @@ export async function listServiceAddOns(
 }
 
 /** Creates an add-on for an owned service. */
+export async function listOwnedAddOns(tx: Transaction, userId: string, serviceId: string) {
+  const service = await repo.findServiceOwnership(tx, serviceId);
+  if (!service) throw new ApiError(404, 'NOT_FOUND', 'service_not_found');
+  await assertProviderOwnership(tx, userId, service);
+  return repo.listOwnedServiceAddOns(tx, serviceId);
+}
+
+export async function updateServiceAddOn(
+  tx: Transaction,
+  userId: string,
+  serviceId: string,
+  addOnId: string,
+  input: ServiceAddOnInput,
+) {
+  const service = await repo.findServiceOwnership(tx, serviceId);
+  if (!service) throw new ApiError(404, 'NOT_FOUND', 'service_not_found');
+  await assertProviderOwnership(tx, userId, service);
+  const result = await repo.updateServiceAddOn(tx, serviceId, addOnId, input);
+  if (!result) throw new ApiError(404, 'NOT_FOUND', 'not_found');
+  return result;
+}
+
 export async function createServiceAddOn(
   tx: Transaction,
   userId: string,

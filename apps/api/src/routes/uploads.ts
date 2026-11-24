@@ -36,9 +36,12 @@ export const uploadsModule: ApiModule = {
       const query = querySchema.parse(request.query);
       if (query.bucket === 'search-uploads')
         requireCondition(deps.env.AI_SEARCH_ENABLED, 503, 'ai_search_disabled');
-      const prefix = await deps.db.run(actor.id, (tx) =>
-        media.authorizeUpload(tx, actor.id, query.bucket, query.scopeId),
-      );
+      const prefix =
+        query.bucket === 'avatars' && !deps.db.isConfigured
+          ? actor.id
+          : await deps.db.run(actor.id, (tx) =>
+              media.authorizeUpload(tx, actor.id, query.bucket, query.scopeId),
+            );
       const inputLimit = uploadInputLimit(query.bucket);
       // Give the parser one byte of headroom so it can accept a file at the exact cap.
       const parts = request.parts({ limits: { fileSize: inputLimit + 1 } });

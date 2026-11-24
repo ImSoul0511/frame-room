@@ -350,6 +350,13 @@ Payloads match API objects/schemas. Refetch lists after reconnecting.
 
 ## 4. Personal profile
 
+The implemented `PATCH /v1/me/avatar` accepts `{ "avatarPath": "<userId>/<file>.webp" }`
+or `{ "avatarPath": null }` to clear the avatar. The caller must first upload the
+image through `POST /v1/uploads?bucket=avatars`; the API verifies the path belongs
+to the caller and that the image and thumbnail exist before saving it. `GET /v1/me`
+returns the nullable `avatarPath`. Removing an avatar clears the profile reference;
+it does not delete stored files. The avatar bucket is public.
+
 ### GET /v1/me
 
 **Purpose:** Return the current user's profile and roles.
@@ -865,8 +872,10 @@ Storage RLS permits writes only under the caller's userId folder. Public portfol
 | `POST /v1/studios/:id/services`            | Create studio service                     | Studio manager                       | Same as above                                                                                            | 201 Service; 400, 401, 403, 404 |
 | `PATCH /v1/services/:id`                   | Edit service                              | Owning photographer / studio manager | Optional POST fields                                                                                     | 200 Service; 400, 401, 403, 404 |
 | `DELETE /v1/services/:id`                  | Soft-delete service                       | Service owner                        |                                                                                                          | 204; 401, 403, 404              |
+| `GET /v1/me/services/:id/add-ons`          | Manage add-ons, including inactive ones   | Service owner                        |                                                                                                          | 200 AddOn[]; 401, 403, 404      |
+| `GET /v1/services/:id/add-ons`             | List active add-ons for booking           | Public active service                |                                                                                                          | 200 AddOn[]; 404                |
 | `POST /v1/services/:id/add-ons`            | Add add-on                                | Service owner                        | Required name, price; optional description, isActive                                                     | 201 AddOn; 400, 401, 403, 404   |
-| `PATCH /v1/services/:id/add-ons/:addOnId`  | Edit add-on                               | Service owner                        | Optional POST fields                                                                                     | 200 AddOn; 400, 401, 403, 404   |
+| `PATCH /v1/services/:id/add-ons/:addOnId`  | Edit add-on                               | Service owner                        | Required name, price; optional description, isActive (defaults to empty description and active)          | 200 AddOn; 400, 401, 403, 404   |
 | `DELETE /v1/services/:id/add-ons/:addOnId` | Soft-delete add-on                        | Service owner                        |                                                                                                          | 204; 401, 403, 404              |
 
 **Notes:** Snapshot service name, price, duration, photo/retouched counts, and add-on names/prices at booking. Later service changes/deletion do not change snapshots or total price.

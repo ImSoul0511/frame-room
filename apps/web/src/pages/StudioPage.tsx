@@ -455,32 +455,111 @@ function ResourceToggle({ resource: r }: { resource: Resource }) {
 }
 export function AddOnForm({ services }: { services: Service[] }) {
   const t = useStrings();
-  const [id, setId] = useState(services[0]?.id ?? '');
-  const [name, setName] = useState('');
-  const [price, setPrice] = useState(0);
-  const task = useTask(async () => {
-    await post(`/v1/services/${id}/add-ons`, { name, price, description: '' });
-    setName('');
-  });
+  const [selectedId, setSelectedId] = useState('');
+  const id = services.some((service) => service.id === selectedId)
+    ? selectedId
+    : (services[0]?.id ?? '');
   return (
     <section className="panel">
       <h2>{t.studio.addOn}</h2>
-      <Form onSubmit={() => task.mutate()}>
-        <Select label={t.booking.service} value={id} onChange={setId}>
-          <option value="">—</option>
-          {services.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </Select>
-        <Field label={t.studio.addOnName} value={name} onChange={setName} />
-        <NumberField label={t.studio.price} value={price} onChange={setPrice} />
-        <Feedback error={task.error} success={task.isSuccess ? t.saved : null} />
-        <Action type="submit" pending={task.isPending} disabled={!id || !name.trim()}>
-          {t.studio.addAddOn}
-        </Action>
-      </Form>
+      <Select label={t.booking.service} value={id} onChange={setSelectedId}>
+        <option value="">—</option>
+        {services.map((service) => (
+          <option key={service.id} value={service.id}>
+            {service.name}
+          </option>
+        ))}
+      </Select>
+      {id ? <AddOnEditor key={id} serviceId={id} /> : null}
     </section>
+  );
+}
+
+type AddOn = {
+  id: string;
+  name: string;
+  price: number;
+  description: string;
+  isActive: boolean;
+};
+
+export function AddOnEditor({ serviceId }: { serviceId: string }) {
+  const t = useStrings();
+  const list = useApi<AddOn[]>(`/v1/me/services/${serviceId}/add-ons`);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [name, setName] = useState('');
+  const [price, setPrice] = useState(0);
+  const [description, setDescription] = useState('');
+  const [isActive, setIsActive] = useState(true);
+  const reset = () => {
+    setEditing(null);
+    setName('');
+    setPrice(0);
+    setDescription('');
+    setIsActive(true);
+  };
+  const task = useTask(async () => {
+    const body = { name, price, description, isActive };
+    if (editing) await patch(`/v1/services/${serviceId}/add-ons/${editing}`, body);
+    else await post(`/v1/services/${serviceId}/add-ons`, body);
+    reset();
+  });
+  return (
+    <>
+      <QueryState query={list} empty={list.data?.length === 0} />
+      {list.data?.map((item) => (
+        <article className="list-row" key={item.id}>
+          <div className="row between wrap">
+            <div>
+              <strong>{item.name}</strong>
+              <p>
+                {currency(item.price)} · {item.isActive ? t.studio.active : t.studio.inactive}
+              </p>
+              {item.description ? <p>{item.description}</p> : null}
+            </div>
+            <Action
+              secondary
+              disabled={task.isPending}
+              onClick={() => {
+                task.reset();
+                setEditing(item.id);
+                setName(item.name);
+                setPrice(item.price);
+                setDescription(item.description);
+                setIsActive(item.isActive);
+              }}
+            >
+              {t.workspaceUi.edit}
+            </Action>
+          </div>
+        </article>
+      ))}
+      <Form onSubmit={() => task.mutate()}>
+        <Field label={t.studio.addOnName} value={name} onChange={setName} />
+        <NumberField label={t.studio.price} value={price} onChange={setPrice} min={0} />
+        <Area label={t.studio.addOnDescription} value={description} onChange={setDescription} />
+        <Select
+          label={t.studio.addOnStatus}
+          value={isActive ? 'active' : 'inactive'}
+          onChange={(value) => setIsActive(value === 'active')}
+        >
+          <option value="active">{t.studio.active}</option>
+          <option value="inactive">{t.studio.inactive}</option>
+        </Select>
+        <Feedback error={task.error} success={task.isSuccess ? t.saved : null} />
+        <Action
+          type="submit"
+          pending={task.isPending}
+          disabled={!name.trim() || !Number.isInteger(price) || price < 0}
+        >
+          {editing ? t.save : t.studio.addAddOn}
+        </Action>
+        {editing ? (
+          <Action secondary disabled={task.isPending} onClick={reset}>
+            {t.cancel}
+          </Action>
+        ) : null}
+      </Form>
+    </>
   );
 }

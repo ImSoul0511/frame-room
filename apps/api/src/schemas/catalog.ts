@@ -155,7 +155,7 @@ export const studioTeamMemberSchema = z.object({
   joinedAt: z.string(),
   displayName: z.string(),
   userName: z.string(),
-  photographerId: idSchema,
+  photographerId: idSchema.nullable(),
 });
 
 export type StudioInput = z.infer<typeof studioInputSchema>;

@@ -216,6 +216,15 @@ export function createCloudCatalog(env: ApiEnv) {
       check(error, 'user_name_taken');
       return profile(userId);
     },
+    async updateAvatar(userId: string, avatarPath: string | null) {
+      await profile(userId);
+      const { error } = await accountClient()
+        .from('profiles')
+        .update({ avatar_path: avatarPath })
+        .eq('id', userId);
+      check(error);
+      return profile(userId);
+    },
     async photographer(userId: string) {
       const { data, error } = await accountClient()
         .from('photographers')

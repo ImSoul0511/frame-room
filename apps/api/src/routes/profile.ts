@@ -1,15 +1,34 @@
 import { photographerInputSchema, profileInputSchema, profileSchema } from '@frameroom/shared';
+import { z } from 'zod';
 
-import { defineRoute, Respond, type ApiModule } from '../plugins/route.js';
+import { defineRoute, Respond, validateResponse, type ApiModule } from '../plugins/route.js';
 import { ownPhotographerSchema } from '../schemas/own-photographer.js';
 import * as profiles from '../services/profiles.js';
 import { createCloudCatalog } from '../services/cloud-catalog.js';
+import { MediaService } from '../services/media.js';
 
 /** /v1/me and /v1/photographers/me. Routes stay thin; logic lives in services/profiles. */
 export const profileModule: ApiModule = {
   name: 'profiles',
   register(app, deps) {
     const cloud = deps.db.isConfigured ? null : createCloudCatalog(deps.env);
+    const media = new MediaService(deps.env);
+    defineRoute(app, deps, {
+      method: 'PATCH',
+      url: '/v1/me/avatar',
+      summary: 'Set or clear the caller’s avatar using an owned uploaded image.',
+      access: 'verified',
+      body: z.object({ avatarPath: z.string().min(1).max(500).nullable() }),
+      response: profileSchema,
+      errors: [400, 403, 404, 503],
+      handler: async ({ actor, body, transaction }) => {
+        if (body.avatarPath) await media.verify('avatars', body.avatarPath, actor.id);
+        return cloud
+          ? cloud.updateAvatar(actor.id, body.avatarPath)
+          : transaction((tx) => profiles.updateAvatar(tx, actor.id, body.avatarPath));
+      },
+    });
+
     defineRoute(app, deps, {
       method: 'GET',
       url: '/v1/me',
@@ -75,7 +94,12 @@ export const profileModule: ApiModule = {
       handler: ({ actor, body, transaction }) =>
         cloud
           ? cloud.savePhotographer(actor.id, body)
-          : transaction((tx) => profiles.createOwnPhotographer(tx, actor.id, body)),
+          : transaction(async (tx) =>
+              validateResponse(
+                ownPhotographerSchema,
+                await profiles.createOwnPhotographer(tx, actor.id, body),
+              ),
+            ),
     });
 
     defineRoute(app, deps, {
@@ -89,7 +113,12 @@ export const profileModule: ApiModule = {
       handler: ({ actor, body, transaction }) =>
         cloud
           ? cloud.savePhotographer(actor.id, body, true)
-          : transaction((tx) => profiles.updateOwnPhotographer(tx, actor.id, body)),
+          : transaction(async (tx) =>
+              validateResponse(
+                ownPhotographerSchema,
+                await profiles.updateOwnPhotographer(tx, actor.id, body),
+              ),
+            ),
     });
   },
 };

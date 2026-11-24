@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { cullingOutputSchema, type AiJob, type Artifact } from '@frameroom/shared';
 import type { Image, PhotoFeedback, Workspace } from '../../lib/types';
 import { post, upload } from '../../lib/api';
@@ -10,6 +10,14 @@ export function GalleryPanel({ workspace: w }: { workspace: Workspace }) {
   const t = useStrings();
   const [selection, setSelection] = useState<string[]>(w.selections.map((s) => s.imageId));
   const [prompt, setPrompt] = useState('');
+  const [preview, setPreview] = useState<{ file: File; url: string } | null>(null);
+  const uploaded = useRef<{ file: File; storagePath: string } | null>(null);
+  useEffect(
+    () => () => {
+      if (preview) URL.revokeObjectURL(preview.url);
+    },
+    [preview],
+  );
   const b = w.booking;
   const jobs = useApi<AiJob[]>(`/v1/creative-projects/${b.projectId}/ai-jobs`, w.isProvider, 5000);
   const variants = useApi<Artifact[]>(
@@ -18,7 +26,11 @@ export function GalleryPanel({ workspace: w }: { workspace: Workspace }) {
     30000,
   );
   const add = useTask(async (file: File) => {
-    const result = await upload(file, 'gallery-previews', b.id);
+    const result =
+      uploaded.current?.file === file
+        ? uploaded.current
+        : await upload(file, 'gallery-previews', b.id);
+    uploaded.current = { file, storagePath: result.storagePath };
     return post(`/v1/bookings/${b.id}/gallery-images`, {
       storagePath: result.storagePath,
       caption: file.name,
@@ -55,7 +67,16 @@ export function GalleryPanel({ workspace: w }: { workspace: Workspace }) {
         {w.isProvider && b.status === 'in_progress' ? (
           <FilePicker
             label={t.booking.addImages}
-            onFile={(file) => add.mutate(file)}
+            onFile={(file) => {
+              uploaded.current = null;
+              setPreview({ file, url: URL.createObjectURL(file) });
+              add.mutate(file, {
+                onSuccess: () => {
+                  uploaded.current = null;
+                  setPreview(null);
+                },
+              });
+            }}
             disabled={add.isPending}
           />
         ) : null}
@@ -63,6 +84,33 @@ export function GalleryPanel({ workspace: w }: { workspace: Workspace }) {
       <Feedback
         error={add.error ?? choose.error ?? reopen.error ?? requestRevision.error ?? ai.error}
       />
+      {preview ? (
+        <figure>
+          <img
+            src={preview.url}
+            alt={preview.file.name}
+            style={{ maxWidth: '100%', maxHeight: 240 }}
+          />
+          <figcaption role="status">
+            {add.isError ? t.messaging.imageUploadFailed : t.messaging.imageUploading}
+          </figcaption>
+          {add.isError ? (
+            <Action
+              secondary
+              onClick={() =>
+                add.mutate(preview.file, {
+                  onSuccess: () => {
+                    uploaded.current = null;
+                    setPreview(null);
+                  },
+                })
+              }
+            >
+              {t.retry}
+            </Action>
+          ) : null}
+        </figure>
+      ) : null}
       {canSelect ? (
         <p>
           {t.workspaceUi.selectionHint} {w.proofing.quota}

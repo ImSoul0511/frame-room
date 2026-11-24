@@ -4,6 +4,7 @@
   --fr-ink: #354568;
   --fr-muted: #60677b;
   --fr-paper: #fcf9f2;
+  --fr-frame-background: #afb4ce;
   --fr-lavender: #e6e3ef;
   --fr-line: #d9d7e0;
   --fr-accent: #54658c;
@@ -33,10 +34,10 @@
 html {
   scroll-behavior: smooth;
   scroll-padding-top: 24px;
-  background: #afb4ce;
+  background: var(--fr-frame-background);
 }
 body {
-  background: #afb4ce;
+  background: var(--fr-frame-background);
   font-size: 1rem;
   line-height: 1.6;
 }
@@ -105,7 +106,7 @@ small,
 .site-header {
   padding: 0 4.5%;
   position: relative;
-  z-index: 10;
+  z-index: 30;
 }
 .masthead {
   min-height: 96px;

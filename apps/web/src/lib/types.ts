@@ -56,6 +56,7 @@ export interface Brief {
 }
 export interface Message {
   id: string;
+  submissionId?: string | null;
   senderId: string | null;
   text: string;
   type: 'text' | 'image' | 'system';

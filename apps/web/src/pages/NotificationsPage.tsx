@@ -1,16 +1,16 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Action, Feedback, PageHeading, QueryState } from '../components/ui';
-import { dateTime, patch } from '../lib/api';
-import { useApi, useTask } from '../lib/hooks';
+import { dateTime } from '../lib/api';
+import { useApi } from '../lib/hooks';
 import { useStrings } from '../lib/i18n';
-import type { Notice } from '../components/NotificationBell';
+import { useMarkNotificationRead, type Notice } from '../lib/notifications';
 
 export function NotificationsPage() {
   const t = useStrings();
   const [unreadOnly, setUnreadOnly] = useState(false);
   const list = useApi<Notice[]>('/v1/me/notifications', true, 30000);
-  const mark = useTask(async (id: string) => patch(`/v1/me/notifications/${id}`, {}));
+  const mark = useMarkNotificationRead();
   const notices = list.data?.filter((notice) => !unreadOnly || !notice.readAt) ?? [];
   return (
     <>
