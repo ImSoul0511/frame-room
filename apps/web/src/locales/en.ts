@@ -1,6 +1,8 @@
 import { workspaceEnglish } from './workspace';
 import { designEnglish } from './design';
+import { curationEnglish } from './curation';
 export const english = {
+  curation: curationEnglish,
   design: designEnglish,
   workspaceUi: workspaceEnglish,
   profileUi: {

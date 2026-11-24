@@ -1,6 +1,8 @@
 import { workspaceVietnamese } from './workspace';
 import { designVietnamese } from './design';
+import { curationVietnamese } from './curation';
 export const vietnamese = {
+  curation: curationVietnamese,
   design: designVietnamese,
   workspaceUi: workspaceVietnamese,
   profileUi: {
@@ -53,9 +55,9 @@ export const vietnamese = {
     heroKicker: 'KHÔNG GIAN DÀNH CHO NHIẾP ẢNH',
     heroFirst: 'Mỗi góc nhìn,',
     heroSecond: 'một câu chuyện.',
-    heroDescription: 'Kết nối với nhiếp ảnh gia và studio đồng điệu với ý tưởng của bạn.',
+    heroDescription: 'Kết nối với nhiếp ảnh gia và phòng chụp đồng điệu với ý tưởng của bạn.',
     browse: 'Khám phá nhiếp ảnh gia',
-    searchKicker: 'NHIẾP ẢNH GIA VÀ STUDIO',
+    searchKicker: 'NHIẾP ẢNH GIA VÀ PHÒNG CHỤP',
     searchTitle: 'Tìm theo từ khóa',
     searchDescription: 'Tìm theo tên, thành phố, thể loại hoặc phong cách.',
     collectionKicker: 'CỘNG ĐỒNG SÁNG TẠO',
@@ -444,16 +446,16 @@ export const vietnamese = {
   genreLabels: {
     portrait: 'Chân dung',
     fashion: 'Thời trang',
-    wedding: 'Cưới',
+    wedding: 'Ảnh cưới',
     family: 'Gia đình',
-    product: 'Sản phẩm',
+    product: 'Quảng cáo',
     food: 'Ẩm thực',
     event: 'Sự kiện',
     cosplay: 'Cosplay',
     drink: 'Đồ uống',
     yearbook: 'Kỷ yếu',
     outdoor: 'Ngoài trời',
-    tet_holiday: 'Tết',
+    tet_holiday: 'Chụp ảnh Tết',
   },
   errors: {
     rate_limited: 'Bạn đã gửi quá nhiều yêu cầu. Vui lòng đợi rồi thử lại.',

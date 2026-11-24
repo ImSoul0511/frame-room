@@ -15,7 +15,9 @@ export function PortfolioCard({
   const { language } = useLanguage();
   const [failed, setFailed] = useState(false);
   const providerId = portfolio.photographerId ?? portfolio.studioId;
-  const tags = portfolio.tags ?? [];
+  const tags = (portfolio.tags ?? []).filter(
+    (tag) => tag.category !== 'genre' || tag.slug === portfolio.genre,
+  );
   const renderTag = (tag: (typeof tags)[number]) => (
     <span className="card-tag" key={tag.id}>
       {language === 'vi' ? tag.nameVi || tag.name : tag.name}

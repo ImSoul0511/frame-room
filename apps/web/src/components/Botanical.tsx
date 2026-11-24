@@ -1,5 +1,6 @@
 import { useId } from 'react';
 import { FLOWER_PETALS as PETALS, PIGMENT_PATCHES } from './botanical-art';
+export { LeafBranch } from './LeafBranch';
 
 function FlowerHead({ paint, texture, leaf }: { paint: string; texture: string; leaf: string }) {
   return (
@@ -235,12 +236,12 @@ export function WatercolorWash() {
           className="watercolor-wash-left"
           d="M-80 410Q10 370 115 411T280 434L300 550Q128 590-80 550Z"
           fill="#aab4cf"
-          opacity=".22"
+          opacity=".38"
         />
         <path
-          d="M970 100Q1090 70 1270 100L1280 255Q1100 269 969 222Z"
+          d="M970 335Q1090 305 1270 335L1280 510Q1100 524 969 477Z"
           fill="#a9a0c8"
-          opacity=".18"
+          opacity=".34"
         />
         <g fill="#a9a0c8" opacity=".28">
           <circle cx="878" cy="68" r="7" />

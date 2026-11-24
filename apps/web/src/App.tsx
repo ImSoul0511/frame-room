@@ -18,6 +18,11 @@ const OnboardingPage = lazy(() =>
 const ExplorePage = lazy(() =>
   import('./pages/ExplorePage').then((m) => ({ default: m.ExplorePage })),
 );
+const GenrePage = lazy(() => import('./pages/GenrePage').then((m) => ({ default: m.GenrePage })));
+const ProviderDirectoryPage = lazy(() =>
+  import('./pages/ProviderDirectoryPage').then((m) => ({ default: m.ProviderDirectoryPage })),
+);
+const AboutPage = lazy(() => import('./pages/AboutPage').then((m) => ({ default: m.AboutPage })));
 const SearchPage = lazy(() =>
   import('./pages/SearchPage').then((m) => ({ default: m.SearchPage })),
 );
@@ -92,6 +97,18 @@ export function App() {
                 <Route element={<AppLayout />}>
                   <Route path="/" element={<Navigate to="/explore" replace />} />
                   <Route path="/explore" element={<ExplorePage />} />
+                  <Route path="/home" element={<Navigate to="/explore" replace />} />
+                  <Route
+                    path="/photographers"
+                    element={<ProviderDirectoryPage key="photographers" type="photographer" />}
+                  />
+                  <Route
+                    path="/studios"
+                    element={<ProviderDirectoryPage key="studios" type="studio" />}
+                  />
+                  <Route path="/genres" element={<Navigate to="/explore#genres" replace />} />
+                  <Route path="/genres/:genre" element={<GenrePage />} />
+                  <Route path="/about" element={<AboutPage />} />
                   <Route path="/search" element={<SearchPage />} />
                   <Route path="/auth" element={<AuthPage />} />
                   <Route path="/auth/callback" element={<AuthPage callback />} />
@@ -108,127 +125,127 @@ export function App() {
                   >
                     <Route path="/profile" element={<AccountPage />} />
                     <Route path="/settings" element={<SettingsPage />} />
+                    <Route
+                      path="/notifications"
+                      element={
+                        <RequireAuth>
+                          <NotificationsPage />
+                        </RequireAuth>
+                      }
+                    />
+                    <Route
+                      path="/projects"
+                      element={
+                        <RequireAuth>
+                          <ProjectsPage />
+                        </RequireAuth>
+                      }
+                    />
+                    <Route
+                      path="/projects/:id"
+                      element={
+                        <RequireAuth>
+                          <ProjectPage />
+                        </RequireAuth>
+                      }
+                    />
+                    <Route
+                      path="/bookings"
+                      element={
+                        <RequireAuth>
+                          <BookingsPage />
+                        </RequireAuth>
+                      }
+                    />
+                    <Route
+                      path="/bookings/new"
+                      element={
+                        <RequireAuth>
+                          <BookingRequestPage />
+                        </RequireAuth>
+                      }
+                    />
+                    <Route
+                      path="/bookings/live/:id"
+                      element={
+                        <RequireAuth>
+                          <BookingPage />
+                        </RequireAuth>
+                      }
+                    />
+                    <Route
+                      path="/bookings/:id"
+                      element={
+                        <RequireAuth>
+                          <BookingPage />
+                        </RequireAuth>
+                      }
+                    />
+                    <Route
+                      path="/messages"
+                      element={
+                        <RequireAuth>
+                          <MessagesPage />
+                        </RequireAuth>
+                      }
+                    />
+                    <Route
+                      path="/studio"
+                      element={
+                        <RequireAuth roles={['photographer', 'studio_manager']}>
+                          <StudioPage />
+                        </RequireAuth>
+                      }
+                    />
+                    <Route
+                      path="/studio/:id"
+                      element={
+                        <RequireAuth roles={['photographer', 'studio_manager']}>
+                          <StudioDetailPage />
+                        </RequireAuth>
+                      }
+                    />
+                    <Route
+                      path="/portfolio"
+                      element={
+                        <RequireAuth roles={['photographer', 'studio_manager']}>
+                          <PortfolioPage />
+                        </RequireAuth>
+                      }
+                    />
+                    <Route
+                      path="/portfolio/services/:id/edit"
+                      element={
+                        <RequireAuth roles={['photographer']}>
+                          <ServiceEditPage />
+                        </RequireAuth>
+                      }
+                    />
+                    <Route
+                      path="/portfolio/new"
+                      element={
+                        <RequireAuth roles={['photographer']}>
+                          <PortfolioCreatePage />
+                        </RequireAuth>
+                      }
+                    />
+                    <Route
+                      path="/admin"
+                      element={
+                        <RequireAuth roles={['system_admin']}>
+                          <ModerationPage />
+                        </RequireAuth>
+                      }
+                    />
+                    <Route
+                      path="/admin/booking-completions"
+                      element={
+                        <RequireAuth roles={['system_admin']}>
+                          <BookingCompletionsPage />
+                        </RequireAuth>
+                      }
+                    />
                   </Route>
-                  <Route
-                    path="/notifications"
-                    element={
-                      <RequireAuth>
-                        <NotificationsPage />
-                      </RequireAuth>
-                    }
-                  />
-                  <Route
-                    path="/projects"
-                    element={
-                      <RequireAuth>
-                        <ProjectsPage />
-                      </RequireAuth>
-                    }
-                  />
-                  <Route
-                    path="/projects/:id"
-                    element={
-                      <RequireAuth>
-                        <ProjectPage />
-                      </RequireAuth>
-                    }
-                  />
-                  <Route
-                    path="/bookings"
-                    element={
-                      <RequireAuth>
-                        <BookingsPage />
-                      </RequireAuth>
-                    }
-                  />
-                  <Route
-                    path="/bookings/new"
-                    element={
-                      <RequireAuth>
-                        <BookingRequestPage />
-                      </RequireAuth>
-                    }
-                  />
-                  <Route
-                    path="/bookings/live/:id"
-                    element={
-                      <RequireAuth>
-                        <BookingPage />
-                      </RequireAuth>
-                    }
-                  />
-                  <Route
-                    path="/bookings/:id"
-                    element={
-                      <RequireAuth>
-                        <BookingPage />
-                      </RequireAuth>
-                    }
-                  />
-                  <Route
-                    path="/messages"
-                    element={
-                      <RequireAuth>
-                        <MessagesPage />
-                      </RequireAuth>
-                    }
-                  />
-                  <Route
-                    path="/studio"
-                    element={
-                      <RequireAuth roles={['photographer', 'studio_manager']}>
-                        <StudioPage />
-                      </RequireAuth>
-                    }
-                  />
-                  <Route
-                    path="/studio/:id"
-                    element={
-                      <RequireAuth roles={['photographer', 'studio_manager']}>
-                        <StudioDetailPage />
-                      </RequireAuth>
-                    }
-                  />
-                  <Route
-                    path="/portfolio"
-                    element={
-                      <RequireAuth roles={['photographer', 'studio_manager']}>
-                        <PortfolioPage />
-                      </RequireAuth>
-                    }
-                  />
-                  <Route
-                    path="/portfolio/services/:id/edit"
-                    element={
-                      <RequireAuth roles={['photographer']}>
-                        <ServiceEditPage />
-                      </RequireAuth>
-                    }
-                  />
-                  <Route
-                    path="/portfolio/new"
-                    element={
-                      <RequireAuth roles={['photographer']}>
-                        <PortfolioCreatePage />
-                      </RequireAuth>
-                    }
-                  />
-                  <Route
-                    path="/admin"
-                    element={
-                      <RequireAuth roles={['system_admin']}>
-                        <ModerationPage />
-                      </RequireAuth>
-                    }
-                  />
-                  <Route
-                    path="/admin/booking-completions"
-                    element={
-                      <RequireAuth roles={['system_admin']}>
-                        <BookingCompletionsPage />
-                      </RequireAuth>
-                    }
-                  />
                   <Route path="/bookings/live" element={<Navigate to="/bookings" replace />} />
                   <Route path="/health" element={<HomePage />} />
                   <Route

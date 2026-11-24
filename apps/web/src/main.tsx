@@ -5,6 +5,7 @@ import './styles.css';
 import './editorial.css';
 import './profiles.css';
 import './design.css';
+import './curation.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

@@ -130,8 +130,19 @@ retain their original kind/name labels. No schema migration is required.
 
 The browser has no role switcher, seeded fallback state or simulated workflow. Existing account
 routes use authenticated APIs. Bookings include a month calendar and owned schedule blocks;
-the notification bell uses the same account feed as the notification page. Explore loads twelve
-collections per request, offers explicit loading of the next page and lazy-loads photographs.
+the notification bell uses the same account feed as the notification page. Home remains at
+`/explore` and introduces the twelve shared genres through a draggable animated aperture ring.
+Its original rim/blade geometry surrounds an independently moving colour wash in the central
+opening. The botanical, watercolor and paper-frame presentation is drawn in SVG/CSS, with
+portfolio photographs supplying the actual imagery.
+Genre introductions show one or two portfolio photographs, neighbouring previews and a
+separate Explore action; interface labels follow the selected language.
+Public directories at `/photographers` and `/studios` use the existing provider list/detail
+endpoints and published portfolio imagery. `/genres/:genre` scopes collection discovery to
+one primary genre, retains secondary tag/search/sort filters, loads twelve collections per
+request, offers explicit loading of the next page and lazy-loads photographs. Account
+workspace links live inside Profile; the floating chat launcher keeps `/messages` and its
+existing unread state. No API contract or workspace endpoint changed.
 
 Unknown paid-provider outcomes remain uncertain and are not automatically repeated.
 The worker rechecks project access before reading private inputs. Originals are
