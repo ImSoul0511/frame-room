@@ -131,6 +131,10 @@ export const genreNames: Record<string, string> = {
   food: 'Ẩm thực',
   event: 'Sự kiện',
   cosplay: 'Cosplay',
+  drink: 'Đồ uống',
+  yearbook: 'Kỷ yếu',
+  outdoor: 'Ngoại cảnh',
+  tet_holiday: 'Ảnh Tết',
 };
 export const categoryNames: Record<string, string> = {
   genre: 'Loại hình',

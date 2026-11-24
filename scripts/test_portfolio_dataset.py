@@ -208,6 +208,22 @@ class ImportTests(unittest.TestCase):
         self.assertEqual(image["caption"], "Human caption")
         self.assertEqual(len(self.db.users), 1)
 
+    def test_new_genres_import_and_resume_without_duplicates(self):
+        for genre in ("drink", "yearbook", "outdoor", "tet_holiday"):
+            with self.subTest(genre=genre):
+                self.db = FakeSupabase()
+                self.record["genre"] = genre
+                self.args.genres = genre
+                (self.output / "manifest.jsonl").write_text(
+                    json.dumps(self.record) + "\n", encoding="utf-8")
+                self.assertEqual(self.run_import(), 0)
+                self.assertEqual(self.run_import(), 0)
+                self.assertEqual(len(self.db.uploads), 1)
+                self.assertEqual(len(self.db.tables["portfolio_images"]), 1)
+                self.assertEqual(self.db.tables["portfolio_images"][0]["suggested_genre"], genre)
+                self.assertEqual(self.db.tables["portfolios"][0]["genre"], genre)
+                self.assertEqual(self.db.tables["photographers"][0]["genres"], [genre])
+
     def test_already_imported_and_deleted_records_do_not_read_local_files(self):
         self.run_import()
         image = self.db.tables["portfolio_images"].pop()

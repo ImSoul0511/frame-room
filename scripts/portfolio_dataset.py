@@ -30,7 +30,10 @@ from bs4 import BeautifulSoup
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 ROOT = Path(__file__).resolve().parents[1]
-GENRES = ("portrait", "fashion", "wedding", "family", "product", "food", "event", "cosplay")
+GENRES = (
+    "portrait", "fashion", "wedding", "family", "product", "food", "event", "cosplay",
+    "drink", "yearbook", "outdoor", "tet_holiday",
+)
 CATEGORIES = {
     "genre", "subject", "setting", "lighting", "color_tone", "mood",
     "composition", "style", "editing", "styling",

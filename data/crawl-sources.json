@@ -88,6 +88,30 @@
       "enabled": false,
       "note": "Mixed-genre profile feeds. Enable only when you accept portrait as a weak intake hint, or replace URLs with profiles you have inspected.",
       "urls": ["https://potonow.vn/photographers"]
+    },
+    {
+      "source": "pinterest",
+      "genre": "drink",
+      "queries": [
+        "beverage commercial photography cafe menu",
+        "aesthetic iced coffee drink photography",
+        "restaurant cocktail mocktail photography"
+      ]
+    },
+    {
+      "source": "pinterest",
+      "genre": "yearbook",
+      "queries": ["high school yearbook photoshoot vietnam", "ảnh kỷ yếu"]
+    },
+    {
+      "source": "pinterest",
+      "genre": "outdoor",
+      "queries": ["natural light outdoor lifestyle photography", "chụp ảnh ngoại cảnh"]
+    },
+    {
+      "source": "pinterest",
+      "genre": "tet_holiday",
+      "queries": ["chụp ảnh tết ngoại cảnh", "chụp ảnh áo dài tết"]
     }
   ]
 }

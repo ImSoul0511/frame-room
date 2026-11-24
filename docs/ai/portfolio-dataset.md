@@ -41,7 +41,17 @@ py -3 scripts/portfolio_dataset.py doctor
 
 ## Collect images locally
 
-Edit [crawl-sources.json](../../data/crawl-sources.json). Each job contains a source adapter, a suggested genre, and either public URLs or Pinterest search queries. The eight application genres are supported. Graduation is a subject tag and appears in portrait/event search queries rather than a new application enum.
+Edit [crawl-sources.json](../../data/crawl-sources.json). Each job contains a source adapter, a suggested genre, and either public URLs or Pinterest search queries. Supported genres are `portrait`, `fashion`, `wedding`, `family`, `product`, `food`, `event`, `cosplay`, `drink`, `yearbook`, `outdoor`, and `tet_holiday`. Graduation queries can also remain in portrait/event jobs; `yearbook` supports a separate intake category.
+
+Before importing the four new genres, run [202611240001_expand_dataset_genres.sql](../../supabase/migrations/202611240001_expand_dataset_genres.sql) in the intended Supabase project's SQL Editor and wait for it to commit. It extends `public.genre` and the text check on `portfolio_images.suggested_genre`, preserving existing data and tag assignments. It does not add or automatically assign reviewed tags.
+
+```powershell
+py -3 scripts/portfolio_dataset.py crawl --source pinterest --genres drink,yearbook,outdoor,tet_holiday --per-genre 100 --browser --headed
+py -3 scripts/portfolio_dataset.py import --genres drink,yearbook,outdoor,tet_holiday --check
+py -3 scripts/portfolio_dataset.py import --genres drink,yearbook,outdoor,tet_holiday --apply
+```
+
+New inboxes are drafts with the last command. Add `--publish` when importing if newly created inboxes should be published.
 
 Use `--source mywed`, `--source pinterest`, or `--source potonow` to run only one website. Omitting `--source` runs every enabled job matching the selected genres. `--source` does not enable a disabled job.
 
