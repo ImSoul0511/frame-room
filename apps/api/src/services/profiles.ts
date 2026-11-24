@@ -16,6 +16,12 @@ export async function updateAvatar(tx: Transaction, userId: string, path: string
   return getOwnProfile(tx, userId);
 }
 
+export async function updatePhotographerCover(tx: Transaction, userId: string, path: string) {
+  const photographer = await profiles.updatePhotographerCover(tx, userId, path);
+  if (!photographer) throw new ApiError(404, 'NOT_FOUND', 'not_found');
+  return photographer;
+}
+
 /** Read-only: a missing profile is reported, never created implicitly. */
 export async function getOwnProfile(tx: Transaction, userId: string): Promise<Profile> {
   const profile = await profiles.findProfile(tx, userId);

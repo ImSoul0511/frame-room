@@ -216,6 +216,13 @@ export async function findPhotographersByDisplayName(
 }
 
 /** Lists active, non-deleted services offered by a provider. */
+export function findPhotographerProfileImages(tx: Transaction, id: string) {
+  return tx.optional<{ coverPath: string | null; avatarPath: string | null }>(
+    "select to_jsonb(p)->>'cover_path' as cover_path, pr.avatar_path from photographers p join profiles pr on pr.id=p.user_id where p.id = $1 and not p.is_hidden",
+    [id],
+  );
+}
+
 export async function listActiveServicesByProvider(
   tx: Transaction,
   type: 'photographer' | 'studio',

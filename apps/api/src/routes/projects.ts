@@ -9,13 +9,24 @@ import { z } from 'zod';
 import { defineRoute, type ApiModule } from '../plugins/route.js';
 import { MediaService } from '../services/media.js';
 import * as repo from '../repositories/projects.js';
-import { patchProject } from '../services/projects.js';
+import { deleteProject, patchProject } from '../services/projects.js';
 
 export const projectsModule: ApiModule = {
   name: 'projects',
   register(app, deps) {
     const media = new MediaService(deps.env);
     const params = z.object({ id: idSchema });
+    defineRoute(app, deps, {
+      method: 'DELETE',
+      url: '/v1/creative-projects/:id',
+      summary: 'Remove an owned project without a booking or active AI job.',
+      access: 'verified',
+      params,
+      response: z.object({ deleted: z.literal(true) }),
+      errors: [409],
+      handler: ({ actor, params, transaction }) =>
+        transaction((tx) => deleteProject(tx, actor.id, params.id)),
+    });
     defineRoute(app, deps, {
       method: 'GET',
       url: '/v1/creative-projects',

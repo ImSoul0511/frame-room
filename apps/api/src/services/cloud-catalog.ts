@@ -234,6 +234,17 @@ export function createCloudCatalog(env: ApiEnv) {
       check(error);
       return data ? ownPhotographerSchema.parse(normalizeRow(data)) : null;
     },
+    async updatePhotographerCover(userId: string, path: string) {
+      const { data, error } = await accountClient()
+        .from('photographers')
+        .update({ cover_path: path })
+        .eq('user_id', userId)
+        .select()
+        .maybeSingle();
+      check(error);
+      if (!data) throw new ApiError(404, 'NOT_FOUND', 'not_found');
+      return ownPhotographerSchema.parse(normalizeRow(data));
+    },
     async savePhotographer(
       userId: string,
       input: {
@@ -282,7 +293,7 @@ export function createCloudCatalog(env: ApiEnv) {
       if (!data) throw new ApiError(404, 'NOT_FOUND', `${type}_not_found`);
       const { id } = data;
       const owner = type === 'photographer' ? 'photographer_id' : 'studio_id';
-      const [services, portfolios, reviews] = await Promise.all([
+      const [services, portfolios, reviews, cover] = await Promise.all([
         publicClient
           .from('services')
           .select('*')
@@ -301,10 +312,27 @@ export function createCloudCatalog(env: ApiEnv) {
           .eq(owner, id)
           .eq('is_hidden', false)
           .is('deleted_at', null),
+        type === 'photographer'
+          ? publicClient
+              .from('photographers')
+              .select('*,profiles(avatar_path)')
+              .eq('id', id)
+              .maybeSingle()
+          : Promise.resolve({ data: null, error: null }),
       ]);
-      for (const result of [services, portfolios, reviews]) check(result.error);
+      for (const result of [services, portfolios, reviews, cover]) check(result.error);
       return providerDetailSchema.parse({
         provider: normalizeRow(data),
+        coverPath:
+          z.object({ cover_path: z.string().nullable().optional() }).nullable().parse(cover.data)
+            ?.cover_path ?? null,
+        avatarPath:
+          z
+            .object({
+              profiles: z.object({ avatar_path: z.string().nullable() }).nullable().optional(),
+            })
+            .nullable()
+            .parse(cover.data)?.profiles?.avatar_path ?? null,
         services: normalizeRow(services.data ?? []),
         portfolios: (portfolios.data ?? []).map((portfolio) => ({
           ...(normalizeRow(portfolio) as object),

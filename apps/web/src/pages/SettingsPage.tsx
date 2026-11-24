@@ -1,13 +1,13 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { Resource, Studio } from '../lib/types';
 import { useAuth } from '../lib/auth';
 import { api, post, patch } from '../lib/api';
 import { useApi, useTask } from '../lib/hooks';
 import { useStrings } from '../lib/i18n';
-import { PhotographerForm, ProfileForm } from '../features/catalog/ProviderForms';
-import { AvatarEditor } from '../features/catalog/AvatarEditor';
 import { LanguageSwitcher } from '../components/LanguageSwitcher';
+import { UserAvatar } from '../components/UserAvatar';
+import { PhotographerForm, ProfileForm } from '../features/catalog/ProviderForms';
 import {
   Action,
   Area,
@@ -24,39 +24,61 @@ import {
 export function SettingsPage() {
   const t = useStrings();
   const { profile, session } = useAuth();
+  const avatarTriggerRef = useRef<HTMLButtonElement>(null);
   return (
     <>
       <PageHeading title={t.workspaceUi.settings} />
-      <div className="two-col">
+      <div className="settings-profile">
         <section className="panel">
-          <h2>{t.onboarding}</h2>
-          {profile ? <AvatarEditor profile={profile} /> : null}
-          {profile ? <ProfileForm profile={profile} /> : null}
+          <h2>{t.profileUi.account}</h2>
+          {profile ? <ProfileForm profile={profile} avatarTriggerRef={avatarTriggerRef} /> : null}
           <p className="muted">{session?.user.email}</p>
-          <LanguageSwitcher />
         </section>
-        <section className="profile-summary">
-          <h2>{t.profileUi.profileLinks}</h2>
-          <p>{t.profileUi.profileLinksDescription}</p>
-          <div className="account-quick-links">
-            <Link to="/profile">{t.profileUi.account}</Link>
-          </div>
-          <h3>{t.profileUi.security}</h3>
-          <p>{t.profileUi.passwordDescription}</p>
+        {profile ? (
+          <aside className="settings-avatar-card" aria-label={t.profileUi.account}>
+            <button
+              type="button"
+              className="avatar-edit-trigger"
+              aria-label={t.profileUi.editAvatar}
+              onClick={() => avatarTriggerRef.current?.click()}
+            >
+              <UserAvatar
+                name={profile.displayName}
+                avatarPath={profile.avatarPath}
+                className="settings-avatar-card-photo"
+              />
+            </button>
+            <p className="settings-avatar-card-name">{profile.displayName}</p>
+            <p className="settings-avatar-card-username">@{profile.userName}</p>
+          </aside>
+        ) : null}
+      </div>
+      {profile?.roles.includes('photographer') ? (
+        <>
+          <section className="panel">
+            <h2>{t.portfolio.profile}</h2>
+            <PhotographerForm />
+          </section>
+          <ScheduleBlocks />
+        </>
+      ) : null}
+      <div className="settings-preferences">
+        <section className="panel">
+          <h2>{t.profileUi.security}</h2>
+          <p className="muted">{t.profileUi.passwordDescription}</p>
           <Link className="text-button" to="/auth?mode=reset">
             {t.forgot}
           </Link>
         </section>
+        <section className="panel settings-language-panel">
+          <h2>{t.language.label}</h2>
+          <LanguageSwitcher />
+        </section>
       </div>
-      <section className="panel">
-        <h2>{t.portfolio.profile}</h2>
-        <PhotographerForm />
-      </section>
-      {profile?.roles.includes('photographer') ? <ScheduleBlocks /> : null}
     </>
   );
 }
-function ScheduleBlocks() {
+export function ScheduleBlocks() {
   const t = useStrings();
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');

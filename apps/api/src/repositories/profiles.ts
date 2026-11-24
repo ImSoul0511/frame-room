@@ -24,7 +24,14 @@ const PROFILE_SQL = `
   where p.id = $1`;
 
 const PHOTOGRAPHER_COLUMNS =
-  'id, user_id, display_name, bio, city, district, genres::text[] as genres, styles, contact_email, professional_roles, is_hidden, created_at, updated_at';
+  "id, user_id, display_name, bio, city, district, genres::text[] as genres, styles, contact_email, professional_roles, to_jsonb(photographers)->>'cover_path' as cover_path, is_hidden, created_at, updated_at";
+
+export function updatePhotographerCover(tx: Transaction, userId: string, path: string) {
+  return tx.optional<OwnPhotographer>(
+    `update photographers set cover_path = $2 where user_id = $1 returning ${PHOTOGRAPHER_COLUMNS}`,
+    [userId, path],
+  );
+}
 
 export function findProfile(tx: Transaction, userId: string) {
   return tx.optional<Profile>(PROFILE_SQL, [userId]);

@@ -16,7 +16,7 @@ export async function access(
 export async function project(tx: Transaction, id: string, lock = false) {
   await access(tx, 'project', id);
   return tx.one<CreativeProject>(
-    'select p.*, b.id as booking_id from creative_projects p left join bookings b on b.project_id=p.id where p.id=$1' +
+    'select p.*, b.id as booking_id from creative_projects p left join bookings b on b.project_id=p.id where p.id=$1 and p.deleted_at is null' +
       (lock ? ' for update of p' : ''),
     [id],
   );

@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import type { Service } from '@frameroom/shared';
 import type { ProviderDetail } from '../../lib/types';
-import { currency } from '../../lib/api';
+import { currency, supabase } from '../../lib/api';
 import { useStrings } from '../../lib/i18n';
 import { Action } from '../../components/ui';
 import { FittedImage } from '../../components/FittedImage';
+import { UserAvatar } from '../../components/UserAvatar';
 import { ReportButton } from '../../pages/SettingsPage';
 
 export function ProviderProfile({
@@ -13,35 +14,45 @@ export function ProviderProfile({
   onBook,
   onContact,
   canRequest = true,
+  coverAction,
+  avatarPath,
 }: {
   detail: ProviderDetail;
   onBook: (service: Service) => void;
   onContact?: () => void;
   canRequest?: boolean;
+  coverAction?: ReactNode;
+  avatarPath?: string | null;
 }) {
   const t = useStrings();
   const { provider, services, portfolios, reviews } = detail;
   const [tab, setTab] = useState('works');
-  const cover = portfolios.find((portfolio) => portfolio.coverUrl)?.coverUrl;
+  const customCover =
+    detail.coverPath && supabase
+      ? supabase.storage.from('profile-covers').getPublicUrl(detail.coverPath).data.publicUrl
+      : null;
+  const cover = customCover || portfolios.find((portfolio) => portfolio.coverUrl)?.coverUrl;
   return (
     <div className="public-profile">
-      <div className={`profile-cover ${!cover ? 'profile-cover-empty' : ''}`}>
-        {cover ? (
+      <div
+        className={`profile-cover ${!cover ? 'profile-cover-empty' : ''} ${customCover ? 'profile-cover-custom' : ''}`}
+      >
+        {customCover ? (
+          <img src={customCover} alt="" />
+        ) : cover ? (
           <FittedImage src={cover} alt={provider.displayName} />
         ) : (
           <span aria-hidden="true">FrameRoom.</span>
         )}
         <span className="profile-kind">{t.explore[provider.type]}</span>
+        {coverAction}
       </div>
       <header className="profile-identity">
-        <div className="profile-monogram" aria-hidden="true">
-          {provider.displayName
-            .trim()
-            .split(' ')
-            .slice(-2)
-            .map((part) => part[0])
-            .join('')}
-        </div>
+        <UserAvatar
+          name={provider.displayName}
+          avatarPath={avatarPath === undefined ? detail.avatarPath : avatarPath}
+          className="profile-monogram"
+        />
         <div className="profile-name">
           <p className="eyebrow">{provider.city || t.eyebrow}</p>
           <h1>{provider.displayName}</h1>
@@ -187,7 +198,7 @@ export function ProviderProfile({
                     </span>
                     <p>{review.comment}</p>
                     <cite>{review.authorName}</cite>
-                    <ReportButton targetType="review" targetId={review.id} />
+                    {canRequest ? <ReportButton targetType="review" targetId={review.id} /> : null}
                   </blockquote>
                 ))
               ) : (

@@ -15,6 +15,21 @@ export const profileModule: ApiModule = {
     const media = new MediaService(deps.env);
     defineRoute(app, deps, {
       method: 'PATCH',
+      url: '/v1/photographers/me/cover',
+      summary: 'Set the caller’s photographer cover using an owned uploaded image.',
+      access: 'verified',
+      body: z.object({ coverPath: z.string().min(1).max(500) }),
+      response: ownPhotographerSchema,
+      errors: [400, 403, 404, 503],
+      handler: async ({ actor, body, transaction }) => {
+        await media.verify('profile-covers', body.coverPath, actor.id);
+        return cloud
+          ? cloud.updatePhotographerCover(actor.id, body.coverPath)
+          : transaction((tx) => profiles.updatePhotographerCover(tx, actor.id, body.coverPath));
+      },
+    });
+    defineRoute(app, deps, {
+      method: 'PATCH',
       url: '/v1/me/avatar',
       summary: 'Set or clear the caller’s avatar using an owned uploaded image.',
       access: 'verified',

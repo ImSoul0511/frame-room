@@ -75,6 +75,7 @@ export const photographerInputSchema = z.object({
 export const ownPhotographerSchema = photographerInputSchema.extend({
   id: idSchema,
   userId: idSchema,
+  coverPath: z.string().nullable().optional(),
   genres: z.array(genreSchema),
   isHidden: z.boolean(),
   createdAt: z.string(),

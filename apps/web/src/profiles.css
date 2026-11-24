@@ -17,6 +17,35 @@
   min-height: 0;
   margin-inline: auto;
 }
+.profile-cover-custom > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.profile-cover-picker {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 8px 16px;
+  border: 1px solid #d4cfdf;
+  border-radius: 24px;
+  background: #fffdf9ed;
+  color: #354568;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.profile-cover-picker:focus-within {
+  outline: 2px solid #536894;
+  outline-offset: 2px;
+}
+.profile-cover-picker.is-pending {
+  opacity: 0.7;
+  cursor: wait;
+}
 .profile-kind {
   position: absolute;
   right: 24px;
@@ -32,7 +61,7 @@
   place-items: center;
   background: radial-gradient(ellipse at 30% 80%, #c8d8d1, transparent 60%), #deddeb;
 }
-.profile-cover-empty > span {
+.profile-cover-empty > span[aria-hidden='true'] {
   font:
     italic clamp(40px, 6vw, 80px) 'Lora',
     Georgia,
@@ -77,6 +106,57 @@
   color: #485b82;
   font-size: 1.35rem;
 }
+.avatar-edit-trigger {
+  display: inline-flex;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+.avatar-edit-trigger:focus-visible {
+  outline: 2px solid #536894;
+  outline-offset: 4px;
+}
+.avatar-crop-dialog {
+  display: grid;
+  gap: 16px;
+  width: min(420px, 100%);
+  margin-inline: auto;
+}
+.avatar-crop-stage {
+  position: relative;
+  width: min(320px, 100%);
+  aspect-ratio: 1;
+  margin-inline: auto;
+  overflow: hidden;
+  border: 3px solid #ded8e8;
+  border-radius: 50%;
+  background: #e9e5ee;
+  cursor: grab;
+  touch-action: none;
+}
+.avatar-crop-stage:active {
+  cursor: grabbing;
+}
+.avatar-crop-stage img {
+  position: absolute;
+  max-width: none;
+  transform: translate(-50%, -50%);
+  user-select: none;
+  pointer-events: none;
+}
+.avatar-crop-range {
+  display: grid;
+  gap: 6px;
+  color: #515c77;
+  font-size: 0.875rem;
+}
+.avatar-crop-range input {
+  width: 100%;
+  accent-color: #536894;
+}
 .avatar-editor-controls {
   display: flex;
   min-width: 0;
@@ -85,7 +165,111 @@
   gap: 10px;
 }
 .avatar-editor-picker {
+  display: inline-flex;
+  align-items: center;
+  min-height: 80px;
   cursor: pointer;
+}
+.settings-profile {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(250px, 0.55fr);
+  align-items: start;
+  gap: clamp(32px, 5vw, 80px);
+}
+.settings-preferences {
+  max-width: 760px;
+}
+.settings-language-panel .language-switcher select {
+  min-width: 170px;
+  min-height: 44px;
+  padding: 8px 36px 8px 14px;
+  border: 1px solid #c9c5d2;
+  border-radius: 8px;
+  background-color: #fff;
+  color: #394b70;
+  font-size: 1rem;
+  cursor: pointer;
+}
+.settings-language-panel .language-switcher select:focus-visible {
+  outline: 2px solid #536894;
+  outline-offset: 2px;
+}
+.settings-avatar-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 350px;
+  margin-top: 24px;
+  padding: 40px 24px;
+  border: 1px solid #ded8e8;
+  border-radius: 8px;
+  background: #f0ecf5;
+  text-align: center;
+}
+.settings-avatar-card-photo {
+  width: 148px;
+  height: 148px;
+  border: 6px solid #fffaf5;
+  background: #dcd5e9;
+  color: #485b82;
+  font-size: 2.5rem;
+}
+.settings-avatar-card-name {
+  margin: 22px 0 4px;
+  color: #354568;
+  font-size: 1.15rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.settings-avatar-card-username {
+  margin: 0;
+  color: #68718b;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 700px) {
+  .settings-profile {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+  .settings-avatar-card {
+    min-height: 260px;
+  }
+}
+.profile-edit-fields {
+  display: grid;
+  gap: 16px;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.profile-edit-fields div:has(> input:disabled) {
+  background: #e9e9ed !important;
+  border-radius: 8px;
+  cursor: not-allowed;
+}
+.profile-edit-fields input:disabled {
+  background: transparent;
+  color: #6d7281;
+  cursor: not-allowed;
+  -webkit-text-fill-color: #6d7281;
+}
+.profile-update-action {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.profile-update-confirmed {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #dcefe3;
+  color: #28794e;
+  font-weight: 700;
+  line-height: 1;
 }
 .avatar-editor-picker:focus-within {
   outline: 2px solid #536894;

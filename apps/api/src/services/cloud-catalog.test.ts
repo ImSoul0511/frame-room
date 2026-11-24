@@ -108,14 +108,25 @@ describe('Cloud catalog without a direct Postgres connection', () => {
           },
         ]);
       }
+      if (request.pathname.endsWith('/photographers')) {
+        expect(request.searchParams.get('id')).toBe(`eq.${USER}`);
+        return Response.json([
+          { cover_path: `${USER}/cover.webp`, profiles: { avatar_path: `${USER}/avatar.webp` } },
+        ]);
+      }
       expect(request.searchParams.get('photographer_id')).toBe(`eq.${USER}`);
       return Response.json([]);
     });
     vi.stubGlobal('fetch', fetch);
     await expect(
       createCloudCatalog(settings)!.detail('photographer', { displayName }),
-    ).resolves.toMatchObject({ provider: { id: USER, displayName }, services: [] });
-    expect(fetch).toHaveBeenCalledTimes(4);
+    ).resolves.toMatchObject({
+      provider: { id: USER, displayName },
+      services: [],
+      coverPath: `${USER}/cover.webp`,
+      avatarPath: `${USER}/avatar.webp`,
+    });
+    expect(fetch).toHaveBeenCalledTimes(5);
   });
 
   it('never reads gallery images for an unpublished or deleted portfolio', async () => {
