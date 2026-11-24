@@ -91,6 +91,14 @@ test('avatar opens profile, keeps settings inside it and signs out', async ({ pa
     roles: ['client'],
     createdAt: new Date().toISOString(),
   };
+  const notifications = Array.from({ length: 12 }, (_, index) => ({
+    id: `notice-${index}`,
+    bookingId: null,
+    studioId: null,
+    event: 'bookingUpdated',
+    createdAt: new Date().toISOString(),
+    readAt: index === 11 ? new Date().toISOString() : null,
+  }));
   await page.route(`${projectUrl}/**`, async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith('/logout')) {
@@ -108,7 +116,31 @@ test('avatar opens profile, keeps settings inside it and signs out', async ({ pa
     else await route.abort();
   });
   await page.route('http://localhost:4000/v1/**', async (route) => {
-    const path = new URL(route.request().url()).pathname;
+    const url = new URL(route.request().url());
+    const path = url.pathname;
+    if (path === '/v1/me/notifications/pages') {
+      const pageNumber = Number(url.searchParams.get('page'));
+      const pageSize = Number(url.searchParams.get('pageSize'));
+      const filtered = notifications.filter(
+        (notice) => url.searchParams.get('unread') !== 'true' || !notice.readAt,
+      );
+      const start = (pageNumber - 1) * pageSize;
+      await route.fulfill({
+        json: {
+          data: {
+            items: filtered.slice(start, start + pageSize),
+            hasMore: filtered.length > start + pageSize,
+          },
+        },
+      });
+      return;
+    }
+    if (path.startsWith('/v1/me/notifications/') && route.request().method() === 'PATCH') {
+      const item = notifications.find((notice) => path.endsWith(notice.id));
+      if (item) item.readAt = new Date().toISOString();
+      await route.fulfill({ json: { data: item } });
+      return;
+    }
     if (path === '/v1/me' && route.request().method() === 'PATCH') {
       profileWrites++;
       const input = route.request().postDataJSON() as { displayName: string; userName: string };
@@ -120,30 +152,32 @@ test('avatar opens profile, keeps settings inside it and signs out', async ({ pa
     const data =
       path === '/v1/me'
         ? account
-        : path === '/v1/photographers/me'
-          ? account.roles.includes('photographer')
-            ? { id: 'photo-id' }
-            : null
-          : path === '/v1/photographers/photo-id'
-            ? {
-                provider: {
-                  id: 'photo-id',
-                  type: 'photographer',
-                  displayName: 'New Check',
-                  city: '',
-                  district: '',
-                  bio: '',
-                  genres: ['portrait'],
-                  styles: [],
-                  priceFrom: null,
-                  ratingAvg: null,
-                  reviewCount: 0,
-                },
-                portfolios: [],
-                services: [],
-                reviews: [],
-              }
-            : [];
+        : path === '/v1/me/notifications'
+          ? notifications
+          : path === '/v1/photographers/me'
+            ? account.roles.includes('photographer')
+              ? { id: 'photo-id' }
+              : null
+            : path === '/v1/photographers/photo-id'
+              ? {
+                  provider: {
+                    id: 'photo-id',
+                    type: 'photographer',
+                    displayName: 'New Check',
+                    city: '',
+                    district: '',
+                    bio: '',
+                    genres: ['portrait'],
+                    styles: [],
+                    priceFrom: null,
+                    ratingAvg: null,
+                    reviewCount: 0,
+                  },
+                  portfolios: [],
+                  services: [],
+                  reviews: [],
+                }
+              : [];
     await route.fulfill({ json: { data } });
   });
   await page.goto('/explore', { waitUntil: 'domcontentloaded' });
@@ -164,6 +198,16 @@ test('avatar opens profile, keeps settings inside it and signs out', async ({ pa
     'aria-current',
     'page',
   );
+  await profileTabs.getByRole('link', { name: 'Thông báo', exact: true }).click();
+  await expect(page.locator('.notification-card')).toHaveCount(10);
+  await page.getByRole('button', { name: 'Trang tiếp theo' }).click();
+  await expect(page.locator('.notification-card')).toHaveCount(2);
+  await page.getByRole('button', { name: 'Chưa đọc', exact: true }).click();
+  await expect(page.locator('.notification-card')).toHaveCount(10);
+  await page.getByRole('button', { name: 'Trang tiếp theo' }).click();
+  await expect(page.locator('.notification-card')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Đánh dấu đã đọc', exact: true }).click();
+  await expect(page.locator('.notification-card')).toHaveCount(10);
   await expect(page.getByLabel('Tên hiển thị', { exact: true })).toHaveCount(0);
   await profileTabs.getByRole('link', { name: 'Cài đặt', exact: true }).click();
   await expect(page).toHaveURL(/\/settings$/);
@@ -219,6 +263,36 @@ test('avatar opens profile, keeps settings inside it and signs out', async ({ pa
   );
   await expect(page.getByLabel('Đổi ảnh bìa')).toBeAttached();
   await expect(page.getByRole('button', { name: 'Liên hệ', exact: true })).toHaveCount(0);
+  await expect(page.locator('.primary-navigation > a')).toHaveText([
+    'Trang chủ',
+    'Giới thiệu',
+    'Dự án của bạn',
+    'Lịch chụp',
+    'Hồ sơ và tác phẩm',
+  ]);
+  await expect(profileTabs.getByRole('link')).toHaveText([
+    'Hồ sơ',
+    'Studio',
+    'Thông báo',
+    'Cài đặt',
+  ]);
+  await expect(profileTabs.locator('.photographer-logout-box')).toBeVisible();
+  const contentBounds = await page.locator('.photographer-account-content').boundingBox();
+  const sidebarBounds = await page.locator('.photographer-account-sidebar').boundingBox();
+  expect(contentBounds!.x).toBeGreaterThanOrEqual(sidebarBounds!.x + sidebarBounds!.width);
+  const coverBounds = await page.locator('.public-profile .profile-cover').boundingBox();
+  expect(Math.abs(sidebarBounds!.y - coverBounds!.y)).toBeLessThanOrEqual(2);
+  await page.locator('.photographer-account-content').evaluate((content) => {
+    (content as HTMLElement).style.minHeight = '2200px';
+  });
+  await page.evaluate(() => window.scrollTo({ top: 700, behavior: 'instant' }));
+  await expect
+    .poll(async () => (await page.locator('.photographer-account-sidebar').boundingBox())?.y)
+    .toBeCloseTo(190, 0);
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+  await page.setViewportSize({ width: 375, height: 900 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
+  await page.setViewportSize({ width: 1280, height: 900 });
   await expect(profileTabs.getByRole('link', { name: 'Hồ sơ' })).toHaveAttribute(
     'aria-current',
     'page',

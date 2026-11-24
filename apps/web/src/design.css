@@ -1154,6 +1154,26 @@ body {
 .notification-card .row {
   align-items: start;
 }
+.notification-card-content {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+.notification-card h2 {
+  overflow-wrap: anywhere;
+}
+.notification-expand {
+  margin-top: 6px;
+  font-size: 0.8125rem;
+}
+.notification-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 24px;
+  color: #53617f;
+}
 .notification-card p {
   font-size: 0.8125rem;
   color: var(--fr-muted);

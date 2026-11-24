@@ -48,6 +48,10 @@ export const designEnglish = {
   read: 'Read',
   allNotices: 'All notifications',
   noUnread: 'You are all caught up.',
+  showMore: 'Show more',
+  showLess: 'Show less',
+  pageLabel: 'Page',
+  notificationPagination: 'Notification pages',
   notificationDescription: 'Updates on bookings, studio invitations and your photography work.',
   tagCategories: {
     genre: 'Genre',
@@ -113,6 +117,10 @@ export const designVietnamese: typeof designEnglish = {
   read: 'Đã đọc',
   allNotices: 'Tất cả thông báo',
   noUnread: 'Bạn đã xem hết thông báo.',
+  showMore: 'Xem thêm',
+  showLess: 'Thu gọn',
+  pageLabel: 'Trang',
+  notificationPagination: 'Phân trang thông báo',
   notificationDescription: 'Cập nhật về lịch chụp, lời mời studio và công việc nhiếp ảnh của bạn.',
   tagCategories: {
     genre: 'Thể loại',

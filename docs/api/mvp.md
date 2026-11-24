@@ -56,6 +56,11 @@ The bucket is public, so uploaded covers are publicly accessible.
 Photographer detail also exposes the account's public `avatarPath`; clients use
 the account avatar or show initials when no image is available.
 
+`GET /v1/me/notifications/pages` returns the authenticated recipient's
+notifications as `{ items, hasMore }`, with `page` (default 1), `pageSize`
+(default 10, maximum 50), and `unread` (`true` or `false`). The existing
+`GET /v1/me/notifications` array response remains available for the header.
+
 Project deletion requires migration `20261125000200_soft_delete_projects.sql`.
 Only the owner may delete a project. Projects linked to a booking or with a
 queued or running AI job are rejected with a conflict. Deletion hides the project

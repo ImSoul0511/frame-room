@@ -7,7 +7,12 @@ import * as schemas from '@frameroom/shared';
 import type { Transaction } from '../repositories/database.js';
 import { authenticateVerified } from '../lib/auth.js';
 import { ApiError, requireCondition } from '../lib/errors.js';
-import type { ApiDependencies, ApiModule, RouteMethod } from '../plugins/route.js';
+import {
+  defineRoute,
+  type ApiDependencies,
+  type ApiModule,
+  type RouteMethod,
+} from '../plugins/route.js';
 import { assertProviderOwnership, requirePortfolioOwnership } from '../services/catalog.js';
 import * as bookings from '../services/bookings.js';
 import * as room from '../services/collaboration.js';
@@ -232,6 +237,50 @@ function registerBusiness(app: FastifyInstance, deps: ApiDependencies) {
       [c.userId],
     ),
   );
+  defineRoute(app, deps, {
+    method: 'GET',
+    url: '/v1/me/notifications/pages',
+    summary: 'List one page of the caller’s notifications.',
+    access: 'verified',
+    query: z.object({
+      page: z.coerce.number().int().min(1).max(10000).default(1),
+      pageSize: z.coerce.number().int().min(1).max(50).default(10),
+      unread: z.enum(['true', 'false']).default('false'),
+    }),
+    response: z.object({
+      items: z.array(
+        z.object({
+          id: schemas.idSchema,
+          bookingId: schemas.idSchema.nullable(),
+          studioId: schemas.idSchema.nullable(),
+          event: z.string(),
+          createdAt: z.string(),
+          readAt: z.string().nullable(),
+        }),
+      ),
+      hasMore: z.boolean(),
+    }),
+    handler: ({ actor, query, transaction }) =>
+      transaction(async (tx) => {
+        const rows = await tx.rows<{
+          id: string;
+          bookingId: string | null;
+          studioId: string | null;
+          event: string;
+          createdAt: string;
+          readAt: string | null;
+        }>(
+          'select id,booking_id,studio_id,event,created_at,read_at from notifications where recipient_id=$1 and ($2::boolean = false or read_at is null) order by created_at desc,id desc limit $3 offset $4',
+          [
+            actor.id,
+            query.unread === 'true',
+            query.pageSize + 1,
+            (query.page - 1) * query.pageSize,
+          ],
+        );
+        return { items: rows.slice(0, query.pageSize), hasMore: rows.length > query.pageSize };
+      }),
+  });
   route('PATCH', '/v1/me/notifications/:id', empty, (c, tx) =>
     tx.one(
       'update notifications set read_at=coalesce(read_at,now()) where id=$1 and recipient_id=$2 returning *',

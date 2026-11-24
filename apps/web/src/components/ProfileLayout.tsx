@@ -19,6 +19,43 @@ export function ProfileLayout() {
     ['photographer', 'studio_manager'].includes(role),
   );
   if (pathname === '/messages') return <Outlet />;
+  if (profile?.roles.includes('photographer')) {
+    const isAccountPage = ['/profile', '/settings', '/notifications', '/studio', '/admin'].some(
+      (path) => pathname === path || pathname.startsWith(`${path}/`),
+    );
+    if (!isAccountPage) return <Outlet />;
+    return (
+      <section
+        className={`profile-workspace photographer-workspace${pathname === '/profile' ? ' photographer-profile-workspace' : ''}`}
+        aria-label={t.design.profile}
+      >
+        <aside className="photographer-account-sidebar">
+          <nav className="photographer-account-nav" aria-label={t.design.profile}>
+            <NavLink to="/profile">{t.design.profile}</NavLink>
+            <NavLink to="/studio">{t.nav.studio}</NavLink>
+            <NavLink to="/notifications">{t.workspaceUi.notifications}</NavLink>
+            <NavLink to="/settings">{t.workspaceUi.settings}</NavLink>
+            {profile.roles.includes('system_admin') ? (
+              <NavLink to="/admin">{t.workspaceUi.moderation}</NavLink>
+            ) : null}
+            <div className="photographer-logout-box">
+              <button
+                className="text-button"
+                disabled={logout.isPending}
+                onClick={() => logout.mutate()}
+              >
+                {logout.isPending ? t.pending : t.logout}
+              </button>
+            </div>
+          </nav>
+          <Feedback error={logout.error} />
+        </aside>
+        <div className="photographer-account-content">
+          <Outlet />
+        </div>
+      </section>
+    );
+  }
   return (
     <section className="profile-workspace" aria-label={t.design.profile}>
       <nav className="profile-navigation" aria-label={t.design.profile}>
