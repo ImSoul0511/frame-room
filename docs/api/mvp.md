@@ -24,26 +24,42 @@ are in `packages/shared/src/business.ts` and `locale.ts`.
 
 ## Routes and boundaries
 
-| Group         | Implemented interface                                                                                             |
-| ------------- | ----------------------------------------------------------------------------------------------------------------- |
-| Profiles      | GET/POST/PATCH `/v1/me`; GET `/v1/me/studios`, `/v1/me/invitations`                                               |
-| Photographers | GET lists/detail/me; POST/PATCH `/v1/photographers/me`                                                            |
-| Discovery     | GET `/v1/explore`, `/v1/photographers`, `/v1/studios`, provider detail, `/v1/tags`                                |
-| Studios       | POST/PATCH studios; team, membership roles/departure, invitations and responses, resources, dashboard             |
-| Catalog       | Personal/studio portfolios and services, image registration and tags, service add-ons, soft deletion              |
-| Projects      | GET/POST `/v1/creative-projects`, GET/PATCH detail; references, artifacts, assistant history, actions, jobs       |
-| Assistant     | POST project `/assistant` for brief/action; POST project `/chat` for AI SDK UI streaming                          |
-| AI jobs       | POST project `/ai-jobs` returns 202; GET project jobs or `/v1/ai-jobs/:id`                                        |
-| AI actions    | POST `/v1/ai-actions/:id/confirm` or `/reject`; caller, state, expiry, and versions checked again                 |
-| Booking       | POST booking-requests; booking detail/workspace; versioned transitions, assignment, reassignment and cancellation |
-| Agreement     | POST booking brief versions; approve the latest version or record a revision request                              |
-| Conversations | GET/POST conversations; cursor-paginated message history; idempotent send; authenticated attachment retrieval     |
-| Shoot Room    | Booking-scoped messages, milestones, decisions and protected attachments during collaboration                     |
-| Proofing      | Watermarked gallery previews, round-specific photo feedback, quota, revision requests and final-file gate         |
-| Completion    | POST booking deliveries and reviews; 168-hour automatic completion; administrator dispute holds                   |
-| Schedule      | GET `/v1/me/timeline`, `/v1/me/schedule`; POST/DELETE own/resource blocks                                         |
-| Moderation    | POST reports on public content; audited report decisions and review reassessment                                  |
-| Media         | POST `/v1/uploads?bucket=...&scopeId=...` with one multipart image; API validates, normalizes and writes Storage  |
+| Group         | Implemented interface                                                                      |
+| ------------- | ------------------------------------------------------------------------------------------ |
+| Profiles      | GET/POST/PATCH `/v1/me`; GET `/v1/me/studios`, `/v1/me/invitations`                        |
+| Photographers | GET lists/detail/me; POST/PATCH `/v1/photographers/me`; PATCH `/v1/photographers/me/cover` |
+| Discovery     | GET `/v1/explore`, `/v1/photographers`, `/v1/studios`, provider detail, `/v1/tags`         |
+
+| Studios | POST/PATCH studios; team, membership roles/departure, invitations and responses, resources, dashboard |
+| Catalog | Personal/studio portfolios and services, image registration and tags, service add-ons, soft deletion |
+| Projects | GET/POST `/v1/creative-projects`, GET/PATCH/DELETE detail; references, artifacts, assistant history, actions, jobs |
+| Assistant | POST project `/assistant` for brief/action; POST project `/chat` for AI SDK UI streaming |
+| AI jobs | POST project `/ai-jobs` returns 202; GET project jobs or `/v1/ai-jobs/:id` |
+| AI actions | POST `/v1/ai-actions/:id/confirm` or `/reject`; caller, state, expiry, and versions checked again |
+| Booking | POST booking-requests; booking detail/workspace; versioned transitions, assignment, reassignment and cancellation |
+| Agreement | POST booking brief versions; approve the latest version or record a revision request |
+| Conversations | GET/POST conversations; cursor-paginated message history; idempotent send; authenticated attachment retrieval |
+| Shoot Room | Booking-scoped messages, milestones, decisions and protected attachments during collaboration |
+| Proofing | Watermarked gallery previews, round-specific photo feedback, quota, revision requests and final-file gate |
+| Completion | POST booking deliveries and reviews; 168-hour automatic completion; administrator dispute holds |
+| Schedule | GET `/v1/me/timeline`, `/v1/me/schedule`; POST/DELETE own/resource blocks |
+| Moderation | POST reports on public content; audited report decisions and review reassessment |
+| Media | POST `/v1/uploads?bucket=...&scopeId=...` with one multipart image; API validates, normalizes and writes Storage |
+
+Photographer covers require migration `20261125000100_photographer_cover.sql`.
+Upload a JPEG, PNG or WebP image with `POST /v1/uploads?bucket=profile-covers`,
+then send its returned `storagePath` as `coverPath` to
+`PATCH /v1/photographers/me/cover`. The server verifies the caller owns the
+uploaded image and a photographer profile. Public photographer detail returns
+`coverPath`; the UI falls back to a published portfolio cover when it is null.
+The bucket is public, so uploaded covers are publicly accessible.
+Photographer detail also exposes the account's public `avatarPath`; clients use
+the account avatar or show initials when no image is available.
+
+Project deletion requires migration `20261125000200_soft_delete_projects.sql`.
+Only the owner may delete a project. Projects linked to a booking or with a
+queued or running AI job are rejected with a conflict. Deletion hides the project
+and its associated content from project access; records and stored files remain.
 
 `GET /v1/bookings/:id/workspace` aggregates the authorized booking, project, room,
 briefs, messages, decisions, milestones, gallery, selection, delivery, and review.

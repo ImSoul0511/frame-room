@@ -163,7 +163,8 @@ test('collection keyword and ordering reach the API and return matching results'
       response.url().includes('/v1/portfolios?') &&
       new URL(response.url()).searchParams.get('sort') === 'name',
   );
-  await page.getByLabel('Sort by', { exact: true }).selectOption('name');
+  await page.getByLabel('Sort by', { exact: true }).click();
+  await page.getByRole('option', { name: 'Name: A–Z', exact: true }).click();
   const response = await sort;
   expect(response.ok()).toBe(true);
   const { data } = await response.json();

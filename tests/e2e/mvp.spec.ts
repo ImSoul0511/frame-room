@@ -8,14 +8,17 @@ test('English default and persistent bilingual preference preserve form input', 
     page.getByRole('heading', { name: 'Every perspective, a story to tell.' }),
   ).toBeVisible();
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
-  await page.getByLabel('Language', { exact: true }).selectOption('vi');
+  await page.getByLabel('Language', { exact: true }).click();
+  await page.getByRole('option', { name: 'Tiếng Việt', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Mỗi góc nhìn, một câu chuyện.' })).toBeVisible();
   await page.goto('/auth');
   await page.getByLabel(/^Email/).fill('draft@example.test');
-  await page.getByLabel('Ngôn ngữ', { exact: true }).selectOption('en');
+  await page.getByLabel('Ngôn ngữ', { exact: true }).click();
+  await page.getByRole('option', { name: 'English', exact: true }).click();
   await expect(page.getByLabel(/^Email/)).toHaveValue('draft@example.test');
   await expect(page.getByLabel(/^Password/)).toBeVisible();
-  await page.getByLabel('Language', { exact: true }).selectOption('vi');
+  await page.getByLabel('Language', { exact: true }).click();
+  await page.getByRole('option', { name: 'Tiếng Việt', exact: true }).click();
   await page.reload();
   await expect(page.getByLabel(/^Mật khẩu/)).toBeVisible();
   await expect(page.locator('html')).toHaveAttribute('lang', 'vi');
@@ -82,7 +85,8 @@ test('real client and studio manager complete a private shoot workflow', async (
     expect(studio).toBeTruthy();
     await client.goto(`/providers/studio/${studio!.id}?project=${projectId}`);
     await client.getByRole('button', { name: 'Choose this service', exact: true }).first().click();
-    await client.getByLabel('Location type', { exact: true }).selectOption('studio');
+    await client.getByLabel('Location type', { exact: true }).click();
+    await client.getByRole('option', { name: 'Studio', exact: true }).click();
     const start = new Date(
       Date.UTC(
         2040 + Math.floor(Math.random() * 10),
@@ -107,10 +111,8 @@ test('real client and studio manager complete a private shoot workflow', async (
     ).toBeDisabled();
     await manager.getByRole('button', { name: 'Approve this version', exact: true }).click();
     await manager.getByRole('button', { name: 'Assigned photographer', exact: true }).click();
-    await manager
-      .getByRole('dialog')
-      .getByLabel('Photographer', { exact: true })
-      .selectOption({ label: 'Linh Nguyen' });
+    await manager.getByRole('dialog').getByLabel('Photographer', { exact: true }).click();
+    await manager.getByRole('option', { name: 'Linh Nguyen', exact: true }).click();
     await manager
       .getByRole('dialog')
       .getByRole('button', { name: 'Assigned photographer', exact: true })

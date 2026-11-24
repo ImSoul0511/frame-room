@@ -88,14 +88,19 @@ export async function getProviderDetail(
   }
 
   const { id } = provider;
-  const [services, portfolios, reviews] = await Promise.all([
+  const [services, portfolios, reviews, cover] = await Promise.all([
     repo.listActiveServicesByProvider(tx, type, id),
     repo.listPublishedPortfoliosByProvider(tx, type, id),
     repo.listVisibleReviewsByProvider(tx, type, id),
+    type === 'photographer'
+      ? repo.findPhotographerProfileImages(tx, id)
+      : Promise.resolve(undefined),
   ]);
 
   return {
     provider,
+    coverPath: cover?.coverPath ?? null,
+    avatarPath: cover?.avatarPath ?? null,
     services,
     portfolios: portfolios.map((pf) => ({
       ...pf,

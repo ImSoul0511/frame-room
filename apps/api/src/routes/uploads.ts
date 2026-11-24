@@ -37,7 +37,7 @@ export const uploadsModule: ApiModule = {
       if (query.bucket === 'search-uploads')
         requireCondition(deps.env.AI_SEARCH_ENABLED, 503, 'ai_search_disabled');
       const prefix =
-        query.bucket === 'avatars' && !deps.db.isConfigured
+        (query.bucket === 'avatars' || query.bucket === 'profile-covers') && !deps.db.isConfigured
           ? actor.id
           : await deps.db.run(actor.id, (tx) =>
               media.authorizeUpload(tx, actor.id, query.bucket, query.scopeId),

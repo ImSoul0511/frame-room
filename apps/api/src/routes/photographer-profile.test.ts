@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AUTH, bodyData, buildTestApp, closeTestApps } from '../../test/helpers/build-test-app.js';
 import * as repo from '../repositories/profiles.js';
 import type { OwnPhotographer } from '../schemas/own-photographer.js';
+import { MediaService } from '../services/media.js';
 
 vi.mock('../repositories/profiles.js');
 
@@ -40,6 +41,64 @@ const uniqueViolation = (constraint: string) =>
 
 beforeEach(() => vi.resetAllMocks());
 afterEach(closeTestApps);
+afterEach(() => vi.restoreAllMocks());
+
+describe('PATCH /v1/photographers/me/cover', () => {
+  it('sets an owned verified cover for the caller', async () => {
+    const verify = vi
+      .spyOn(MediaService.prototype, 'verify')
+      .mockResolvedValue({ width: 100, height: 100, mimeType: 'image/webp' });
+    vi.mocked(repo.updatePhotographerCover).mockResolvedValue({
+      ...PHOTOG,
+      coverPath: 'user-1/cover.webp',
+    });
+    const app = await buildTestApp();
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/v1/photographers/me/cover',
+      headers: AUTH,
+      payload: { coverPath: 'user-1/cover.webp' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(bodyData(res)).toMatchObject({ coverPath: 'user-1/cover.webp' });
+    expect(verify).toHaveBeenCalledWith('profile-covers', 'user-1/cover.webp', 'user-1');
+    expect(repo.updatePhotographerCover).toHaveBeenCalledWith(
+      expect.anything(),
+      'user-1',
+      'user-1/cover.webp',
+    );
+    verify.mockRestore();
+  });
+
+  it('rejects a different user’s upload', async () => {
+    const app = await buildTestApp();
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/v1/photographers/me/cover',
+      headers: AUTH,
+      payload: { coverPath: 'another-user/cover.webp' },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(repo.updatePhotographerCover).not.toHaveBeenCalled();
+  });
+
+  it('does not attach a cover when the caller has no photographer profile', async () => {
+    vi.spyOn(MediaService.prototype, 'verify').mockResolvedValue({
+      width: 100,
+      height: 100,
+      mimeType: 'image/webp',
+    });
+    vi.mocked(repo.updatePhotographerCover).mockResolvedValue(NONE);
+    const app = await buildTestApp();
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/v1/photographers/me/cover',
+      headers: AUTH,
+      payload: { coverPath: 'user-1/cover.webp' },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+});
 
 describe('GET /v1/photographers/me', () => {
   it('returns 200 with null when the caller has no photographer profile', async () => {

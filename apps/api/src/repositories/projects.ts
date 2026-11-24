@@ -9,7 +9,7 @@ export async function findProject(
   lock = false,
 ): Promise<CreativeProject> {
   const row = await tx.optional<CreativeProject>(
-    `select ${projection} from creative_projects p left join bookings b on b.project_id=p.id where p.id=$1 and private.can_read_project(p.id)${lock ? ' for update of p' : ''}`,
+    `select ${projection} from creative_projects p left join bookings b on b.project_id=p.id where p.id=$1 and p.deleted_at is null and private.can_read_project(p.id)${lock ? ' for update of p' : ''}`,
     [id],
   );
   if (!row) throw new ApiError(404, 'NOT_FOUND', 'project_not_found');
@@ -17,7 +17,7 @@ export async function findProject(
 }
 export function listProjects(tx: Transaction) {
   return tx.rows<CreativeProject>(
-    `select ${projection} from creative_projects p left join bookings b on b.project_id=p.id where private.can_read_project(p.id) order by p.updated_at desc,p.id limit 100`,
+    `select ${projection} from creative_projects p left join bookings b on b.project_id=p.id where p.deleted_at is null and private.can_read_project(p.id) order by p.updated_at desc,p.id limit 100`,
   );
 }
 export function insertProject(tx: Transaction, userId: string, title: string, idea: string) {

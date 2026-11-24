@@ -1,7 +1,16 @@
-import { useId, useEffect, useRef, type ReactNode, type FormEvent } from 'react';
+import {
+  Children,
+  isValidElement,
+  useId,
+  useEffect,
+  useRef,
+  type ReactNode,
+  type FormEvent,
+} from 'react';
 import { Button } from '@astryxdesign/core/Button';
 import { TextInput } from '@astryxdesign/core/TextInput';
 import { TextArea } from '@astryxdesign/core/TextArea';
+import { Selector } from '@astryxdesign/core/Selector';
 import { genres } from '@frameroom/shared';
 import { useStrings } from '../lib/i18n';
 import { Botanical } from './Botanical';
@@ -66,6 +75,7 @@ export function Field({
   autoComplete,
   description,
   error,
+  disabled = false,
 }: {
   label: string;
   value: string;
@@ -76,6 +86,7 @@ export function Field({
   autoComplete?: string;
   description?: string;
   error?: string;
+  disabled?: boolean;
 }) {
   return (
     <TextInput
@@ -84,6 +95,7 @@ export function Field({
       onChange={onChange}
       type={type}
       isRequired={required}
+      isDisabled={disabled}
       placeholder={placeholder}
       description={description}
       status={error ? { type: 'error', message: error } : undefined}
@@ -136,24 +148,57 @@ export function Select({
   required?: boolean;
   error?: string;
 }) {
-  const id = useId();
+  const trigger = useRef<HTMLButtonElement>(null);
+  const optionText = (node: ReactNode): string =>
+    Children.toArray(node)
+      .map((child) => {
+        if (typeof child === 'string' || typeof child === 'number') return String(child);
+        if (isValidElement<{ children?: ReactNode }>(child))
+          return optionText(child.props.children);
+        return '';
+      })
+      .join('');
+  const options = Children.toArray(children).flatMap((child) => {
+    if (
+      !isValidElement<{ value?: string | number; children?: ReactNode; disabled?: boolean }>(
+        child,
+      ) ||
+      child.type !== 'option'
+    )
+      return [];
+    const text = optionText(child.props.children);
+    return [
+      { value: String(child.props.value ?? text), label: text, disabled: child.props.disabled },
+    ];
+  });
   return (
-    <div className="native-field">
-      <label htmlFor={id}>{label}</label>
-      <select
-        id={id}
+    <div className="fr-selector-field">
+      <Selector
+        ref={trigger}
+        label={label}
+        placement="below"
+        options={options}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
-        required={required}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={error ? `${id}-error` : undefined}
-      >
-        {children}
-      </select>
-      {error ? (
-        <small id={`${id}-error`} role="alert">
-          {error}
-        </small>
+        onChange={onChange}
+        isRequired={required}
+        status={error ? { type: 'error', message: error } : undefined}
+        controlClassName="fr-selector-control"
+      />
+      {required ? (
+        <select
+          className="sr-only"
+          tabIndex={-1}
+          aria-hidden="true"
+          required
+          value={value}
+          onChange={() => {}}
+          onInvalid={(event) => {
+            event.preventDefault();
+            trigger.current?.focus();
+          }}
+        >
+          {children}
+        </select>
       ) : null}
     </div>
   );

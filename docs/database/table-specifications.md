@@ -23,19 +23,20 @@ Confirmed source: the eight ordered `supabase/migrations/20261030*.sql` files on
 
 ## `public.photographers`
 
-| Column         | SQL declaration                                                             |
-| -------------- | --------------------------------------------------------------------------- |
-| `id`           | `id uuid primary key default public.uuid_generate_v7()`                     |
-| `user_id`      | `user_id uuid not null unique references public.profiles(id)`               |
-| `display_name` | `display_name text not null check(length(display_name) between 1 and 60)`   |
-| `bio`          | `bio text not null default ''`                                              |
-| `city`         | `city text not null default ''`                                             |
-| `district`     | `district text not null default ''`                                         |
-| `genres`       | `genres public.genre[] not null check(cardinality(genres) between 1 and 5)` |
-| `styles`       | `styles text[] not null default '{}'`                                       |
-| `is_hidden`    | `is_hidden boolean not null default false`                                  |
-| `created_at`   | `created_at timestamptz not null default now()`                             |
-| `updated_at`   | `updated_at timestamptz not null default now()`                             |
+| Column         | SQL declaration                                                                                                              |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `id`           | `id uuid primary key default public.uuid_generate_v7()`                                                                      |
+| `user_id`      | `user_id uuid not null unique references public.profiles(id)`                                                                |
+| `display_name` | `display_name text not null check(length(display_name) between 1 and 60)`                                                    |
+| `bio`          | `bio text not null default ''`                                                                                               |
+| `city`         | `city text not null default ''`                                                                                              |
+| `district`     | `district text not null default ''`                                                                                          |
+| `genres`       | `genres public.genre[] not null check(cardinality(genres) between 1 and 5)`                                                  |
+| `styles`       | `styles text[] not null default '{}'`                                                                                        |
+| `cover_path`   | `text`; optional owner-prefixed path in the public `profile-covers` bucket, added by `20261125000100_photographer_cover.sql` |
+| `is_hidden`    | `is_hidden boolean not null default false`                                                                                   |
+| `created_at`   | `created_at timestamptz not null default now()`                                                                              |
+| `updated_at`   | `updated_at timestamptz not null default now()`                                                                              |
 
 ## `public.studios`
 
@@ -189,17 +190,18 @@ Table constraints: `primary key(portfolio_image_id,tag_id)`.
 
 ## `public.creative_projects`
 
-| Column            | SQL declaration                                         |
-| ----------------- | ------------------------------------------------------- |
-| `id`              | `id uuid primary key default public.uuid_generate_v7()` |
-| `owner_id`        | `owner_id uuid not null references public.profiles(id)` |
-| `title`           | `title text not null`                                   |
-| `idea`            | `idea text not null`                                    |
-| `brief`           | `brief jsonb`                                           |
-| `reference_paths` | `reference_paths text[] not null default '{}'`          |
-| `version`         | `version integer not null default 1`                    |
-| `created_at`      | `created_at timestamptz not null default now()`         |
-| `updated_at`      | `updated_at timestamptz not null default now()`         |
+| Column            | SQL declaration                                                     |
+| ----------------- | ------------------------------------------------------------------- |
+| `id`              | `id uuid primary key default public.uuid_generate_v7()`             |
+| `owner_id`        | `owner_id uuid not null references public.profiles(id)`             |
+| `title`           | `title text not null`                                               |
+| `idea`            | `idea text not null`                                                |
+| `brief`           | `brief jsonb`                                                       |
+| `reference_paths` | `reference_paths text[] not null default '{}'`                      |
+| `version`         | `version integer not null default 1`                                |
+| `deleted_at`      | `timestamptz`; null until the owner removes the project from access |
+| `created_at`      | `created_at timestamptz not null default now()`                     |
+| `updated_at`      | `updated_at timestamptz not null default now()`                     |
 
 ## `public.bookings`
 

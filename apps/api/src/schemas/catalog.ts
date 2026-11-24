@@ -117,6 +117,8 @@ export const publicReviewSchema = z.object({
 /** Response payload for GET /v1/photographers/:id and GET /v1/studios/:id. */
 export const providerDetailSchema = z.object({
   provider: providerSchema,
+  coverPath: z.string().nullable().optional(),
+  avatarPath: z.string().nullable().optional(),
   services: z.array(serviceSchema),
   portfolios: z.array(publicPortfolioSchema),
   reviews: z.array(publicReviewSchema),

@@ -1588,8 +1588,10 @@ details summary {
   margin-top: 5px;
 }
 .portfolio-summary {
-  border-top: 1px solid var(--fr-line);
-  padding: 24px 0;
+  border: 1px solid var(--fr-line);
+  border-radius: 10px;
+  background: #fff;
+  padding: 24px;
 }
 .portfolio-summary h2 {
   font-size: 1.375rem;

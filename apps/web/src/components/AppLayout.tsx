@@ -53,7 +53,7 @@ export function AppLayout() {
                 </span>
               </Link>
               <div className="topbar-actions">
-                <LanguageSwitcher />
+                <LanguageSwitcher compact />
                 <UserSearch key={pathname === '/search' ? search : 'other'} />
                 <NotificationBell />
                 {session ? (

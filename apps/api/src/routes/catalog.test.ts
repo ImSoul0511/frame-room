@@ -187,6 +187,10 @@ describe('GET /v1/photographers and GET /v1/photographers/:id', () => {
 
   it('returns photographer detail with active services, published portfolios and visible reviews', async () => {
     vi.mocked(repo.findProviderById).mockResolvedValue(PHOTOGRAPHER_PROVIDER);
+    vi.mocked(repo.findPhotographerProfileImages).mockResolvedValue({
+      coverPath: 'user-1/cover.webp',
+      avatarPath: 'user-1/avatar.webp',
+    });
     vi.mocked(repo.listActiveServicesByProvider).mockResolvedValue([SERVICE]);
     vi.mocked(repo.listPublishedPortfoliosByProvider).mockResolvedValue([PORTFOLIO]);
     vi.mocked(repo.listVisibleReviewsByProvider).mockResolvedValue([REVIEW]);
@@ -200,6 +204,8 @@ describe('GET /v1/photographers and GET /v1/photographers/:id', () => {
     expect(res.statusCode).toBe(200);
     expect(bodyData(res)).toMatchObject({
       provider: { id: PHOTOGRAPHER_ID, type: 'photographer' },
+      coverPath: 'user-1/cover.webp',
+      avatarPath: 'user-1/avatar.webp',
       services: [{ id: SERVICE_ID }],
       portfolios: [{ id: PORTFOLIO_ID, coverUrl: null }],
       reviews: [{ id: REVIEW_ID, authorName: 'Lan Anh' }],

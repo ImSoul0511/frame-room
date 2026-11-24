@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type RefObject } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   genres,
@@ -8,7 +8,8 @@ import {
   type Profile,
   type Service,
 } from '@frameroom/shared';
-import { patch, post } from '../../lib/api';
+import { patch, post, upload } from '../../lib/api';
+import { AvatarEditor } from './AvatarEditor';
 import { useAuth } from '../../lib/auth';
 import { useApi, useTask } from '../../lib/hooks';
 import { useStrings } from '../../lib/i18n';
@@ -237,27 +238,53 @@ export function ServiceForm({
     </Form>
   );
 }
-export function ProfileForm({ profile }: { profile: Profile }) {
+export function ProfileForm({
+  profile,
+  avatarTriggerRef,
+}: {
+  profile: Profile;
+  avatarTriggerRef?: RefObject<HTMLButtonElement | null>;
+}) {
   const t = useStrings();
   const client = useQueryClient();
   const [name, setName] = useState(profile.displayName);
   const [username, setUsername] = useState(profile.userName);
+  const [editing, setEditing] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
   const task = useMutation({
-    mutationFn: (input: { displayName: string; userName: string }) =>
-      patch<Profile>('/v1/me', input),
+    mutationFn: async (input: { displayName: string; userName: string; file: File | null }) => {
+      const updated = await patch<Profile>('/v1/me', {
+        displayName: input.displayName,
+        userName: input.userName,
+      });
+      client.setQueryData(['profile', profile.id], updated);
+      if (input.file) {
+        const avatarPath = (await upload(input.file, 'avatars')).storagePath;
+        const withAvatar = await patch<Profile>('/v1/me/avatar', { avatarPath });
+        client.setQueryData(['profile', profile.id], withAvatar);
+        void client.invalidateQueries({ queryKey: ['conversation'] });
+        void client.invalidateQueries({ queryKey: ['people-search'] });
+      }
+    },
     onMutate: async (input) => {
+      setEditing(false);
       const queryKey = ['profile', profile.id];
       await client.cancelQueries({ queryKey });
       const previous = client.getQueryData<Profile>(queryKey);
-      client.setQueryData<Profile>(queryKey, (current) => current && { ...current, ...input });
-      return { previous, queryKey };
-    },
-    onError: (_error, input, context) => {
-      client.setQueryData<Profile>(context?.queryKey ?? [], (current) =>
-        current && current.displayName === input.displayName && current.userName === input.userName
-          ? (context?.previous ?? current)
+      client.setQueryData<Profile>(queryKey, (current) =>
+        current
+          ? { ...current, displayName: input.displayName, userName: input.userName }
           : current,
       );
+      return { previous };
+    },
+    onError: (_error, _input, context) => {
+      if (context?.previous) client.setQueryData(['profile', profile.id], context.previous);
+      setEditing(true);
+    },
+    onSuccess: () => {
+      setEditing(false);
+      setFile(null);
     },
     onSettled: () =>
       Promise.all([
@@ -266,13 +293,65 @@ export function ProfileForm({ profile }: { profile: Profile }) {
       ]),
   });
   return (
-    <Form onSubmit={() => task.mutate({ displayName: name, userName: username })}>
-      <Field label={t.displayName} value={name} onChange={setName} />
-      <Field label={t.userName} value={username} onChange={setUsername} />
-      <Feedback error={task.error} success={task.isSuccess ? t.saved : null} />
-      <Action type="submit" pending={task.isPending}>
-        {t.save}
-      </Action>
+    <Form
+      onSubmit={() => {
+        if (editing && !task.isPending)
+          task.mutate({ displayName: name, userName: username, file });
+      }}
+    >
+      <AvatarEditor
+        profile={profile}
+        file={file}
+        editing={editing}
+        disabled={task.isPending}
+        triggerRef={avatarTriggerRef}
+        onStartEdit={() => {
+          task.reset();
+          setEditing(true);
+        }}
+        onChange={setFile}
+      />
+      <fieldset className="profile-edit-fields" disabled={!editing || task.isPending}>
+        <Field
+          label={t.displayName}
+          value={name}
+          onChange={setName}
+          disabled={!editing || task.isPending}
+        />
+        <Field
+          label={t.userName}
+          value={username}
+          onChange={setUsername}
+          disabled={!editing || task.isPending}
+        />
+      </fieldset>
+      <Feedback error={task.error} />
+      <div className="profile-update-action">
+        {editing ? (
+          <Action
+            onClick={() => task.mutate({ displayName: name, userName: username, file })}
+            pending={task.isPending}
+          >
+            {t.profileUi.confirmUpdate}
+          </Action>
+        ) : (
+          <Action
+            disabled={task.isPending}
+            onClick={() => {
+              task.reset();
+              setEditing(true);
+            }}
+          >
+            {t.profileUi.update}
+          </Action>
+        )}
+        {!editing && (task.isPending || task.isSuccess) ? (
+          <span className="profile-update-confirmed" role="status">
+            <span aria-hidden="true">✓</span>
+            <span className="sr-only">{task.isPending ? t.pending : t.saved}</span>
+          </span>
+        ) : null}
+      </div>
     </Form>
   );
 }

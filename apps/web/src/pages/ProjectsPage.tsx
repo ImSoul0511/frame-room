@@ -123,6 +123,7 @@ export function ProjectsPage() {
 export function ProjectPage() {
   const t = useStrings();
   const { session } = useAuth();
+  const navigate = useNavigate();
   const { id = '' } = useParams();
   const project = useApi<CreativeProject>(`/v1/creative-projects/${id}`);
   const artifacts = useApi<Artifact[]>(`/v1/creative-projects/${id}/artifacts`, true, 30000);
@@ -133,6 +134,7 @@ export function ProjectPage() {
   );
   const jobs = useApi<AiJob[]>(`/v1/creative-projects/${id}/ai-jobs`, true, 5000);
   const [tab, setTab] = useState('concepts');
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [plan, setPlan] = useState<BriefContent | null>(null);
   const generate = useTask(async () =>
@@ -164,6 +166,10 @@ export function ProjectPage() {
         : current.selectedArtifactIds.filter((item) => item !== value.id),
     });
   });
+  const remove = useTask(async () => {
+    await api(`/v1/creative-projects/${id}`, { method: 'DELETE' });
+    navigate('/projects');
+  });
   if (!project.data) return <QueryState query={project} />;
   const p = project.data;
   const initial = plan ??
@@ -190,7 +196,14 @@ export function ProjectPage() {
         }
       />
       <div className="tabs" role="tablist">
-        {(['concepts', 'brief', 'assistant'] as const).map((key) => (
+        {(
+          [
+            'concepts',
+            'brief',
+            'assistant',
+            ...(p.ownerId === session?.user.id ? ['settings' as const] : []),
+          ] as const
+        ).map((key) => (
           <button key={key} role="tab" aria-selected={tab === key} onClick={() => setTab(key)}>
             {t.project[key]}
           </button>
@@ -294,6 +307,42 @@ export function ProjectPage() {
         </div>
       ) : null}
       {tab === 'assistant' ? <ChatPanel projectId={id} /> : null}
+      {tab === 'settings' && p.ownerId === session?.user.id ? (
+        <section className="panel narrow-page">
+          <h2>{t.project.deleteProject}</h2>
+          <p className="muted">
+            {p.bookingId ? t.project.deleteBooked : t.project.deleteDescription}
+          </p>
+          <Action
+            disabled={Boolean(p.bookingId)}
+            onClick={() => {
+              remove.reset();
+              setDeleteOpen(true);
+            }}
+          >
+            {t.project.deleteProject}
+          </Action>
+        </section>
+      ) : null}
+      {deleteOpen ? (
+        <Modal
+          title={t.project.deleteProject}
+          onClose={() => {
+            if (!remove.isPending) setDeleteOpen(false);
+          }}
+        >
+          <p>{t.project.deleteConfirm}</p>
+          <Feedback error={remove.error} />
+          <div className="row wrap">
+            <Action onClick={() => remove.mutate()} pending={remove.isPending}>
+              {t.project.deleteProject}
+            </Action>
+            <Action secondary disabled={remove.isPending} onClick={() => setDeleteOpen(false)}>
+              {t.cancel}
+            </Action>
+          </div>
+        </Modal>
+      ) : null}
     </>
   );
 }

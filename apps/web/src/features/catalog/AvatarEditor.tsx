@@ -1,93 +1,128 @@
-import { useEffect, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import type { Profile } from '@frameroom/shared';
-import { Action, Feedback } from '../../components/ui';
 import { UserAvatar } from '../../components/UserAvatar';
-import { patch, upload } from '../../lib/api';
-import { useAuth } from '../../lib/auth';
-import { useTask } from '../../lib/hooks';
+import { supabase } from '../../lib/api';
 import { useStrings } from '../../lib/i18n';
+import { AvatarCropDialog } from './AvatarCropDialog';
 
-export function AvatarEditor({ profile }: { profile: Profile }) {
+export function AvatarEditor({
+  profile,
+  file,
+  editing,
+  disabled,
+  triggerRef,
+  onStartEdit,
+  onChange,
+}: {
+  profile: Profile;
+  file: File | null;
+  editing: boolean;
+  disabled: boolean;
+  triggerRef?: RefObject<HTMLButtonElement | null>;
+  onStartEdit: () => void;
+  onChange: (file: File) => void;
+}) {
   const t = useStrings();
-  const { session } = useAuth();
-  const client = useQueryClient();
-  const [file, setFile] = useState<File | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  const [source, setSource] = useState<{ url: string; objectUrl: boolean } | null>(null);
+  const [error, setError] = useState('');
   useEffect(
     () => () => {
       if (preview) URL.revokeObjectURL(preview);
     },
     [preview],
   );
-  const update = useTask(async (remove: boolean) => {
-    const avatarPath = remove ? null : (await upload(file!, 'avatars')).storagePath;
-    const updated = await patch<Profile>('/v1/me/avatar', { avatarPath });
-    client.setQueryData(['profile', session?.user.id], updated);
-    void client.invalidateQueries({ queryKey: ['conversation'] });
-    void client.invalidateQueries({ queryKey: ['people-search'] });
-    setFile(null);
-    setPreview(null);
-  });
+  useEffect(
+    () => () => {
+      if (source?.objectUrl) URL.revokeObjectURL(source.url);
+    },
+    [source],
+  );
+  const openFile = (selected: File) => {
+    if (
+      !['image/jpeg', 'image/png', 'image/webp'].includes(selected.type) ||
+      selected.size > 20 * 1024 * 1024
+    ) {
+      setError(t.profileUi.avatarInvalid);
+      return;
+    }
+    setError('');
+    onStartEdit();
+    setSource({ url: URL.createObjectURL(selected), objectUrl: true });
+  };
+  const openCurrent = () => {
+    onStartEdit();
+    setError('');
+    if (file) setSource({ url: URL.createObjectURL(file), objectUrl: true });
+    else if (profile.avatarPath && supabase)
+      setSource({
+        url: supabase.storage.from('avatars').getPublicUrl(profile.avatarPath).data.publicUrl,
+        objectUrl: false,
+      });
+    else inputRef.current?.click();
+  };
   return (
-    <div className="avatar-editor">
-      <UserAvatar
-        name={profile.displayName}
-        avatarPath={profile.avatarPath}
-        imageUrl={preview}
-        className="avatar-editor-preview"
-      />
-      <div className="avatar-editor-controls">
-        <label className="button-link avatar-editor-picker">
-          {t.profileUi.chooseAvatar}
+    <>
+      <div className="avatar-editor">
+        <button
+          type="button"
+          ref={triggerRef}
+          className="avatar-edit-trigger"
+          disabled={disabled}
+          onClick={openCurrent}
+          aria-label={t.profileUi.editAvatar}
+        >
+          <UserAvatar
+            name={profile.displayName}
+            avatarPath={profile.avatarPath}
+            imageUrl={file ? preview : null}
+            className="avatar-editor-preview"
+          />
+        </button>
+        <div className="avatar-editor-controls">
+          {editing ? (
+            <button
+              type="button"
+              className="button-link avatar-editor-picker"
+              disabled={disabled}
+              onClick={() => inputRef.current?.click()}
+            >
+              {t.profileUi.chooseAvatar}
+            </button>
+          ) : null}
           <input
+            ref={inputRef}
             type="file"
             className="sr-only"
+            aria-label={t.profileUi.chooseAvatar}
+            tabIndex={-1}
             accept="image/jpeg,image/png,image/webp"
-            disabled={update.isPending}
+            disabled={disabled}
             onChange={(event) => {
-              const selected = event.target.files?.[0] ?? null;
-              setFile(selected);
-              setPreview(selected ? URL.createObjectURL(selected) : null);
-              update.reset();
+              const selected = event.target.files?.[0];
+              if (selected) openFile(selected);
               event.target.value = '';
             }}
           />
-        </label>
-        <span className="muted">{file?.name ?? t.profileUi.avatarHint}</span>
-        <div className="row wrap">
-          <Action
-            pending={update.isPending && !update.variables}
-            disabled={!file || update.isPending}
-            onClick={() => update.mutate(false)}
-          >
-            {t.save}
-          </Action>
-          {file ? (
-            <Action
-              secondary
-              disabled={update.isPending}
-              onClick={() => {
-                setFile(null);
-                setPreview(null);
-              }}
-            >
-              {t.cancel}
-            </Action>
-          ) : null}
-          {profile.avatarPath ? (
-            <Action
-              secondary
-              pending={update.isPending && update.variables}
-              disabled={update.isPending}
-              onClick={() => update.mutate(true)}
-            >
-              {t.profileUi.removeAvatar}
-            </Action>
-          ) : null}
         </div>
-        <Feedback error={update.error} success={update.isSuccess ? t.saved : null} />
       </div>
-    </div>
+      {error ? (
+        <p className="notice error" role="alert">
+          {error}
+        </p>
+      ) : null}
+      {source ? (
+        <AvatarCropDialog
+          source={source.url}
+          onClose={() => setSource(null)}
+          onApply={(cropped) => {
+            setPreview(URL.createObjectURL(cropped));
+            onChange(cropped);
+            setSource(null);
+          }}
+        />
+      ) : null}
+    </>
   );
 }

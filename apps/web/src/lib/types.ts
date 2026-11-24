@@ -128,6 +128,8 @@ export interface Workspace {
 }
 export interface ProviderDetail {
   provider: Provider;
+  coverPath?: string | null;
+  avatarPath?: string | null;
   services: Service[];
   portfolios: Portfolio[];
   reviews: { id: string; rating: number; comment: string; authorName: string }[];

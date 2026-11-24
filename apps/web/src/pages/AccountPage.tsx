@@ -1,104 +1,88 @@
 import { Link } from 'react-router-dom';
 import type { OwnPhotographer } from '@frameroom/shared';
 import { useAuth } from '../lib/auth';
-import { useApi } from '../lib/hooks';
+import { useApi, useTask } from '../lib/hooks';
 import { useStrings } from '../lib/i18n';
-import { QueryState } from '../components/ui';
+import { patch, upload } from '../lib/api';
+import type { ProviderDetail } from '../lib/types';
+import { Feedback, QueryState } from '../components/ui';
 import { UserAvatar } from '../components/UserAvatar';
+import { ProviderProfile } from '../features/profiles/ProviderProfile';
+
+function PhotographerProfile({ id }: { id: string }) {
+  const t = useStrings();
+  const { profile } = useAuth();
+  const detail = useApi<ProviderDetail>(`/v1/photographers/${id}`);
+  const coverTask = useTask(async (file: File) => {
+    if (
+      !['image/jpeg', 'image/png', 'image/webp'].includes(file.type) ||
+      file.size > 20 * 1024 * 1024
+    )
+      throw new Error(t.profileUi.avatarInvalid);
+    const { storagePath } = await upload(file, 'profile-covers');
+    await patch('/v1/photographers/me/cover', { coverPath: storagePath });
+  });
+  if (!detail.data) return <QueryState query={detail} />;
+  return (
+    <>
+      <Feedback error={coverTask.error} success={coverTask.isSuccess ? t.saved : null} />
+      <ProviderProfile
+        detail={detail.data}
+        avatarPath={profile?.avatarPath ?? null}
+        canRequest={false}
+        onBook={() => {}}
+        coverAction={
+          <label className={`profile-cover-picker${coverTask.isPending ? ' is-pending' : ''}`}>
+            {coverTask.isPending ? t.pending : t.profileUi.changeCover}
+            <input
+              type="file"
+              className="sr-only"
+              accept="image/jpeg,image/png,image/webp"
+              disabled={coverTask.isPending}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) coverTask.mutate(file);
+                event.target.value = '';
+              }}
+            />
+          </label>
+        }
+      />
+    </>
+  );
+}
 
 export function AccountPage() {
   const t = useStrings();
-  const { profile, session } = useAuth();
+  const { profile } = useAuth();
   const isPhotographer = Boolean(profile?.roles.includes('photographer'));
-  const isProfessional = Boolean(
-    profile?.roles.some((role) => role === 'photographer' || role === 'studio_manager'),
-  );
   const photographer = useApi<OwnPhotographer | null>('/v1/photographers/me', isPhotographer);
-  const own = photographer.data;
+  if (isPhotographer) {
+    if (!photographer.data)
+      return <QueryState query={photographer} empty={photographer.data === null} />;
+    return <PhotographerProfile key={photographer.data.id} id={photographer.data.id} />;
+  }
   return (
-    <div className="account-page">
-      <header className="account-profile-heading">
+    <div className="public-profile">
+      <div className="profile-cover profile-cover-empty">
+        <span aria-hidden="true">FrameRoom.</span>
+        <span className="profile-kind">{t.client}</span>
+      </div>
+      <header className="profile-identity">
         <UserAvatar
           name={profile?.displayName ?? ''}
           avatarPath={profile?.avatarPath}
           className="profile-monogram"
         />
-        <div>
+        <div className="profile-name">
           <p className="eyebrow">{t.profileUi.account}</p>
           <h1>{profile?.displayName}</h1>
           <p className="muted">@{profile?.userName}</p>
-          <Link className="text-button" to="/settings">
-            {t.profileUi.chooseAvatar}
-          </Link>
         </div>
+        <Link className="button-link dark" to="/settings">
+          {t.profileUi.editProfile}
+        </Link>
       </header>
-      <div className="account-profile-columns">
-        <div>
-          <section className="profile-section">
-            <h2>{t.profileUi.about}</h2>
-            {isPhotographer ? <QueryState query={photographer} /> : null}
-            <p className="profile-biography">{own?.bio || t.profileUi.accountDescription}</p>
-            <dl className="profile-facts">
-              <div>
-                <dt>{t.email}</dt>
-                <dd>{session?.user.email}</dd>
-              </div>
-              <div>
-                <dt>{t.role}</dt>
-                <dd>{isPhotographer ? t.photographer : t.client}</dd>
-              </div>
-              {own?.city ? (
-                <div>
-                  <dt>{t.city}</dt>
-                  <dd>{own.city}</dd>
-                </div>
-              ) : null}
-            </dl>
-            {own?.genres.length ? (
-              <div className="profile-tags">
-                {own.genres.map((genre) => (
-                  <span key={genre} className="card-tag">
-                    {t.genreLabels[genre]}
-                  </span>
-                ))}
-              </div>
-            ) : null}
-          </section>
-          {isProfessional ? (
-            <section className="profile-section">
-              <h2>{t.profileUi.profileLinks}</h2>
-              <p className="muted">{t.profileUi.profileLinksDescription}</p>
-              <div className="account-quick-links">
-                <Link to="/portfolio">{t.portfolio.title}</Link>
-                <Link to="/bookings">{t.workspaceUi.bookings}</Link>
-                <Link to="/studio">{t.nav.studio}</Link>
-              </div>
-            </section>
-          ) : null}
-        </div>
-        <aside className="profile-aside">
-          <section className="profile-summary">
-            <h3>{t.profileUi.privacy}</h3>
-            <p>{t.profileUi.privateProfile}</p>
-          </section>
-          {own ? (
-            <section className="profile-inquiry">
-              <h3>{t.profileUi.publicProfile}</h3>
-              <p>{own.displayName}</p>
-              <Link className="button-link" to={`/providers/photographer/${own.id}`}>
-                {t.view}
-              </Link>
-            </section>
-          ) : null}
-          <section className="profile-summary">
-            <h3>{t.profileUi.security}</h3>
-            <p>{t.profileUi.passwordDescription}</p>
-            <Link className="text-button" to="/auth?mode=reset">
-              {t.forgot}
-            </Link>
-          </section>
-        </aside>
-      </div>
     </div>
   );
 }

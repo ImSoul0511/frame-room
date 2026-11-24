@@ -1,24 +1,23 @@
-import { useId } from 'react';
+import { Selector } from '@astryxdesign/core/Selector';
 import { useLanguage, useStrings } from '../lib/i18n';
-export function LanguageSwitcher() {
+export function LanguageSwitcher({ compact = false }: { compact?: boolean }) {
   const { language, setLanguage } = useLanguage();
   const t = useStrings();
-  const id = useId();
   return (
     <div className="language-switcher">
-      <label htmlFor={id}>{t.language.label}</label>
-      <select
-        id={id}
+      <Selector
+        label={t.language.label}
+        isLabelHidden
+        placement="below"
+        variant={compact ? 'ghost' : 'input'}
+        options={[
+          { value: 'en', label: t.language.english },
+          { value: 'vi', label: t.language.vietnamese },
+        ]}
         value={language}
-        onChange={(event) => setLanguage(event.target.value === 'vi' ? 'vi' : 'en')}
-      >
-        <option value="en" lang="en">
-          {t.language.english}
-        </option>
-        <option value="vi" lang="vi">
-          {t.language.vietnamese}
-        </option>
-      </select>
+        onChange={(value) => setLanguage(value === 'vi' ? 'vi' : 'en')}
+        controlClassName="fr-selector-control"
+      />
     </div>
   );
 }
