@@ -63,11 +63,16 @@ export const providerListQuerySchema = paginationSchema.extend({
   genre: genreSchema.optional(),
   city: optionalFilterText,
   district: optionalFilterText,
+  q: optionalFilterText,
 });
 
 /** Provider card on the Explore page, with the cover URL of its first published portfolio image. */
 export const exploreProviderSchema = providerSchema.extend({
   coverUrl: z.string().nullable().optional(),
+});
+export const directoryProviderSchema = providerSchema.extend({
+  userName: z.string().nullable().optional(),
+  avatarPath: z.string().nullable().optional(),
 });
 
 export const portfolioStatusSchema = z.enum(['draft', 'published', 'hidden']);
@@ -179,6 +184,7 @@ export type OwnedService = z.infer<typeof ownedServiceSchema>;
 
 export const portfolioListQuerySchema = paginationSchema.extend({
   genre: genreSchema.optional(),
+  city: optionalFilterText,
   tag: z.string().trim().min(1).max(60).optional(),
   q: z.string().trim().min(1).max(120).optional(),
   sort: z.enum(['newest', 'oldest', 'name']).optional(),

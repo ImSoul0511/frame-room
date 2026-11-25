@@ -4,7 +4,7 @@ import { Theme } from '@astryxdesign/core/theme';
 import { neutralTheme } from '@astryxdesign/theme-neutral/built';
 import { InternationalizationProvider } from '@astryxdesign/core/i18n';
 import vietnameseCatalog from '@astryxdesign/core/locales/vi-VN.generated.js';
-import { BrowserRouter, Link, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useLanguage, useStrings } from './lib/i18n';
 import { AuthProvider, RequireAuth } from './lib/auth';
 import { AppLayout } from './components/AppLayout';
@@ -22,10 +22,14 @@ const GenrePage = lazy(() => import('./pages/GenrePage').then((m) => ({ default:
 const ProviderDirectoryPage = lazy(() =>
   import('./pages/ProviderDirectoryPage').then((m) => ({ default: m.ProviderDirectoryPage })),
 );
-const AboutPage = lazy(() => import('./pages/AboutPage').then((m) => ({ default: m.AboutPage })));
-const SearchPage = lazy(() =>
-  import('./pages/SearchPage').then((m) => ({ default: m.SearchPage })),
+const DiscoverySearchPage = lazy(() =>
+  import('./pages/DiscoverySearchPage').then((m) => ({ default: m.DiscoverySearchPage })),
 );
+const AboutPage = lazy(() => import('./pages/AboutPage').then((m) => ({ default: m.AboutPage })));
+function LegacySearchRedirect() {
+  const { search } = useLocation();
+  return <Navigate to={`/photographers${search}`} replace />;
+}
 const ProviderPage = lazy(() =>
   import('./pages/ProviderPage').then((m) => ({ default: m.ProviderPage })),
 );
@@ -98,10 +102,7 @@ export function App() {
                   <Route path="/" element={<Navigate to="/explore" replace />} />
                   <Route path="/explore" element={<ExplorePage />} />
                   <Route path="/home" element={<Navigate to="/explore" replace />} />
-                  <Route
-                    path="/photographers"
-                    element={<ProviderDirectoryPage key="photographers" type="photographer" />}
-                  />
+                  <Route path="/photographers" element={<DiscoverySearchPage />} />
                   <Route
                     path="/studios"
                     element={<ProviderDirectoryPage key="studios" type="studio" />}
@@ -109,7 +110,7 @@ export function App() {
                   <Route path="/genres" element={<Navigate to="/explore#genres" replace />} />
                   <Route path="/genres/:genre" element={<GenrePage />} />
                   <Route path="/about" element={<AboutPage />} />
-                  <Route path="/search" element={<SearchPage />} />
+                  <Route path="/search" element={<LegacySearchRedirect />} />
                   <Route path="/auth" element={<AuthPage />} />
                   <Route path="/auth/callback" element={<AuthPage callback />} />
                   <Route path="/reset-password" element={<AuthPage recovery />} />

@@ -32,7 +32,7 @@ import type {
   Tag,
 } from '../schemas/catalog.js';
 
-/** Public media routes recheck current portfolio visibility on every request. */
+/** Public media routes recheck portfolio visibility whenever the browser cache expires. */
 export function buildPublicPortfolioImageUrl(
   supabaseUrl: string | undefined,
   storagePath: string | null | undefined,

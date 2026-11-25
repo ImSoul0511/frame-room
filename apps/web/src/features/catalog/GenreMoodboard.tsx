@@ -7,7 +7,12 @@ import { BotanicalSpray } from '../../components/BotanicalSpray';
 
 export function GenreMoodboard({ genre, destination }: { genre: Genre; destination: string }) {
   const t = useStrings();
-  const portfolios = useApi<Portfolio[]>(`/v1/portfolios?genre=${genre}&pageSize=2`);
+  const portfolios = useApi<Portfolio[]>(
+    `/v1/portfolios?genre=${genre}&pageSize=2`,
+    true,
+    undefined,
+    60_000,
+  );
   const covers = [
     ...new Map(
       (portfolios.data ?? [])
@@ -19,6 +24,8 @@ export function GenreMoodboard({ genre, destination }: { genre: Genre; destinati
   const gallery = useApi<{ images: Image[] }>(
     `/v1/portfolios/${first?.id ?? ''}`,
     Boolean(first) && covers.length < 2,
+    undefined,
+    60_000,
   );
   const pictures = [
     ...new Map([

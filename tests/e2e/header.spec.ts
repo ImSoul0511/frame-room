@@ -23,7 +23,7 @@ test('language names stay complete and search focus shows only the caret', async
   const popupBounds = await page.locator('.astryx-selector-popup').boundingBox();
   expect(popupBounds!.y).toBeGreaterThanOrEqual(controlBounds!.y + controlBounds!.height - 1);
   await page.keyboard.press('Escape');
-  const input = page.getByRole('searchbox', { name: 'Search by username' });
+  const input = page.getByRole('searchbox', { name: 'Search photographers or styles' });
   await input.click();
   await expect(input).toBeFocused();
   expect(
@@ -280,15 +280,19 @@ test('avatar opens profile, keeps settings inside it and signs out', async ({ pa
   const contentBounds = await page.locator('.photographer-account-content').boundingBox();
   const sidebarBounds = await page.locator('.photographer-account-sidebar').boundingBox();
   expect(contentBounds!.x).toBeGreaterThanOrEqual(sidebarBounds!.x + sidebarBounds!.width);
-  const coverBounds = await page.locator('.public-profile .profile-cover').boundingBox();
-  expect(Math.abs(sidebarBounds!.y - coverBounds!.y)).toBeLessThanOrEqual(2);
+  const headerBounds = await page.locator('.site-header-shell').boundingBox();
+  expect(sidebarBounds!.y).toBeCloseTo(headerBounds!.y + headerBounds!.height + 12, 0);
   await page.locator('.photographer-account-content').evaluate((content) => {
     (content as HTMLElement).style.minHeight = '2200px';
   });
   await page.evaluate(() => window.scrollTo({ top: 700, behavior: 'instant' }));
   await expect
     .poll(async () => (await page.locator('.photographer-account-sidebar').boundingBox())?.y)
-    .toBeCloseTo(190, 0);
+    .toBeCloseTo(12, 0);
+  await page.evaluate(() => window.scrollTo({ top: 500, behavior: 'instant' }));
+  await expect
+    .poll(async () => (await page.locator('.photographer-account-sidebar').boundingBox())?.y)
+    .toBeCloseTo(headerBounds!.height + 12, 0);
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
   await page.setViewportSize({ width: 375, height: 900 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);

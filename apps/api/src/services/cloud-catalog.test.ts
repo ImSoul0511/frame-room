@@ -232,6 +232,39 @@ describe('Cloud catalog without a direct Postgres connection', () => {
     expect(calls[1].url.searchParams.get('status')).toBe('eq.published');
     expect(calls[1].url.searchParams.get('deleted_at')).toBe('is.null');
   });
+  it('includes photographer username and avatar in directory results', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('/providers'))
+          return Response.json([
+            {
+              id: USER,
+              type: 'photographer',
+              display_name: 'Demo',
+              bio: '',
+              city: '',
+              district: '',
+              genres: [],
+              styles: [],
+              price_from: null,
+              rating_avg: null,
+              review_count: 0,
+            },
+          ]);
+        if (url.includes('/photographers'))
+          return Response.json([
+            { id: USER, profiles: { user_name: 'demo', avatar_path: `${USER}/avatar.webp` } },
+          ]);
+        return Response.json([]);
+      }),
+    );
+    const data = await createCloudCatalog(settings)!.list(
+      { page: 1, pageSize: 12 },
+      'photographer',
+    );
+    expect(data[0]).toMatchObject({ userName: 'demo', avatarPath: `${USER}/avatar.webp` });
+  });
   it('accepts nullable Vietnamese names and omits inactive database tags', async () => {
     vi.stubGlobal(
       'fetch',

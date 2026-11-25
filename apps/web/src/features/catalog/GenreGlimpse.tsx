@@ -13,7 +13,12 @@ export function GenreGlimpse({
   previous?: boolean;
 }) {
   const t = useStrings();
-  const portfolios = useApi<Portfolio[]>(`/v1/portfolios?genre=${genre}&pageSize=2`);
+  const portfolios = useApi<Portfolio[]>(
+    `/v1/portfolios?genre=${genre}&pageSize=2`,
+    true,
+    undefined,
+    60_000,
+  );
   const picture = portfolios.data?.find((portfolio) => portfolio.coverUrl);
   return (
     <button

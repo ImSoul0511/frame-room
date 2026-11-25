@@ -11,6 +11,29 @@ export function ScrollHeader({
   const [hidden, setHidden] = useState(false);
 
   useEffect(() => {
+    const element = header.current;
+    const container = element?.parentElement;
+    if (!element || !container) return;
+    const updateHeight = () => {
+      container.style.setProperty('--site-header-height', `${element.offsetHeight}px`);
+      container.style.setProperty(
+        '--site-header-offset',
+        `${Math.max(0, element.getBoundingClientRect().top)}px`,
+      );
+    };
+    updateHeight();
+    window.addEventListener('scroll', updateHeight, { passive: true });
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(element);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('scroll', updateHeight);
+      container.style.removeProperty('--site-header-height');
+      container.style.removeProperty('--site-header-offset');
+    };
+  }, []);
+
+  useEffect(() => {
     if (fixed) return;
     let frame = 0;
     let previousY = window.scrollY;

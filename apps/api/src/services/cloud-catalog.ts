@@ -4,6 +4,7 @@ import { profileSchema, ownPhotographerSchema, type Profile } from '@frameroom/s
 
 import type { ApiEnv } from '../config/env.js';
 import { ApiError } from '../lib/errors.js';
+import { provinceNames } from '../lib/provinces.js';
 import { normalizeRow } from '../repositories/database.js';
 import type {
   ExploreQuery,
@@ -41,8 +42,44 @@ export function createCloudCatalog(env: ApiEnv) {
     let request = publicClient.from('providers').select('*');
     if (type) request = request.eq('type', type);
     if (query.genre) request = request.contains('genres', [query.genre]);
-    if (query.city) request = request.ilike('city', query.city);
+    if (query.city) {
+      const names = provinceNames(query.city);
+      request =
+        names.length === 1
+          ? request.ilike('city', names[0])
+          : request.or(names.map((name) => `city.ilike.${name}`).join(','));
+    }
     if (query.district) request = request.ilike('district', query.district);
+    if ('q' in query && query.q) {
+      const keyword = query.q.replace(/[\\%_]/g, '\\$&');
+      const matches = await Promise.all(
+        ['display_name', 'user_name', 'photographers.display_name'].map((column) =>
+          publicClient
+            .from('profiles')
+            .select('photographers!inner(id,display_name,is_hidden)')
+            .eq('photographers.is_hidden', false)
+            .ilike(column, `%${keyword}%`)
+            .limit(1000),
+        ),
+      );
+      for (const result of matches) check(result.error);
+      const ids = [
+        ...new Set(
+          matches.flatMap((result) =>
+            (result.data ?? []).flatMap((row) =>
+              row.photographers.map((photographer) => photographer.id),
+            ),
+          ),
+        ),
+      ];
+      const pattern = `%${keyword}%`.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      request = request.or(
+        [
+          `display_name.ilike."${pattern}"`,
+          ...(ids.length ? [`id.in.(${ids.join(',')})`] : []),
+        ].join(','),
+      );
+    }
     if ('priceMax' in query && query.priceMax !== undefined)
       request = request.lte('price_from', query.priceMax);
     const start = (query.page - 1) * query.pageSize;
@@ -53,6 +90,24 @@ export function createCloudCatalog(env: ApiEnv) {
       .range(start, start + query.pageSize - 1);
     check(error);
     const providers = normalizeRow(data ?? []) as Provider[];
+    const photographerIds = providers
+      .filter((item) => item.type === 'photographer')
+      .map((item) => item.id);
+    const identities = new Map<string, { userName: string | null; avatarPath: string | null }>();
+    if (photographerIds.length && type === 'photographer') {
+      const identityRows = await publicClient
+        .from('photographers')
+        .select('id,profiles(user_name,avatar_path)')
+        .in('id', photographerIds);
+      check(identityRows.error);
+      for (const row of identityRows.data ?? []) {
+        const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
+        identities.set(row.id, {
+          userName: profile?.user_name ?? null,
+          avatarPath: profile?.avatar_path ?? null,
+        });
+      }
+    }
     const { data: portfolios, error: portfolioError } = await publicClient
       .from('portfolios')
       .select('id,photographer_id,studio_id,portfolio_images(storage_path,sort_order,is_hidden)')
@@ -71,6 +126,7 @@ export function createCloudCatalog(env: ApiEnv) {
         .sort((a, b) => a.sort_order - b.sort_order)[0];
       return {
         ...provider,
+        ...identities.get(provider.id),
         coverUrl: buildPublicPortfolioImageUrl(
           env.SUPABASE_URL,
           image?.storage_path,
@@ -115,6 +171,30 @@ export function createCloudCatalog(env: ApiEnv) {
     list,
     profile,
     async portfolios(query: PortfolioListQuery) {
+      let cityProviderFilter: string | undefined;
+      if (query.city) {
+        const names = provinceNames(query.city);
+        let providers = publicClient.from('providers').select('id,type');
+        providers =
+          names.length === 1
+            ? providers.ilike('city', names[0])
+            : providers.or(names.map((name) => `city.ilike.${name}`).join(','));
+        const { data, error } = await providers.limit(10000);
+        check(error);
+        const photographers = (data ?? [])
+          .filter((item) => item.type === 'photographer')
+          .map((item) => item.id);
+        const studios = (data ?? [])
+          .filter((item) => item.type === 'studio')
+          .map((item) => item.id);
+        if (!photographers.length && !studios.length) return [];
+        cityProviderFilter = [
+          photographers.length ? `photographer_id.in.(${photographers.join(',')})` : '',
+          studios.length ? `studio_id.in.(${studios.join(',')})` : '',
+        ]
+          .filter(Boolean)
+          .join(',');
+      }
       const matching = query.tag
         ? ',matches:portfolio_images!inner(is_hidden,image_tags!inner(tags!inner(slug)))'
         : '';
@@ -126,6 +206,7 @@ export function createCloudCatalog(env: ApiEnv) {
         .eq('status', 'published')
         .is('deleted_at', null);
       if (query.genre) request = request.eq('genre', query.genre);
+      if (cityProviderFilter) request = request.or(cityProviderFilter);
       if (query.tag)
         request = request
           .eq('matches.is_hidden', false)

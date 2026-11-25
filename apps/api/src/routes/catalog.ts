@@ -4,6 +4,7 @@ import { createPortfolioUploadVerifier } from '../lib/portfolio-upload.js';
 import { defineRoute, validateResponse, type ApiModule } from '../plugins/route.js';
 import {
   exploreProviderSchema,
+  directoryProviderSchema,
   exploreQuerySchema,
   idSchema,
   idParamsSchema,
@@ -21,7 +22,6 @@ import {
   portfolioListQuerySchema,
   providerDetailSchema,
   providerListQuerySchema,
-  providerSchema,
   publicPortfolioSchema,
   respondInvitationInputSchema,
   serviceAddOnInputSchema,
@@ -74,7 +74,7 @@ export const catalogModule: ApiModule = {
       requireCondition(visible, 404, 'file_not_found');
       const bytes = await media.download('portfolio-images', path);
       return reply
-        .header('Cache-Control', 'no-store')
+        .header('Cache-Control', 'private, max-age=60, must-revalidate')
         .header('X-Content-Type-Options', 'nosniff')
         .type(
           path.endsWith('.webp')
@@ -112,7 +112,7 @@ export const catalogModule: ApiModule = {
         summary: `List visible public ${plural} with pagination and filters.`,
         access: 'public',
         query: providerListQuerySchema,
-        response: z.array(providerSchema),
+        response: z.array(directoryProviderSchema),
         handler: ({ query, transaction }) =>
           cloud
             ? cloud.list(query, type)

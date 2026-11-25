@@ -47,29 +47,27 @@ export function PrimaryNavigation() {
         </>
       ) : (
         <>
-          <details className="nav-disclosure" name="primary-navigation">
-            <summary>
-              {t.curation.explore}
-              <span className="nav-chevron" aria-hidden="true" />
-            </summary>
-            <div className="nav-panel">
-              <NavLink to={destination('/photographers')}>{t.curation.photographers}</NavLink>
-              <NavLink to={destination('/studios')}>{t.curation.studios}</NavLink>
-            </div>
-          </details>
-          <details className="nav-disclosure nav-genres" name="primary-navigation">
-            <summary>
-              {t.curation.genres}
-              <span className="nav-chevron" aria-hidden="true" />
-            </summary>
-            <div className="nav-panel nav-genre-panel">
-              {genres.map((genre) => (
-                <NavLink key={genre} to={destination(`/genres/${genre}`)}>
-                  {t.genreLabels[genre]}
-                </NavLink>
-              ))}
-            </div>
-          </details>
+          <NavLink to={destination('/photographers')}>{t.curation.explore}</NavLink>
+          {profile ? (
+            <>
+              <NavLink to="/bookings">{t.workspaceUi.bookings}</NavLink>
+              <NavLink to="/projects">{t.nav.projects}</NavLink>
+            </>
+          ) : (
+            <details className="nav-disclosure nav-genres" name="primary-navigation">
+              <summary>
+                {t.curation.genres}
+                <span className="nav-chevron" aria-hidden="true" />
+              </summary>
+              <div className="nav-panel nav-genre-panel">
+                {genres.map((genre) => (
+                  <NavLink key={genre} to={destination(`/genres/${genre}`)}>
+                    {t.genreLabels[genre]}
+                  </NavLink>
+                ))}
+              </div>
+            </details>
+          )}
           <NavLink to="/about">{t.curation.about}</NavLink>
         </>
       )}

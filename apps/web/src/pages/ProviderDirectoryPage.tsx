@@ -1,25 +1,37 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { genres, type Provider } from '@frameroom/shared';
 import { api } from '../lib/api';
 import { useStrings } from '../lib/i18n';
 import { Action, Field, QueryState, Select } from '../components/ui';
 import { ProviderCard } from '../features/catalog/ProviderCard';
+import { ProvinceSelect } from '../features/catalog/ProvinceSelect';
 
 export function ProviderDirectoryPage({ type }: { type: 'photographer' | 'studio' }) {
+  const [params] = useSearchParams();
+  return <ProviderDirectory type={type} key={`${type}:${params}`} />;
+}
+
+function ProviderDirectory({ type }: { type: 'photographer' | 'studio' }) {
   const t = useStrings();
-  const [genre, setGenre] = useState('');
-  const [draftCity, setDraftCity] = useState('');
-  const [city, setCity] = useState('');
+  const [params, setParams] = useSearchParams();
+  const query = params.get('q') ?? '';
+  const city = params.get('city') ?? '';
+  const genre = params.get('genre') ?? '';
+  const [draftQuery, setDraftQuery] = useState(query);
+  const [draftCity, setDraftCity] = useState(city);
+  const [draftGenre, setDraftGenre] = useState(genre);
   const plural = type === 'studio' ? 'studios' : 'photographers';
   const pageSize = type === 'studio' ? 6 : 9;
   const results = useInfiniteQuery({
-    queryKey: ['api', 'provider-directory', type, genre, city],
+    queryKey: ['api', 'provider-directory', type, genre, city, query],
     initialPageParam: 1,
     queryFn: ({ pageParam, signal }) => {
       const query = new URLSearchParams({ page: String(pageParam), pageSize: String(pageSize) });
       if (genre) query.set('genre', genre);
       if (city) query.set('city', city);
+      if (params.get('q')?.trim()) query.set('q', params.get('q')!.trim());
       return api<Provider[]>(`/v1/${plural}?${query}`, { signal });
     },
     getNextPageParam: (last, pages) => (last.length === pageSize ? pages.length + 1 : undefined),
@@ -42,16 +54,28 @@ export function ProviderDirectoryPage({ type }: { type: 'photographer' | 'studio
         className="directory-filters"
         onSubmit={(event) => {
           event.preventDefault();
-          setCity(draftCity.trim());
+          const next = new URLSearchParams(params);
+          for (const [key, value] of [
+            ['q', draftQuery.trim().slice(0, 100)],
+            ['city', draftCity],
+            ['genre', draftGenre],
+          ]) {
+            if (value) next.set(key, value);
+            else next.delete(key);
+          }
+          setParams(next);
         }}
       >
-        <Field
-          label={t.curation.city}
-          value={draftCity}
-          onChange={setDraftCity}
-          placeholder={t.curation.cityPlaceholder}
-        />
-        <Select label={t.genres} value={genre} onChange={setGenre}>
+        <div className="directory-search-field">
+          <Field
+            label={t.discovery.userSearch}
+            value={draftQuery}
+            onChange={setDraftQuery}
+            placeholder={t.discovery.searchPhotographersPlaceholder}
+          />
+        </div>
+        <ProvinceSelect value={draftCity} onChange={setDraftCity} />
+        <Select label={t.genres} value={draftGenre} onChange={setDraftGenre}>
           <option value="">{t.all}</option>
           {genres.map((value) => (
             <option key={value} value={value}>
@@ -65,8 +89,13 @@ export function ProviderDirectoryPage({ type }: { type: 'photographer' | 'studio
           className="text-button"
           onClick={() => {
             setDraftCity('');
-            setCity('');
-            setGenre('');
+            setDraftQuery('');
+            setDraftGenre('');
+            const next = new URLSearchParams(params);
+            next.delete('q');
+            next.delete('city');
+            next.delete('genre');
+            setParams(next);
           }}
         >
           {t.explore.clear}

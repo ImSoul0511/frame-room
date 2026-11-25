@@ -18,24 +18,20 @@ export function ProfileLayout() {
   const professional = profile?.roles.some((role) =>
     ['photographer', 'studio_manager'].includes(role),
   );
-  if (pathname === '/messages') return <Outlet />;
-  if (profile?.roles.includes('photographer')) {
+  {
     const isAccountPage = ['/profile', '/settings', '/notifications', '/studio', '/admin'].some(
       (path) => pathname === path || pathname.startsWith(`${path}/`),
     );
     if (!isAccountPage) return <Outlet />;
     return (
-      <section
-        className={`profile-workspace photographer-workspace${pathname === '/profile' ? ' photographer-profile-workspace' : ''}`}
-        aria-label={t.design.profile}
-      >
+      <section className="profile-workspace photographer-workspace" aria-label={t.design.profile}>
         <aside className="photographer-account-sidebar">
           <nav className="photographer-account-nav" aria-label={t.design.profile}>
             <NavLink to="/profile">{t.design.profile}</NavLink>
-            <NavLink to="/studio">{t.nav.studio}</NavLink>
+            {professional ? <NavLink to="/studio">{t.nav.studio}</NavLink> : null}
             <NavLink to="/notifications">{t.workspaceUi.notifications}</NavLink>
             <NavLink to="/settings">{t.workspaceUi.settings}</NavLink>
-            {profile.roles.includes('system_admin') ? (
+            {profile?.roles.includes('system_admin') ? (
               <NavLink to="/admin">{t.workspaceUi.moderation}</NavLink>
             ) : null}
             <div className="photographer-logout-box">
@@ -56,33 +52,4 @@ export function ProfileLayout() {
       </section>
     );
   }
-  return (
-    <section className="profile-workspace" aria-label={t.design.profile}>
-      <nav className="profile-navigation" aria-label={t.design.profile}>
-        <NavLink to="/profile">{t.design.profile}</NavLink>
-        <NavLink to="/projects">{t.nav.projects}</NavLink>
-        <NavLink to="/bookings">{t.workspaceUi.bookings}</NavLink>
-        {professional ? (
-          <>
-            <NavLink to="/portfolio">{t.workspaceUi.portfolio}</NavLink>
-            <NavLink to="/studio">{t.nav.studio}</NavLink>
-          </>
-        ) : null}
-        <NavLink to="/notifications">{t.workspaceUi.notifications}</NavLink>
-        {profile?.roles.includes('system_admin') ? (
-          <NavLink to="/admin">{t.workspaceUi.moderation}</NavLink>
-        ) : null}
-        <NavLink to="/settings">{t.workspaceUi.settings}</NavLink>
-        <button
-          className="text-button profile-logout"
-          disabled={logout.isPending}
-          onClick={() => logout.mutate()}
-        >
-          {logout.isPending ? t.pending : t.logout}
-        </button>
-      </nav>
-      <Feedback error={logout.error} />
-      <Outlet />
-    </section>
-  );
 }

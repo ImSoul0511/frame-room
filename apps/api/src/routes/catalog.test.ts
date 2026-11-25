@@ -173,6 +173,21 @@ describe('GET /v1/explore', () => {
 });
 
 describe('GET /v1/photographers and GET /v1/photographers/:id', () => {
+  it('passes search text and province filters to provider discovery', async () => {
+    vi.mocked(repo.listProvidersByType).mockResolvedValue([PHOTOGRAPHER_PROVIDER]);
+    const app = await buildTestApp();
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/photographers?${new URLSearchParams({ q: 'Minh', city: 'Hồ Chí Minh' })}`,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(repo.listProvidersByType).toHaveBeenCalledWith(expect.anything(), 'photographer', {
+      q: 'Minh',
+      city: 'Hồ Chí Minh',
+      page: 1,
+      pageSize: 20,
+    });
+  });
   it('lists public photographers with default pagination (200)', async () => {
     vi.mocked(repo.listProvidersByType).mockResolvedValue([PHOTOGRAPHER_PROVIDER]);
     const app = await buildTestApp();

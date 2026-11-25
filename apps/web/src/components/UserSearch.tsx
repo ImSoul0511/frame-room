@@ -3,11 +3,18 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useStrings } from '../lib/i18n';
 
 export function UserSearch() {
+  const location = useLocation();
+  return <UserSearchForm key={`${location.pathname}${location.search}`} />;
+}
+
+function UserSearchForm() {
   const t = useStrings();
   const navigate = useNavigate();
   const location = useLocation();
   const [draft, setDraft] = useState(() =>
-    location.pathname === '/search' ? (new URLSearchParams(location.search).get('q') ?? '') : '',
+    location.pathname === '/photographers'
+      ? (new URLSearchParams(location.search).get('q') ?? '')
+      : '',
   );
   return (
     <div className="user-search">
@@ -17,7 +24,11 @@ export function UserSearch() {
         onSubmit={(event) => {
           event.preventDefault();
           const query = draft.trim();
-          if (query) navigate(`/search?${new URLSearchParams({ q: query })}`);
+          const params = new URLSearchParams(
+            location.pathname === '/photographers' ? location.search : '',
+          );
+          params.set('q', query);
+          navigate(`/photographers?${params}`);
         }}
       >
         <label htmlFor="user-search" className="sr-only">
@@ -29,7 +40,7 @@ export function UserSearch() {
           placeholder={t.discovery.searchPhotographersPlaceholder}
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
-          maxLength={60}
+          maxLength={100}
         />
         <button type="submit" aria-label={t.discovery.userSearch} disabled={!draft.trim()}>
           <svg

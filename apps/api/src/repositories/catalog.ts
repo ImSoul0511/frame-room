@@ -1,4 +1,5 @@
 import type { Transaction } from './database.js';
+import { provinceNames } from '../lib/provinces.js';
 import type {
   ExploreProvider,
   ExploreQuery,
@@ -160,12 +161,19 @@ export async function listProvidersByType(
     conditions.push(`$${params.length}::text = any(p.genres)`);
   }
   if (query.city) {
-    params.push(query.city);
-    conditions.push(`lower(p.city) = lower($${params.length})`);
+    params.push(provinceNames(query.city).map((name) => name.toLocaleLowerCase('vi')));
+    conditions.push(`lower(p.city) = any($${params.length}::text[])`);
   }
   if (query.district) {
     params.push(query.district);
     conditions.push(`lower(p.district) = lower($${params.length})`);
+  }
+
+  if (query.q) {
+    params.push(query.q);
+    conditions.push(
+      `(strpos(lower(p.display_name), lower($${params.length})) > 0 or (p.type = 'photographer' and exists (select 1 from photographers ph join profiles pr on pr.id = ph.user_id where ph.id = p.id and (strpos(lower(pr.user_name), lower($${params.length})) > 0 or strpos(lower(pr.display_name), lower($${params.length})) > 0))))`,
+    );
   }
 
   const limitParam = params.push(query.pageSize);
@@ -173,8 +181,11 @@ export async function listProvidersByType(
 
   const rows = await tx.rows<Provider>(
     `select p.id, p.type, p.display_name, p.bio, p.city, p.district,
-            p.genres, p.styles, p.price_from, p.rating_avg, p.review_count
+            p.genres, p.styles, p.price_from, p.rating_avg, p.review_count,
+            pr.user_name, pr.avatar_path
      from providers p
+     left join photographers ph on p.type = 'photographer' and ph.id = p.id
+     left join profiles pr on pr.id = ph.user_id
      where ${conditions.join(' and ')}
      order by p.rating_avg desc nulls last, p.review_count desc, p.display_name
      limit $${limitParam} offset $${offsetParam}`,
@@ -635,6 +646,12 @@ export async function listPublicPortfolios(
   if (query.genre) {
     params.push(query.genre);
     conditions.push(`pf.genre = $${params.length}::genre`);
+  }
+  if (query.city) {
+    params.push(provinceNames(query.city).map((name) => name.toLocaleLowerCase('vi')));
+    conditions.push(
+      `exists (select 1 from providers p where ((p.type = 'photographer' and p.id = pf.photographer_id) or (p.type = 'studio' and p.id = pf.studio_id)) and lower(p.city) = any($${params.length}::text[]))`,
+    );
   }
   if (query.q) {
     params.push(`%${query.q.replace(/[\\%_]/g, '\\$&')}%`);

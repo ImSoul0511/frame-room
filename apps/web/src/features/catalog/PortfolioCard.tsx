@@ -7,9 +7,11 @@ import { FittedImage } from '../../components/FittedImage';
 export function PortfolioCard({
   portfolio,
   project,
+  compact = false,
 }: {
   portfolio: Portfolio;
   project?: string | null;
+  compact?: boolean;
 }) {
   const t = useStrings();
   const { language } = useLanguage();
@@ -24,7 +26,7 @@ export function PortfolioCard({
     </span>
   );
   return (
-    <article className="collection-card">
+    <article className={`collection-card${compact ? ' collection-card-compact' : ''}`}>
       <Link className="collection-image" to={`/portfolios/${portfolio.id}`}>
         {portfolio.coverUrl && !failed ? (
           <FittedImage
@@ -46,8 +48,8 @@ export function PortfolioCard({
           <h3>{portfolio.title}</h3>
         </Link>
         {portfolio.description ? <p>{portfolio.description}</p> : null}
-        <div className="provider-tags">{tags.slice(0, 6).map(renderTag)}</div>
-        {tags.length > 6 ? (
+        <div className="provider-tags">{tags.slice(0, compact ? 2 : 6).map(renderTag)}</div>
+        {!compact && tags.length > 6 ? (
           <details className="more-tags">
             <summary>
               {t.design.allTags} ({tags.length})
