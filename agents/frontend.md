@@ -1,8 +1,8 @@
 # Frontend guide
 
-Read [contribution rules](../docs/contributing.md#frontend), the [API draft](../docs/api/contract_v0.md), and the task.
+Read [contribution rules](../docs/contributing.md#frontend), the [API contract](../docs/api/mvp.md), and the task.
 
-For a concrete screen/form task, load the [Astryx screen skill](skills/frameroom-astryx-screen/SKILL.md). The [auth packet](../docs/features/auth/packet.md) provides the first screen specifications; its proposed onboarding API is not implemented.
+For a concrete screen/form task, load the [Astryx screen skill](skills/frameroom-astryx-screen/SKILL.md). Check route ownership in `apps/web/src/App.tsx` and the [frontend inventory](../docs/frontend/feature-inventory.md).
 
 Use React functions/hooks, Astryx components/tokens, React Router, and TanStack Query. Inspect installed props with `pnpm --filter web astryx component <Name>`; do not run init or recreate root agent files. Keep UI strings separate.
 

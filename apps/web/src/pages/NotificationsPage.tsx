@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Action, Feedback, PageHeading, QueryState } from '../components/ui';
-import { dateTime } from '../lib/api';
+import { NotificationText, useNotificationTitle } from '../components/NotificationText';
 import { useApi } from '../lib/hooks';
 import { useStrings } from '../lib/i18n';
 import { useMarkNotificationRead, type NoticePage } from '../lib/notifications';
@@ -11,6 +11,7 @@ const TITLE_LIMIT = 90;
 
 export function NotificationsPage() {
   const t = useStrings();
+  const titleOf = useNotificationTitle();
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [page, setPage] = useState(1);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -56,20 +57,13 @@ export function NotificationsPage() {
       </div>
       <QueryState
         query={list}
-        empty={!unreadOnly && list.isSuccess && page === 1 && list.data.items.length === 0}
+        empty={list.isSuccess && !notices.length}
+        emptyMessage={unreadOnly ? t.design.noUnread : undefined}
       />
       <Feedback error={mark.error} />
-      {unreadOnly && list.isSuccess && !notices.length ? (
-        <p className="empty-state">{t.design.noUnread}</p>
-      ) : null}
-      {!unreadOnly && page > 1 && list.isSuccess && !notices.length ? (
-        <p className="empty-state">{t.empty}</p>
-      ) : null}
       <div className="notification-list">
         {notices.map((notice) => {
-          const title =
-            t.workspaceUi[notice.event as keyof typeof t.workspaceUi] ??
-            t.workspaceUi.notifications;
+          const title = titleOf(notice);
           const destination = notice.bookingId
             ? `/bookings/${notice.bookingId}`
             : notice.studioId
@@ -87,10 +81,13 @@ export function NotificationsPage() {
             >
               <div className="row between wrap">
                 <div className="notification-card-content">
-                  <span className="eyebrow">{notice.readAt ? t.design.read : t.design.unread}</span>
-                  <h2>
-                    {destination ? <Link to={destination}>{visibleTitle}</Link> : visibleTitle}
-                  </h2>
+                  <NotificationText
+                    notice={notice}
+                    heading
+                    title={
+                      destination ? <Link to={destination}>{visibleTitle}</Link> : visibleTitle
+                    }
+                  />
                   {isLong ? (
                     <button
                       type="button"
@@ -101,7 +98,6 @@ export function NotificationsPage() {
                       {expanded ? t.design.showLess : t.design.showMore}
                     </button>
                   ) : null}
-                  <p>{dateTime(notice.createdAt)}</p>
                 </div>
                 {!notice.readAt ? (
                   <Action

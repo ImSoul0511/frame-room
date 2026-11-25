@@ -18,7 +18,6 @@ Use Node.js 22 and pnpm 9.15.0. Set the ignored root `.env` using
 | `DATABASE_URL`                                  | Server-only PostgreSQL connection for the same project. Use the Cloud session pooler for IPv4 access. |
 | `VITE_API_URL`, `API_PUBLIC_ORIGIN`             | Browser-visible API origin. The second setting defaults to the first.                                 |
 | `WEB_ORIGIN`                                    | Frontend origin allowed by the API                                                                    |
-| `AI_SEARCH_ENABLED`                             | Keep `false` for UC-001 verification                                                                  |
 
 The API also accepts the legacy `SUPABASE_ANON_KEY` and
 `SUPABASE_SERVICE_ROLE_KEY` names. Restart the API and web after editing settings.

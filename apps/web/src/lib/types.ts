@@ -16,6 +16,7 @@ export interface Portfolio {
   genre: string;
   status: 'draft' | 'published' | 'hidden';
   ownerType: 'photographer' | 'studio';
+  ownerName?: string | null;
   studioId: string | null;
   coverUrl?: string | null;
   photographerId?: string | null;

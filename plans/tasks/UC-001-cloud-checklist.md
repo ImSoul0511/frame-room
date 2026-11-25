@@ -1,6 +1,6 @@
 # UC-001 Cloud acceptance checklist
 
-Use this checklist to verify the application against the [RUP specification](../../rup_ucspec-v2.docx.md)
+Use this checklist to verify the application against the [RUP specification](../../report/rup_ucspec-v2.docx)
 and the [UC-001 implementation plan](UC-001.md). Check a use case after its
 main flow and failure checks pass. Record failing steps with the actor, route,
 HTTP status, actual result and relevant test record IDs. Keep credentials,
@@ -13,7 +13,7 @@ session tokens and signed media URLs out of the evidence.
       [Migration workflow](../../docs/infrastructure/migration-workflow.md)
 - [ ] Point the API and browser to the same Cloud test project. Configure the
       server PostgreSQL connection, Auth redirect allowlist and Cloud test
-      environment variables. Set `AI_SEARCH_ENABLED=false`.
+      environment variables.
       [Cloud setup](../../docs/infrastructure/supabase-cloud-preview.md)
 - [ ] Prepare separate browser contexts for one Client, one solo Photographer,
       one Studio Manager, two Studio Photographers, one System Administrator

@@ -1,5 +1,7 @@
 # Replacement AI service contract
 
+> Historical proposal. For current behavior see the [implementation contract](../api/mvp.md) and [AI capabilities](../ai/current-ai-capabilities.md).
+
 **Ownership (user decision, 2026-11-18):** Quynh Anh owns the entire AI scope,
 including AIS-101 through AIS-105, BE-104 and BE-107: Python/model implementation,
 HTTP adapters, ranking, import/indexing, jobs/usage/actions and assistant/chat.

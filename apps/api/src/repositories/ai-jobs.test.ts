@@ -12,22 +12,22 @@ const job: WorkerJob = {
   input: {},
 };
 
-it('ends a queued indexing job before recording a provider call when search is disabled', async () => {
+it('closes a legacy indexing job before a provider call', async () => {
   const tx: Transaction = {
     one: vi.fn().mockResolvedValue(job),
     execute: vi.fn().mockResolvedValue(undefined),
     rows: vi.fn(),
     optional: vi.fn(),
   };
-  expect(await claimForWork(tx, job.id, false)).toBeNull();
+  expect(await claimForWork(tx, job.id)).toBeNull();
   expect(tx.execute).toHaveBeenCalledTimes(1);
   expect(tx.execute).toHaveBeenCalledWith(
-    expect.stringContaining("status='failed',error='ai_search_disabled'"),
+    expect.stringContaining("status='failed',error='retired_job_kind'"),
     [job.id],
   );
 });
 
-it('still claims other AI jobs when search is disabled', async () => {
+it('claims a project concept job', async () => {
   const concept = { ...job, kind: 'concept', projectId: 'project-id' };
   const tx: Transaction = {
     one: vi.fn().mockResolvedValue(concept),
@@ -35,7 +35,7 @@ it('still claims other AI jobs when search is disabled', async () => {
     rows: vi.fn(),
     optional: vi.fn(),
   };
-  expect(await claimForWork(tx, concept.id, false)).toEqual(concept);
+  expect(await claimForWork(tx, concept.id)).toEqual(concept);
   expect(tx.execute).toHaveBeenCalledWith(expect.stringContaining("status='running'"), [
     concept.id,
   ]);

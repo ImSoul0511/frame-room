@@ -9,7 +9,9 @@ import {
 } from './aperture-geometry';
 
 const CRUISE_SPEED = 0.0035; // degrees per millisecond
-const COAST_DECAY_MS = 1400;
+const SETTLE_HOLD_MS = 420;
+const DRAG_THRESHOLD = 1;
+const DRAG_PREVIEW_LIMIT = GENRE_STEP * 0.75;
 
 export function useApertureMotion() {
   const stage = useRef<HTMLElement>(null);
@@ -20,10 +22,9 @@ export function useApertureMotion() {
   const speed = useRef(CRUISE_SPEED);
   const activeStep = useRef(0);
   const manualSelection = useRef(false);
+  const holdUntil = useRef(0);
   const interacting = useRef(false);
-  const pointer = useRef<{ id: number; angle: number; time: number; velocity: number } | null>(
-    null,
-  );
+  const pointer = useRef<{ id: number; angle: number; start: number; travel: number } | null>(null);
   const [active, setActive] = useState(0);
   const [paused, setPaused] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -41,28 +42,30 @@ export function useApertureMotion() {
     const onScroll = () => {
       const delta = window.scrollY - lastScroll;
       lastScroll = window.scrollY;
-      if (visible && !paused && !pointer.current && !motion.matches)
+      if (visible && !paused && !pointer.current && !manualSelection.current && !motion.matches)
         target.current += delta * 0.035;
     };
     const animate = (time: number) => {
       const delta = Math.min(time - (lastTime || time), 64);
       lastTime = time;
-      if (visible && !document.hidden) {
+      if (visible && !document.hidden && (time >= holdUntil.current || motion.matches)) {
         const automatic = !paused && !interacting.current && !pointer.current && !motion.matches;
-        if (automatic && !manualSelection.current) {
-          const cruise = Math.sign(speed.current) * CRUISE_SPEED;
-          const excess = speed.current - cruise;
-          const decay = -Math.expm1(-delta / COAST_DECAY_MS);
-          target.current += cruise * delta + excess * COAST_DECAY_MS * decay;
-          speed.current -= excess * decay;
+        const boundary = activeStep.current * GENRE_STEP;
+        const selecting = manualSelection.current;
+        if (!selecting && !pointer.current) {
+          if (automatic) target.current += speed.current * delta;
+          target.current = Math.max(
+            boundary - GENRE_STEP,
+            Math.min(boundary + GENRE_STEP, target.current),
+          );
         }
         const distance = target.current - rotation.current;
-        const movement = distance * -Math.expm1(-delta / (manualSelection.current ? 120 : 24));
+        const movement = distance * -Math.expm1(-delta / (selecting ? 120 : 24));
         const angle =
-          motion.matches || Math.abs(distance) < 0.015
+          motion.matches || Math.abs(distance) < 0.2
             ? target.current
             : rotation.current +
-              (manualSelection.current
+              (selecting
                 ? Math.sign(movement) * Math.min(Math.abs(movement), delta * 0.15)
                 : movement);
         if (angle !== rotation.current) {
@@ -70,11 +73,19 @@ export function useApertureMotion() {
           if (ring.current) ring.current.style.transform = `rotate(${-angle}deg)`;
           blade.current?.setAttribute('transform', bladePivot(angle));
         }
-        if (manualSelection.current && Math.abs(target.current - angle) < 0.2)
+        if (
+          !pointer.current &&
+          angle === target.current &&
+          (selecting || Math.abs(angle - boundary) >= GENRE_STEP)
+        ) {
+          // Commit at a blade endpoint and hold it while React renders the next genre.
           manualSelection.current = false;
-        if (Math.round(angle / GENRE_STEP) !== activeStep.current) {
-          activeStep.current = Math.round(angle / GENRE_STEP);
-          setActive(wrapGenre(activeStep.current));
+          const step = Math.round(angle / GENRE_STEP);
+          if (step !== activeStep.current) {
+            holdUntil.current = time + SETTLE_HOLD_MS;
+            activeStep.current = step;
+            setActive(wrapGenre(step));
+          }
         }
       }
       frame = requestAnimationFrame(animate);
@@ -115,8 +126,8 @@ export function useApertureMotion() {
     pointer.current = {
       id: event.pointerId,
       angle: angleAtPointer(event),
-      time: event.timeStamp,
-      velocity: 0,
+      start: rotation.current,
+      travel: 0,
     };
     target.current = rotation.current;
     manualSelection.current = false;
@@ -127,15 +138,13 @@ export function useApertureMotion() {
     const drag = pointer.current;
     if (drag?.id !== event.pointerId) return;
     const angle = angleAtPointer(event);
-    const travel = angularDelta(angle, drag.angle);
-    const elapsed = Math.max(1, event.timeStamp - drag.time);
-    const sample = Math.max(-0.45, Math.min(0.45, travel / elapsed));
-    // Discard old momentum when the hand reverses direction.
-    if (sample * drag.velocity < 0) drag.velocity = 0;
-    drag.velocity += (sample - drag.velocity) * -Math.expm1(-elapsed / 45);
-    target.current += travel;
-    drag.time = event.timeStamp;
+    drag.travel += angularDelta(drag.angle, angle);
     drag.angle = angle;
+    const boundary = activeStep.current * GENRE_STEP;
+    target.current = Math.max(
+      boundary - DRAG_PREVIEW_LIMIT,
+      Math.min(boundary + DRAG_PREVIEW_LIMIT, drag.start + drag.travel),
+    );
   };
   const onPointerEnd = (event: PointerEvent<HTMLDivElement>) => {
     const drag = pointer.current;
@@ -143,19 +152,8 @@ export function useApertureMotion() {
     pointer.current = null;
     if (event.currentTarget.hasPointerCapture(event.pointerId))
       event.currentTarget.releasePointerCapture(event.pointerId);
-    if (
-      event.type === 'pointerup' &&
-      !paused &&
-      !window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    ) {
-      const releaseSpeed =
-        Math.abs(drag.velocity) * 0.65 * Math.exp(-(event.timeStamp - drag.time) / 100);
-      speed.current =
-        (Math.sign(drag.velocity) || Math.sign(speed.current)) *
-        Math.max(CRUISE_SPEED, Math.min(0.12, releaseSpeed));
-    } else {
-      select(Math.round(target.current / GENRE_STEP));
-    }
+    const move = event.type === 'pointerup' && Math.abs(drag.travel) >= DRAG_THRESHOLD;
+    select(activeStep.current + (move ? Math.sign(drag.travel) : 0));
     setDragging(false);
   };
   const setInteracting = (value: boolean) => {

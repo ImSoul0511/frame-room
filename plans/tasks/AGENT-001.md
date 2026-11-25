@@ -16,7 +16,7 @@ Make focused project skills reusable and demonstrate them through a reviewable e
 
 - [Explicit routing](../../agents/README.md#focused-skills) to [Astryx screen](../../agents/skills/frameroom-astryx-screen/SKILL.md), [contract change](../../agents/skills/frameroom-contract-change/SKILL.md), and [Supabase migration](../../agents/skills/frameroom-supabase-migration/SKILL.md). Folder placement does not register skills with an assistant.
 - [Auth packet](../../docs/features/auth/packet.md): journey, states, five screens, logout, boundaries, inventory, access cases, and observable acceptance scenarios.
-- [Proposed ADR 0003](../../docs/adr/0003-auth-profile-initialization.md): trigger versus explicit API, recommendation, compatibility and recovery requirements. Contract/ERD question #1 stays open.
+- Proposed ADR 0003 (historical design): trigger versus explicit API, recommendation, compatibility and recovery requirements. Contract/ERD question #1 stays open.
 - [Read-only exercises](AGENT-001-exercises.md), [verification](AGENT-001-verification.md), and [handoff](AGENT-001-handoff.md).
 
 Node/Corepack and installed Astryx support documentation lookup. Python with PyYAML supports skill validation. No Docker/Auth session is needed for this artifact pass; those prerequisites apply to future runtime checks. AUTH-001 depends on foundation integration and accepted packet gates G1–G4, rather than this task merely existing. This is the original task context; current pnpm setup uses npm as described in the [pnpm guide](../../docs/infrastructure/pnpm-without-corepack.md).

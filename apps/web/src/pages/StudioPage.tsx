@@ -53,6 +53,7 @@ export function StudioPage() {
   const respond = useTask(async (v: { id: string; status: string }) =>
     patch(`/v1/invitations/${v.id}`, { status: v.status }),
   );
+  const pendingInvites = invites.data?.filter((invitation) => invitation.status === 'pending');
   if (!profile?.roles.includes('photographer'))
     return (
       <>
@@ -83,22 +84,25 @@ export function StudioPage() {
         ))}
       </div>
       <h2>{t.studio.invitations}</h2>
-      {invites.data
-        ?.filter((i) => i.status === 'pending')
-        .map((i) => (
-          <div className="list-row" key={i.id}>
-            <strong>{i.studioName}</strong>
-            <Action
-              pending={respond.isPending}
-              onClick={() => respond.mutate({ id: i.id, status: 'accepted' })}
-            >
-              {t.studio.accept}
-            </Action>
-            <Action secondary onClick={() => respond.mutate({ id: i.id, status: 'declined' })}>
-              {t.studio.decline}
-            </Action>
-          </div>
-        ))}
+      <QueryState query={invites} empty={pendingInvites?.length === 0} />
+      {pendingInvites?.map((i) => (
+        <div className="list-row" key={i.id}>
+          <strong>{i.studioName}</strong>
+          <Action
+            pending={respond.isPending}
+            onClick={() => respond.mutate({ id: i.id, status: 'accepted' })}
+          >
+            {t.studio.accept}
+          </Action>
+          <Action
+            secondary
+            disabled={respond.isPending}
+            onClick={() => respond.mutate({ id: i.id, status: 'declined' })}
+          >
+            {t.studio.decline}
+          </Action>
+        </div>
+      ))}
       <Feedback error={respond.error} />
       {open ? (
         <Modal

@@ -1,19 +1,16 @@
-import { useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
-import type { Resource, Studio } from '../lib/types';
+import { useState } from 'react';
 import { useAuth } from '../lib/auth';
-import { api, post, patch } from '../lib/api';
+import { post, patch } from '../lib/api';
 import { useApi, useTask } from '../lib/hooks';
 import { useStrings } from '../lib/i18n';
 import { LanguageSwitcher } from '../components/LanguageSwitcher';
-import { UserAvatar } from '../components/UserAvatar';
+import { AvatarEditor } from '../features/catalog/AvatarEditor';
 import { PhotographerForm, ProfileForm } from '../features/catalog/ProviderForms';
+import { ChangePassword } from '../features/profiles/ChangePassword';
 import {
   Action,
   Area,
-  DateField,
   Feedback,
-  Field,
   Form,
   Modal,
   PageHeading,
@@ -24,139 +21,44 @@ import {
 export function SettingsPage() {
   const t = useStrings();
   const { profile, session } = useAuth();
-  const avatarTriggerRef = useRef<HTMLButtonElement>(null);
   return (
     <>
       <PageHeading title={t.workspaceUi.settings} />
       <div className="settings-profile">
-        <section className="panel">
+        <section className="panel settings-profile-panel">
           <h2>{t.profileUi.account}</h2>
-          {profile ? <ProfileForm profile={profile} avatarTriggerRef={avatarTriggerRef} /> : null}
-          <p className="muted">{session?.user.email}</p>
+          <p className="muted">{t.profileUi.editProfileDescription}</p>
+          {profile ? <ProfileForm key={profile.id} profile={profile} /> : null}
         </section>
         {profile ? (
           <aside className="settings-avatar-card" aria-label={t.profileUi.account}>
-            <button
-              type="button"
-              className="avatar-edit-trigger"
-              aria-label={t.profileUi.editAvatar}
-              onClick={() => avatarTriggerRef.current?.click()}
-            >
-              <UserAvatar
-                name={profile.displayName}
-                avatarPath={profile.avatarPath}
-                className="settings-avatar-card-photo"
-              />
-            </button>
+            <AvatarEditor profile={profile} className="settings-avatar-card-photo" />
             <p className="settings-avatar-card-name">{profile.displayName}</p>
             <p className="settings-avatar-card-username">@{profile.userName}</p>
           </aside>
         ) : null}
       </div>
+      {session?.user.email ? (
+        <section className="panel settings-signin-panel">
+          <h2>{t.profileUi.signInEmail}</h2>
+          <p className="settings-signin-email">{session.user.email}</p>
+          <p className="muted">{t.profileUi.signInEmailHint}</p>
+        </section>
+      ) : null}
       {profile?.roles.includes('photographer') ? (
-        <>
-          <section className="panel">
-            <h2>{t.portfolio.profile}</h2>
-            <PhotographerForm />
-          </section>
-          <ScheduleBlocks />
-        </>
+        <section className="panel">
+          <h2>{t.portfolio.profile}</h2>
+          <PhotographerForm />
+        </section>
       ) : null}
       <div className="settings-preferences">
-        <section className="panel">
-          <h2>{t.profileUi.security}</h2>
-          <p className="muted">{t.profileUi.passwordDescription}</p>
-          <Link className="text-button" to="/auth?mode=reset">
-            {t.forgot}
-          </Link>
-        </section>
+        {session ? <ChangePassword key={session.user.id} /> : null}
         <section className="panel settings-language-panel">
           <h2>{t.language.label}</h2>
           <LanguageSwitcher />
         </section>
       </div>
     </>
-  );
-}
-export function ScheduleBlocks() {
-  const t = useStrings();
-  const [start, setStart] = useState('');
-  const [end, setEnd] = useState('');
-  const [label, setLabel] = useState('');
-  const [studioId, setStudio] = useState('');
-  const [resourceId, setResource] = useState('');
-  const blocks =
-    useApi<
-      { id: string; label: string; bookingId: string | null; startsAt: string; endsAt: string }[]
-    >('/v1/me/schedule');
-  const studios = useApi<Studio[]>('/v1/me/studios');
-  const resources = useApi<Resource[]>(`/v1/studios/${studioId}/resources`, Boolean(studioId));
-  const create = useTask(async () => {
-    await post('/v1/me/schedule/blocks', {
-      startsAt: new Date(start).toISOString(),
-      endsAt: new Date(end).toISOString(),
-      label,
-      ...(resourceId ? { resourceId } : {}),
-    });
-    setLabel('');
-  });
-  const remove = useTask(async (id: string) =>
-    api(`/v1/me/schedule/blocks/${id}`, { method: 'DELETE' }),
-  );
-  return (
-    <section className="panel">
-      <h2>{t.studio.blocks}</h2>
-      <Form onSubmit={() => create.mutate()}>
-        <div className="two-col">
-          <Field label={t.studio.label} value={label} onChange={setLabel} />
-          <Select
-            label={t.nav.studio}
-            value={studioId}
-            onChange={(id) => {
-              setStudio(id);
-              setResource('');
-            }}
-          >
-            <option value="">{t.portfolio.own}</option>
-            {studios.data
-              ?.filter((s) => s.role === 'manager')
-              .map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-          </Select>
-          <DateField label={t.booking.start} value={start} onChange={setStart} />
-          <DateField label={t.booking.end} value={end} onChange={setEnd} />
-        </div>
-        {studioId ? (
-          <Select label={t.booking.resources} value={resourceId} onChange={setResource} required>
-            <option value="">—</option>
-            {resources.data
-              ?.filter((r) => r.isActive)
-              .map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name}
-                </option>
-              ))}
-          </Select>
-        ) : null}
-        <Feedback error={create.error ?? remove.error} />
-        <Action type="submit" pending={create.isPending}>
-          {t.studio.newBlock}
-        </Action>
-      </Form>
-      {blocks.data
-        ?.filter((b) => !b.bookingId)
-        .map((b) => (
-          <div className="list-row" key={b.id}>
-            <strong>{b.label}</strong>
-            <Action secondary onClick={() => remove.mutate(b.id)}>
-              {t.delete}
-            </Action>
-          </div>
-        ))}
-    </section>
   );
 }
 export function ReportButton({

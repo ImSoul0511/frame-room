@@ -77,7 +77,7 @@ export const catalogModule: ApiModule = {
         .header('Cache-Control', 'private, max-age=60, must-revalidate')
         .header('X-Content-Type-Options', 'nosniff')
         .type(
-          path.endsWith('.webp')
+          bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP'
             ? 'image/webp'
             : path.endsWith('.png')
               ? 'image/png'
@@ -335,7 +335,9 @@ export const catalogModule: ApiModule = {
       access: 'verified',
       response: z.array(ownedPortfolioSchema),
       handler: ({ actor, transaction }) =>
-        transaction((tx) => catalog.listMyPortfolios(tx, actor.id)),
+        transaction((tx) =>
+          catalog.listMyPortfolios(tx, actor.id, (path) => media.url('portfolio-images', path)),
+        ),
     });
 
     defineRoute(app, deps, {

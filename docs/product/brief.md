@@ -34,4 +34,4 @@ Success: the real local client/provider journey completes through review, access
 and conflicts are enforced, and language switching persists without losing forms.
 Database work remains reproducible through local migrations; Python is unnecessary.
 
-The [contract](../api/contract_v0.md#20-open-decisions) and [ERD](../db/erd_v0.md#6-open-decisions) retain unresolved questions and owners. They are not frozen or implemented. Do not settle onboarding initialization, cancellations, participant scope, or quotas during tooling work.
+The [contract](../api/contract_v0.md#20-open-decisions) and [ERD](../database/erd.md) retain unresolved questions and owners. They are not frozen or implemented. Do not settle onboarding initialization, cancellations, participant scope, or quotas during tooling work.

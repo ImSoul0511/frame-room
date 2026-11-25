@@ -1,21 +1,15 @@
 # Frontend data flow
 
-Source: MVP branch `apps/web/src/lib/{auth.tsx,api.ts,hooks.ts,types.ts}`, `App.tsx`, page and feature components. On checked out `main`, only `lib/health.ts` fetches the API.
+The [router](../../apps/web/src/App.tsx) loads page modules on navigation. Home loads fixed WebP assets and reuses the browser cache. Explore queries the catalog by photographer, genre, location or tag. It requests more results as the visitor reaches the end of the current page.
 
-```mermaid
-flowchart LR
-  UI[Routes and forms] --> Q[TanStack Query hooks]
-  UI --> A[Supabase Auth SDK]
-  A -->|bearer token| Q
-  Q -->|JSON and multipart| API[Fastify /v1]
-  API --> DB[(PostgreSQL)]
-  API --> ST[Supabase Storage]
-  API --> W[AI worker and queue]
-  Q --> UI
-```
+Supabase Auth maintains the session. The [API client](../../apps/web/src/lib/api.ts) sends the bearer token and selected language with requests. TanStack Query caches reads by path and account and clears private data when the account changes. Avatar updates refresh profile, discovery and conversation data.
 
-`useApi` keys reads by account ID and path. `useTask` wraps mutations and cache invalidation. `lib/api.ts` adds bearer token and `Accept-Language`, parses `{data}`, and surfaces stable error codes/reasons. Account changes must clear or isolate private cache; a token refresh must be honored at request time. Public catalog reads can run without a session, while `/v1/search` is protected. `/health` is independent and has a five-second timeout.
+Account settings allow direct editing of display name and username. The shared profile schema validates and normalizes input before `PATCH /v1/me`. Save is enabled only for changed values; Cancel restores the last saved values. Pending submissions disable the form, and profile caches and the saved message update only after a successful response. Duplicate usernames have a field error; other failures retain the draft for retry. The sign-in email appears separately as labeled account information.
 
-Forms are local state until submission. Project and booking pages refetch/poll jobs and workspace; uploads use `POST /v1/uploads` multipart, then register returned Storage paths via catalog/project/booking mutations. A path alone must never grant ownership. Private image reads use short-lived signed URLs; public portfolio images use public URLs. Chat uses the special streaming endpoint; ordinary endpoints use JSON. `useApi` polling and screen-level optimistic control disabling should be checked against stale versions and concurrent edits.
+Avatar and cover edit buttons share a dropdown with View and Choose photo actions. View is disabled when no image exists. Choosing an avatar opens its crop editor; choosing a cover opens its preview after file selection. The same cover dropdown is used on client and photographer profiles, including the photographer's portfolio cover fallback.
 
-**Migration dependency:** the Frontend Developer transfers the complete UI; Backend Developer preserves the agreed response envelopes and status codes; Database Developer enforces owner/manager visibility; AI Developer supplies async job status and output contract. Error and loading states are implemented in MVP components but have not been revalidated against the rebuilt stack.
+Own client and photographer profiles place the cover in a full-width banner above the avatar and identity row at every viewport size. The avatar and name remain below the banner without overlapping the cover.
+
+Uploads use multipart `POST /v1/uploads` and register the returned Storage path with the relevant catalog, project or booking endpoint. Private downloads require authorized access and expiring URLs. See the [storage guide](../database/storage-configuration.md).
+
+The chat launcher and full inbox share message state. Direct conversations and shoot rooms use separate scopes. Expanding a conversation preserves its draft. The [route inventory](feature-inventory.md) lists each workflow.

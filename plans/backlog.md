@@ -24,4 +24,4 @@ No dates or Jira keys are invented. Split epics into reviewable tasks first. Das
 
 ## Open decisions
 
-Use numbered [contract](../docs/api/contract_v0.md#20-open-decisions) and [ERD](../docs/db/erd_v0.md#6-open-decisions) questions. Preserve numbering; record owner/outcome in the feature task. Do not silently settle them during setup.
+Use numbered [contract](../docs/api/contract_v0.md#20-open-decisions) and [ERD](../docs/database/erd.md) questions. Preserve numbering; record owner/outcome in the feature task. Do not silently settle them during setup.

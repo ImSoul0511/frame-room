@@ -1,5 +1,7 @@
 # Backend MVP reconstruction work plan
 
+> Historical proposal. For current behavior see the [implementation contract](../api/mvp.md) and [AI capabilities](../ai/current-ai-capabilities.md).
+
 Prepared on 2026-11-12. Target checkpoint is 2026-11-15 at 23:59, Asia/Saigon.
 That end-of-day cutoff is a planning assumption. Owners confirm availability on day one.
 
@@ -20,7 +22,7 @@ Read the following in order.
    [service responsibilities](service-specifications.md) and
    [authorization matrix](authorization-matrix.md).
 4. [Database guide](../database/mvp-cloud-work-guide.md) and
-   [AI Search guide](../ai/ai-search-work-plan.md).
+   [Current AI capabilities](../ai/current-ai-capabilities.md).
 
 Inspect reference files without checking out MVP code into the target branch.
 
@@ -133,7 +135,7 @@ because the current contract's public-route paragraph omits them. Register stati
   existing own profile, and competing normalized usernames map to 409 with
   `user_name_taken`. Missing profile uses 404 with `profile_required`.
 - Khai, Ly and Khoa record the chosen initialization mechanism before implementing it.
-  [ADR 0003](../adr/0003-auth-profile-initialization.md) remains Proposed and suggests
+  ADR 0003 (historical design) remains Proposed and suggests
   `/me/onboarding`, while the reference UI calls `POST /me`. Reconcile that difference
   explicitly. Test response loss and concurrent same-user creation.
 
@@ -222,18 +224,7 @@ skill for behavior changes and migration skill for SQL. Ask the agent to inspect
 callers before editing, then review the diff and actual command evidence. Keep secrets
 in local configuration and private distribution channels.
 
-Example prompt for BE-104 follows.
-
-```text
-Read agents/README.md and plans/tasks/BE-104.md.
-Implement the assigned search adapter on the current dev-based task branch.
-Inspect the MVP search service at 66f3779 and current shared/browser callers.
-Use docs/ai/ai-search-work-plan.md for model and data contracts.
-Own apps/api search routes/services/repository integration only.
-Coordinate shared exports with Khoa and SQL with Ly.
-Verify filter precedence, private-image denial, vector mismatch and timeouts.
-Record exact checks and unresolved dependencies in the handoff.
-```
+The experimental search adapter task BE-104 is retired. See [current AI capabilities](../ai/current-ai-capabilities.md).
 
 ## 6. Git, commit hooks and verification
 
@@ -305,7 +296,7 @@ Before dependent code, record decisions in the task and affected existing docume
 | Image search availability and search-upload retention, historical question 16    | Quynh Anh, Khai, Khoa         | Image-search integration |
 
 Keep historical question numbers in [API draft](../api/contract_v0.md) and
-[ERD draft](../db/erd_v0.md). The user prioritizes search in this milestone, superseding
+[ERD draft](../database/erd.md). The user prioritizes search in this milestone, superseding
 older deferred-AI scheduling. Owners record unresolved product choices with their
 proposed handling in the relevant implementation task.
 

@@ -30,8 +30,8 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 const headers = { authorization: 'Bearer test' };
-describe('AI Search availability', () => {
-  it('disables search and indexing by default even with a Gateway key', async () => {
+describe('catalog discovery routes', () => {
+  it('rejects retired AI search operations and keeps catalog and project routes available', async () => {
     const instance = app({ AI_GATEWAY_API_KEY: 'test-key' });
     for (const url of ['/v1/search', '/v1/portfolio-images/' + projectId + '/index']) {
       const response = await instance.inject({ method: 'POST', url, headers });
@@ -43,16 +43,10 @@ describe('AI Search availability', () => {
       url: '/v1/uploads?bucket=search-uploads',
       headers,
     });
-    expect(response.statusCode).toBe(503);
+    expect(response.statusCode).toBe(400);
     expect(authorize).not.toHaveBeenCalled();
     expect(instance.hasRoute({ method: 'GET', url: '/v1/explore' })).toBe(true);
     expect(instance.hasRoute({ method: 'POST', url: '/v1/creative-projects/:id/chat' })).toBe(true);
-  });
-  it('registers search and indexing routes when explicitly enabled', async () => {
-    const instance = app({ AI_SEARCH_ENABLED: 'true' });
-    await instance.ready();
-    expect(instance.hasRoute({ method: 'POST', url: '/v1/search' })).toBe(true);
-    expect(instance.hasRoute({ method: 'POST', url: '/v1/portfolio-images/:id/index' })).toBe(true);
   });
 });
 

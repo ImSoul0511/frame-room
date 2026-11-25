@@ -139,7 +139,7 @@ export async function discoverProviders(
        limit 1
      ) cover on true
      ${where}
-     order by p.rating_avg desc nulls last, p.review_count desc, p.display_name
+     order by p.rating_avg desc nulls last, p.review_count desc, p.display_name, p.id
      limit $${limitParam} offset $${offsetParam}`,
     params,
   );
@@ -187,7 +187,7 @@ export async function listProvidersByType(
      left join photographers ph on p.type = 'photographer' and ph.id = p.id
      left join profiles pr on pr.id = ph.user_id
      where ${conditions.join(' and ')}
-     order by p.rating_avg desc nulls last, p.review_count desc, p.display_name
+     order by p.rating_avg desc nulls last, p.review_count desc, p.display_name, p.id
      limit $${limitParam} offset $${offsetParam}`,
     params,
   );
@@ -263,8 +263,10 @@ export async function listPublishedPortfoliosByProvider(
     `select pf.id, pf.title, pf.description, pf.genre, pf.status,
             pf.owner_type, pf.photographer_id, pf.studio_id,
             pf.published_at, pf.created_at, pf.updated_at,
-            cover.storage_path as cover_url
+            cover.storage_path as cover_url, coalesce(ph.display_name, st.name) as owner_name
      from portfolios pf
+     left join photographers ph on ph.id = pf.photographer_id
+     left join studios st on st.id = pf.studio_id
      left join lateral (
        select storage_path from portfolio_images
        where portfolio_id = pf.id and is_hidden = false
@@ -609,8 +611,16 @@ export async function listOwnedPortfolios(
   return tx.rows<OwnedPortfolio>(
     `select pf.id, pf.title, pf.description, pf.genre, pf.status,
             pf.owner_type, pf.photographer_id, pf.studio_id,
-            pf.published_at, pf.created_at, pf.updated_at
+            pf.published_at, pf.created_at, pf.updated_at,
+            coalesce(ph.display_name, st.name) as owner_name, cover.storage_path as cover_url
      from portfolios pf
+     left join photographers ph on ph.id = pf.photographer_id
+     left join studios st on st.id = pf.studio_id
+     left join lateral (
+       select storage_path from portfolio_images
+       where portfolio_id = pf.id and is_hidden = false
+       order by sort_order, created_at limit 1
+     ) cover on true
      where pf.deleted_at is null
        and (
          pf.photographer_id in (select id from photographers where user_id = $1)
@@ -679,8 +689,10 @@ export async function listPublicPortfolios(
     `select pf.id, pf.title, pf.description, pf.genre, pf.status,
             pf.owner_type, pf.photographer_id, pf.studio_id,
             pf.published_at, pf.created_at, pf.updated_at,
-            cover.storage_path as cover_url
+            cover.storage_path as cover_url, coalesce(ph.display_name, st.name) as owner_name
      from portfolios pf
+     left join photographers ph on ph.id = pf.photographer_id
+     left join studios st on st.id = pf.studio_id
      left join lateral (
        select storage_path from portfolio_images
        where portfolio_id = pf.id and is_hidden = false
@@ -713,11 +725,13 @@ export async function findPortfolioById(
   portfolioId: string,
 ): Promise<OwnedPortfolio | undefined> {
   return tx.optional<OwnedPortfolio>(
-    `select id, title, description, genre, status,
-            owner_type, photographer_id, studio_id,
-            published_at, created_at, updated_at
-     from portfolios
-     where id = $1 and deleted_at is null`,
+    `select pf.id, pf.title, pf.description, pf.genre, pf.status,
+            pf.owner_type, pf.photographer_id, pf.studio_id,
+            pf.published_at, pf.created_at, pf.updated_at, coalesce(ph.display_name, st.name) as owner_name
+     from portfolios pf
+     left join photographers ph on ph.id = pf.photographer_id
+     left join studios st on st.id = pf.studio_id
+     where pf.id = $1 and pf.deleted_at is null`,
     [portfolioId],
   );
 }

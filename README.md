@@ -9,16 +9,16 @@ This is an internal educational project for Introduction to Software Engineering
 **Agents: Read `agents/README.md` before working.** Supply this instruction explicitly to your assistant; there is intentionally no root AGENTS.md.
 
 - [Product brief](docs/product/brief.md)
-- [Architecture](docs/architecture/overview.md) and [ADRs](docs/adr/README.md)
+- [Architecture](docs/architecture/overview.md)
 - [Contribution rules](docs/contributing.md)
 - [Backlog](plans/backlog.md)
-- [Auth feature packet](docs/features/auth/packet.md) and [proposed initialization ADR](docs/adr/0003-auth-profile-initialization.md)
+- [Account registration and onboarding](docs/features/auth/packet.md)
 - [Skill/artifact milestone](plans/tasks/AGENT-001.md)
 - [Foundation task](plans/tasks/SETUP-001.md) and [verification](plans/tasks/SETUP-001-verification.md)
-- [API draft](docs/api/contract_v0.md), [ERD draft](docs/db/erd_v0.md), and [Mermaid source](docs/db/erd_v0.mmd)
-- [Local database workflow](docs/db/local-development.md)
+- [API contract](docs/api/mvp.md), [database relationships](docs/database/erd.md), and [versioned migrations](supabase/migrations)
+- [Database setup and verification](docs/infrastructure/supabase-cloud-preview.md)
 
-All documentation outside `report/` is English. Reports retain their existing language. The product supports English (default) and Vietnamese, with a persistent language selector and complete translation dictionaries.
+Documentation outside `report/` should be English. Reports retain their existing language. The product supports English (default) and Vietnamese, with a persistent language selector and complete translation dictionaries.
 
 ## Stack and boundaries
 
@@ -107,9 +107,7 @@ require the project settings in `.env.example`.
 | VITE_SUPABASE_*          | Browser Auth connection and public anonymous key                |
 | DATABASE_URL, SUPABASE_* | Server DB/Auth/Storage connections; never browser-visible       |
 | AI_GATEWAY_API_KEY       | Optional server-only key; absent means real AI is unavailable   |
-| AI_SEARCH_ENABLED        | Defaults to false; enables AI Search API and portfolio indexing |
 | AI_TEXT_MODEL            | google/gemini-3.8-flash                                         |
-| AI_EMBEDDING_MODEL       | google/gemini-embedding-2, 768 dimensions                       |
 | AI_IMAGE_MODEL           | google/gemini-3.1-flash-image                                   |
 | AI_MONTHLY_BUDGET_USD    | 30 maximum, shared API/worker spend reservation limit           |
 
@@ -150,13 +148,7 @@ reserves spend transactionally, limits generated/edited output to 100 per month,
 and never silently substitutes mock responses. Unknown provider outcomes retain
 their reservation and are not automatically repeated.
 
-The MVP uses keyword search and catalog filters. For local AI Search development,
-set `AI_SEARCH_ENABLED=true` in `.env` and restart the API and worker. This
-enables the search and indexing endpoints, search image uploads, and the CLI
-commands. Run `pnpm ai:index` to queue portfolio indexing. `pnpm ai:evaluate`
-measures the 30 bilingual labeled queries after at least 100 permitted images
-are indexed. The small initial seed is not a
-completed benchmark dataset; model quality is not claimed without that run.
+Explore uses keyword search and catalog filters.
 
 ## Repository
 
@@ -166,14 +158,14 @@ apps/web/         React/Vite SPA
 apps/api/         Fastify app and server
 apps/ai-service/  Optional Python scaffold
 packages/shared/  Schemas/types, compiled exports
-supabase/         Config, future migrations, fake seed
+supabase/         Auth/Storage config, ordered migrations and seed SQL
 scripts/          Development/database commands
 docs/             Product, architecture, contract, ERD, contribution rules
 plans/            Backlog, task artifacts, historical plans
 report/           Academic reports, preserved in their existing language
 ```
 
-The [historical week-one plan](plans/week1.md) is retained for context; current backlog replaces its AI/CI/staging schedule.
+The [backlog](plans/backlog.md) tracks development tasks.
 
 ## Roles and team
 

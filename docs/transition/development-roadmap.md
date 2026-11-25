@@ -1,5 +1,7 @@
 # Development roadmap
 
+> Historical proposal. For current behavior see the [implementation contract](../api/mvp.md) and [AI capabilities](../ai/current-ai-capabilities.md).
+
 | Phase | Owner                                | Deliverable and exit check                                                                                                     | Dependency                                                              |
 | ----- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
 | 0     | DevOps                               | Verify/push protected `archive/mvp` at full MVP SHA; agree `dev` baseline                                                      | Git review                                                              |

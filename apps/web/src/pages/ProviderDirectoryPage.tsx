@@ -1,3 +1,5 @@
+import { useVisible } from '../features/catalog/use-visible';
+import { SearchPagination } from '../features/catalog/SearchPagination';
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useInfiniteQuery } from '@tanstack/react-query';
@@ -15,6 +17,7 @@ export function ProviderDirectoryPage({ type }: { type: 'photographer' | 'studio
 
 function ProviderDirectory({ type }: { type: 'photographer' | 'studio' }) {
   const t = useStrings();
+  const { ref: resultsStart, visible } = useVisible<HTMLDivElement>();
   const [params, setParams] = useSearchParams();
   const query = params.get('q') ?? '';
   const city = params.get('city') ?? '';
@@ -26,6 +29,7 @@ function ProviderDirectory({ type }: { type: 'photographer' | 'studio' }) {
   const pageSize = type === 'studio' ? 6 : 9;
   const results = useInfiniteQuery({
     queryKey: ['api', 'provider-directory', type, genre, city, query],
+    enabled: visible,
     initialPageParam: 1,
     queryFn: ({ pageParam, signal }) => {
       const query = new URLSearchParams({ page: String(pageParam), pageSize: String(pageSize) });
@@ -101,6 +105,7 @@ function ProviderDirectory({ type }: { type: 'photographer' | 'studio' }) {
           {t.explore.clear}
         </button>
       </form>
+      <div className="search-start" ref={resultsStart} />
       <QueryState query={results} />
       {results.isSuccess && !providers.length ? (
         <p className="empty-state">{t.explore.noResults}</p>
@@ -110,17 +115,10 @@ function ProviderDirectory({ type }: { type: 'photographer' | 'studio' }) {
           <ProviderCard key={provider.id} provider={provider} />
         ))}
       </div>
-      {results.hasNextPage ? (
-        <div className="load-more">
-          <Action
-            secondary
-            pending={results.isFetchingNextPage}
-            onClick={() => void results.fetchNextPage()}
-          >
-            {t.curation.explore}
-          </Action>
-        </div>
-      ) : null}
+      <SearchPagination
+        query={results}
+        label={type === 'studio' ? t.discovery.loadMoreStudios : t.discovery.loadMorePhotographers}
+      />
     </section>
   );
 }

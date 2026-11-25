@@ -10,7 +10,7 @@ Backend, Database and AI Search work guides for humans working with coding agent
 
 - [Backend allocation and conventions](../../docs/backend/mvp-rebuild-work-plan.md)
 - [Database learning and operations guide](../../docs/database/mvp-cloud-work-guide.md)
-- [AI Search, taxonomy and data plan](../../docs/ai/ai-search-work-plan.md)
+- [Current AI capabilities](../../docs/ai/current-ai-capabilities.md)
 
 ## Dependencies and open decisions
 

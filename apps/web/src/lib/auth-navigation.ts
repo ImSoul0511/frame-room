@@ -1,4 +1,4 @@
-export function safeReturnPath(value: string | null, fallback = '/explore') {
+export function safeReturnPath(value: string | null, fallback = '/home') {
   if (
     !value ||
     !value.startsWith('/') ||

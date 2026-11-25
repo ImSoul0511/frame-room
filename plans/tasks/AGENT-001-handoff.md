@@ -2,7 +2,7 @@
 
 ## Outcome
 
-Three explicitly routed [project skills](../../agents/README.md#focused-skills) and an [auth packet](../../docs/features/auth/packet.md) make the next feature reviewable. [ADR 0003](../../docs/adr/0003-auth-profile-initialization.md) recommends explicit onboarding while remaining Proposed. Neither contract/ERD question #1 nor any endpoint/schema is accepted by this delivery. See [task](AGENT-001.md), [exercises](AGENT-001-exercises.md), and [verification](AGENT-001-verification.md).
+Three explicitly routed [project skills](../../agents/README.md#focused-skills) and an [auth packet](../../docs/features/auth/packet.md) make the next feature reviewable. ADR 0003 (historical design) recommends explicit onboarding while remaining Proposed. Neither contract/ERD question #1 nor any endpoint/schema is accepted by this delivery. See [task](AGENT-001.md), [exercises](AGENT-001-exercises.md), and [verification](AGENT-001-verification.md).
 
 ## Reproduce
 

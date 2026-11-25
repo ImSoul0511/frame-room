@@ -35,19 +35,18 @@ export function PrimaryNavigation() {
         }
       }}
     >
-      <NavLink to={destination('/explore')} end>
+      <NavLink to={destination('/home')} end>
         {t.curation.home}
       </NavLink>
       {isPhotographer ? (
         <>
-          <NavLink to="/about">{t.curation.about}</NavLink>
           <NavLink to="/projects">{t.nav.projects}</NavLink>
           <NavLink to="/bookings">{t.workspaceUi.bookings}</NavLink>
           <NavLink to="/portfolio">{t.workspaceUi.portfolioNav}</NavLink>
         </>
       ) : (
         <>
-          <NavLink to={destination('/photographers')}>{t.curation.explore}</NavLink>
+          <NavLink to={destination('/explore')}>{t.curation.explore}</NavLink>
           {profile ? (
             <>
               <NavLink to="/bookings">{t.workspaceUi.bookings}</NavLink>
@@ -68,9 +67,9 @@ export function PrimaryNavigation() {
               </div>
             </details>
           )}
-          <NavLink to="/about">{t.curation.about}</NavLink>
         </>
       )}
+      <NavLink to="/about">{t.curation.about}</NavLink>
     </nav>
   );
 }

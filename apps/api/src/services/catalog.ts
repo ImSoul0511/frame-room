@@ -97,6 +97,10 @@ export async function getProviderDetail(
       : Promise.resolve(undefined),
   ]);
 
+  const tags = await repo.listTagsForPortfolios(
+    tx,
+    portfolios.map((item) => item.id),
+  );
   return {
     provider,
     coverPath: cover?.coverPath ?? null,
@@ -104,6 +108,8 @@ export async function getProviderDetail(
     services,
     portfolios: portfolios.map((pf) => ({
       ...pf,
+      ownerName: provider.displayName,
+      tags: tags.filter((tag) => tag.portfolioId === pf.id),
       coverUrl: buildPublicPortfolioImageUrl(supabaseUrl, pf.coverUrl, apiOrigin),
     })),
     reviews,
@@ -268,8 +274,26 @@ export async function deleteService(
 // ---------- 102d: Portfolios & Images ----------
 
 /** Lists non-deleted portfolios owned by the caller or their managed studios. */
-export async function listMyPortfolios(tx: Transaction, userId: string): Promise<OwnedPortfolio[]> {
-  return repo.listOwnedPortfolios(tx, userId);
+export async function listMyPortfolios(
+  tx: Transaction,
+  userId: string,
+  ownerUrl: (path: string) => Promise<string>,
+): Promise<OwnedPortfolio[]> {
+  const portfolios = await repo.listOwnedPortfolios(tx, userId);
+  const tags = await repo.listTagsForPortfolios(
+    tx,
+    portfolios.map((item) => item.id),
+  );
+  return Promise.all(
+    portfolios.map(async (portfolio) => ({
+      ...portfolio,
+      coverUrl:
+        portfolio.coverUrl && !/^https?:\/\//i.test(portfolio.coverUrl)
+          ? await ownerUrl(portfolio.coverUrl)
+          : portfolio.coverUrl,
+      tags: tags.filter((tag) => tag.portfolioId === portfolio.id),
+    })),
+  );
 }
 
 /** Lists published portfolios from visible providers with optional genre and tag filters. */

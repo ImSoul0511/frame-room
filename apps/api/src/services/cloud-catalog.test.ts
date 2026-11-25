@@ -47,6 +47,7 @@ describe('Cloud catalog without a direct Postgres connection', () => {
           genre: 'portrait',
           status: 'published',
           owner_type: 'photographer',
+          photographers: { display_name: 'Mai' },
           photographer_id: USER,
           studio_id: null,
           published_at: '2026-11-19T00:00:00Z',
@@ -79,6 +80,7 @@ describe('Cloud catalog without a direct Postgres connection', () => {
       sort: 'name',
       tag: 'soft',
     });
+    expect(data[0].ownerName).toBe('Mai');
     expect(data[0].coverUrl).toContain('/visible.webp');
     expect(data[0].tags).toMatchObject([{ id: USER, nameVi: 'Dịu', category: 'mood' }]);
     expect(data[0].tags).toHaveLength(1);

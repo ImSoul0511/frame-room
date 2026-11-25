@@ -553,10 +553,6 @@ select {
   font-size: 0.875rem;
   overflow-wrap: anywhere;
 }
-.confirmation-icon {
-  font-size: 2.4rem;
-  color: #647299;
-}
 .auth-loading {
   text-align: center;
   padding: 80px 20px;

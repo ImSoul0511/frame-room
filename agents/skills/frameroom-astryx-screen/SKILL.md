@@ -7,7 +7,7 @@ description: Specify, implement, or review FrameRoom application screens using t
 
 ## Inputs and scope
 
-Read the assigned task, screen brief, and API dependencies. Start with the [frontend guide](../../frontend.md) and relevant [contract](../../../docs/api/contract_v0.md) sections. Inspect existing pages, strings, styles, and package versions before proposing changes.
+Read the assigned task, screen brief, and API dependencies. Start with the [frontend guide](../../frontend.md) and relevant [contract](../../../docs/api/mvp.md) sections. Inspect existing pages, strings, styles, and package versions before proposing changes.
 
 Honor the requested mode: a specification or read-only exercise produces artifacts only. Implement UI only when the task authorizes implementation. A mock or proposed endpoint is not a working integration. Record missing decisions and continue independent screen work without settling product policy.
 

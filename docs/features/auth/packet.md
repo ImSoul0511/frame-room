@@ -1,6 +1,12 @@
 # AUTH-001: Email/password and onboarding feature packet
 
-Status: Proposed specification, ready for review; no auth implementation is claimed.
+## Current implementation
+
+The [registration and onboarding screens](../../../apps/web/src/pages/AuthPage.tsx) support email confirmation, password recovery, and signup as a client or photographer. One to five genres may be selected at signup and are retained across email confirmation. The [profile routes](../../../apps/api/src/routes/profile.ts) create the application profile and photographer record. Completing onboarding opens the requested destination or the role's workspace.
+
+## Historical design packet
+
+The following gates, evidence table and proposals describe the original October design review.
 Owner: Feature reviewers, with Khai/Ly resolving profile initialization and Khoa reviewing screens.
 Prepared by: [AGENT-001](../../../plans/tasks/AGENT-001.md), 2026-10-21.
 
@@ -15,7 +21,7 @@ Specify signup, email confirmation/resend, login/session restoration, required p
 | Proposed       | Screen routes, auth state handling, email-confirmation requirement, explicit onboarding API, and missing-profile discriminator below |
 | Unresolved     | Profile initialization in contract/ERD question #1; review gates in section 8                                                        |
 
-The [API draft](../../api/contract_v0.md) describes business designs, not shipped endpoints. The [ERD](../../db/erd_v0.md) is not an implemented schema. [ADR 0003](../../adr/0003-auth-profile-initialization.md) compares initialization approaches and remains Proposed. Nothing here supersedes that review or silently changes the authoritative drafts.
+The [API draft](../../api/contract_v0.md) describes business designs, not shipped endpoints. The [ERD](../../database/erd.md) is not an implemented schema. ADR 0003 (historical design) compares initialization approaches and remains Proposed. Nothing here supersedes that review or silently changes the authoritative drafts.
 
 ## 2. Journey and state model
 

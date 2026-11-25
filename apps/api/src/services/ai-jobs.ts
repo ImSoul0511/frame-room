@@ -3,7 +3,6 @@ import { jobInputSchema, type AiJob, type Language } from '@frameroom/shared';
 import type { Transaction } from '../repositories/database.js';
 import { project, providerSide } from './access.js';
 import { requireCondition } from '../lib/errors.js';
-import type { ApiEnv } from '../config/env.js';
 
 export async function enqueue(
   tx: Transaction,
@@ -47,21 +46,6 @@ export async function enqueue(
   const job = await tx.one<AiJob>(
     `insert into ai_jobs(project_id,user_id,kind,input,request_key) values($1,$2,$3,$4,$5) returning *`,
     [projectId, userId, input.kind, JSON.stringify({ ...input, language }), requestKey],
-  );
-  await tx.execute('select frameroom_enqueue_job($1)', [job.id]);
-  return job;
-}
-export async function enqueueIndex(
-  tx: Transaction,
-  userId: string,
-  imageId: string,
-  env: ApiEnv,
-  requestKey: string,
-) {
-  if (!env.AI_GATEWAY_API_KEY) return null;
-  const job = await tx.one<AiJob>(
-    "insert into ai_jobs(user_id,kind,input,request_key) values($1,'index',$2,$3) returning *",
-    [userId, JSON.stringify({ imageId }), requestKey],
   );
   await tx.execute('select frameroom_enqueue_job($1)', [job.id]);
   return job;

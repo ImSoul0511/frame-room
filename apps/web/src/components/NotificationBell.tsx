@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
-import { dateTime } from '../lib/api';
 import { useApi } from '../lib/hooks';
 import { useStrings } from '../lib/i18n';
 import { useMarkNotificationRead, type Notice } from '../lib/notifications';
-import { Feedback } from './ui';
+import { Feedback, QueryState } from './ui';
+import { NotificationText, useNotificationTitle } from './NotificationText';
 
 export function NotificationBell() {
   const t = useStrings();
+  const titleOf = useNotificationTitle();
   const { profile } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
@@ -75,9 +76,7 @@ export function NotificationBell() {
             </Link>
           </div>
           <div className="notification-preview-list">
-            {notices.isPending ? <p role="status">{t.pending}</p> : null}
-            {notices.error ? <Feedback error={notices.error} /> : null}
-            {notices.isSuccess && !notices.data.length ? <p>{t.empty}</p> : null}
+            <QueryState query={notices} empty={notices.data?.length === 0} />
             {notices.data?.slice(0, 5).map((notice) => (
               <button
                 key={notice.id}
@@ -94,16 +93,7 @@ export function NotificationBell() {
                   }
                 }}
               >
-                <span className="notification-preview-dot" aria-hidden="true" />
-                <span>
-                  <strong>
-                    {t.workspaceUi[notice.event as keyof typeof t.workspaceUi] ??
-                      t.workspaceUi.notifications}
-                  </strong>
-                  <small>
-                    {dateTime(notice.createdAt)} · {notice.readAt ? t.design.read : t.design.unread}
-                  </small>
-                </span>
+                <NotificationText notice={notice} title={titleOf(notice)} />
               </button>
             ))}
           </div>

@@ -39,7 +39,7 @@ export const bookingStatusSchema = z.enum([
   'delivered',
   'completed',
 ]);
-export const jobKindSchema = z.enum(['concept', 'edit', 'cull', 'index']);
+export const jobKindSchema = z.enum(['concept', 'edit', 'cull']);
 export const jobStatusSchema = z.enum(['queued', 'running', 'succeeded', 'failed', 'uncertain']);
 const shortText = z.string().trim().min(1).max(120);
 const description = z.string().trim().max(2000).default('');
@@ -202,39 +202,6 @@ export const projectSchema = projectInputSchema.extend({
   createdAt: z.string(),
   updatedAt: z.string(),
 });
-export const searchInputSchema = z
-  .object({
-    query: z.string().trim().max(300).default(''),
-    imageStoragePath: z.string().max(500).nullable().default(null),
-    filters: z
-      .object({
-        genre: genreSchema.optional(),
-        city: z.string().max(100).optional(),
-        district: z.string().max(100).optional(),
-        priceMax: nonnegative.optional(),
-      })
-      .default({}),
-    ignoreParsed: z.array(z.enum(['genres', 'styles', 'city', 'district', 'priceMax'])).default([]),
-    page: z.number().int().min(1).max(100).default(1),
-    pageSize: z.number().int().min(1).max(50).default(20),
-  })
-  .refine((v) => Boolean(v.query || v.imageStoragePath), 'A query or reference is required');
-export const parsedSearchSchema = z.object({
-  description: z.string().max(1500),
-  genres: z.array(genreSchema).max(5),
-  styles: z.array(z.string().max(60)).max(10),
-  city: z.string().max(100).nullable(),
-  district: z.string().max(100).nullable(),
-  priceMax: nonnegative.nullable(),
-});
-export const searchResultSchema = z.object({
-  provider: providerSchema,
-  score: z.number(),
-  reasons: z.array(z.string()),
-  matchedImages: z.array(
-    z.object({ id: idSchema, url: z.string(), caption: z.string(), provenance: provenanceSchema }),
-  ),
-});
 const bookingRequestFields = z.object({
   serviceId: idSchema,
   scheduledStart: z.string().datetime(),
@@ -388,7 +355,7 @@ export const actionProposalSchema = z.object({
   payload: z.record(z.unknown()),
 });
 export const jobInputSchema = z.object({
-  kind: jobKindSchema.exclude(['index']),
+  kind: jobKindSchema,
   prompt: z.string().trim().max(2000).default(''),
   imageIds: z.array(idSchema).max(50).default([]),
   referencePath: z.string().max(500).optional(),
@@ -401,7 +368,7 @@ export const cullingOutputSchema = z.object({
 export const jobSchema = z.object({
   id: idSchema,
   projectId: idSchema.nullable(),
-  kind: jobKindSchema,
+  kind: z.union([jobKindSchema, z.literal('index')]),
   status: jobStatusSchema,
   result: z.unknown().nullable(),
   error: z.string().nullable(),
@@ -469,5 +436,4 @@ export type BriefContent = z.infer<typeof briefContentSchema>;
 export type AiJob = z.infer<typeof jobSchema>;
 export type AiAction = z.infer<typeof actionSchema>;
 export type Artifact = z.infer<typeof artifactSchema>;
-export type SearchResult = z.infer<typeof searchResultSchema>;
 export type Service = z.infer<typeof serviceSchema>;

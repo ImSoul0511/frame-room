@@ -54,7 +54,7 @@ export async function patchProject(
     requireCondition(matches.length === input.selectedArtifactIds.length, 422, 'invalid_reference');
   }
   for (const path of input.referencePaths ?? [])
-    await media.verifyReference(userId, 'brief-references', path);
+    await media.verify('brief-references', path, userId);
   return tx.one<CreativeProject>(
     `update creative_projects set title=$2,idea=$3,brief=$4,reference_paths=$5,selected_artifact_ids=$6,version=version+1 where id=$1 returning *, $7::uuid as booking_id`,
     [

@@ -15,7 +15,7 @@ describe('authentication return navigation', () => {
     '/\n/other.test',
     '/\t/other.test',
   ])('rejects an external or browser-normalized redirect: %j', (destination) => {
-    expect(safeReturnPath(destination)).toBe('/explore');
+    expect(safeReturnPath(destination)).toBe('/home');
   });
   it.each([
     '/auth',
@@ -26,7 +26,7 @@ describe('authentication return navigation', () => {
     '/projects/../auth#login',
     '/%61uth',
   ])('avoids redirecting back into authentication: %s', (destination) => {
-    expect(safeReturnPath(destination)).toBe('/explore');
+    expect(safeReturnPath(destination)).toBe('/home');
   });
   it.each([
     [[], '/projects'],

@@ -1,8 +1,8 @@
 # Shared contract guide
 
-Read [contribution rules](../docs/contributing.md), [API draft](../docs/api/contract_v0.md), and [ERD](../docs/db/erd_v0.md).
+Read [contribution rules](../docs/contributing.md), the [API contract](../docs/api/mvp.md), and the [ERD](../docs/database/erd.md).
 
-For a behavior/wire/access change, load the [contract-change skill](skills/frameroom-contract-change/SKILL.md). Keep the [profile-initialization ADR](../docs/adr/0003-auth-profile-initialization.md) proposed until reviewed.
+For a behavior, wire format or access change, load the [contract-change skill](skills/frameroom-contract-change/SKILL.md). Profile creation and photographer registration use the [profile routes](../apps/api/src/routes/profile.ts).
 
 Shared contains runtime Zod schemas and inferred types. Public exports point to compiled ESM/declarations, not raw TypeScript. Build before consumers and verify Node/Vite resolution.
 

@@ -1,3 +1,5 @@
+import { useVisible } from '../features/catalog/use-visible';
+import { SearchPagination } from '../features/catalog/SearchPagination';
 import { useState } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom';
@@ -19,15 +21,18 @@ export function GenrePage() {
 }
 function GenreCollection({ genre }: { genre: Genre }) {
   const t = useStrings();
+  const { ref: resultsStart, visible } = useVisible<HTMLDivElement>();
   const { language } = useLanguage();
   const [params] = useSearchParams();
   const [draft, setDraft] = useState('');
   const [keyword, setKeyword] = useState('');
   const [tag, setTag] = useState('');
   const [sort, setSort] = useState('newest');
-  const tags = useApi<Tag[]>('/v1/tags');
+  const [tagsOpen, setTagsOpen] = useState(false);
+  const tags = useApi<Tag[]>('/v1/tags', tagsOpen, undefined, 300_000);
   const collection = useInfiniteQuery({
     queryKey: ['api', 'explore-portfolios', keyword, genre, tag, sort],
+    enabled: visible,
     initialPageParam: 1,
     queryFn: ({ pageParam, signal }) => {
       const query = new URLSearchParams({
@@ -98,13 +103,16 @@ function GenreCollection({ genre }: { genre: Genre }) {
           <span className="chip selected">{t.genreLabels[genre]}</span>
           <Link
             className="text-button"
-            to={`/explore${params.get('project') ? `?project=${encodeURIComponent(params.get('project')!)}` : ''}#genres`}
+            to={`/home${params.get('project') ? `?project=${encodeURIComponent(params.get('project')!)}` : ''}#genres`}
           >
             {t.curation.otherGenres}
           </Link>
         </div>
         <div className="collection-toolbar">
-          <details className="taxonomy-filter">
+          <details
+            className="taxonomy-filter"
+            onToggle={(event) => setTagsOpen(event.currentTarget.open)}
+          >
             <summary>
               {t.design.filterTags}
               {tag
@@ -150,14 +158,15 @@ function GenreCollection({ genre }: { genre: Genre }) {
             <option value="name">{t.discovery.name}</option>
           </Select>
         </div>
+        <div className="search-start" ref={resultsStart} />
         <QueryState query={collection} />
         {!displayed.length && collection.isSuccess ? (
           <p className="empty-state">{t.explore.noResults}</p>
         ) : null}
-        <div className="collection-grid">
+        <div className="collection-grid media-grid">
           {displayed.map((portfolio, index) => (
             <Reveal key={portfolio.id} delay={(index % 3) * 70}>
-              <PortfolioCard portfolio={portfolio} project={params.get('project')} />
+              <PortfolioCard portfolio={portfolio} />
             </Reveal>
           ))}
         </div>
@@ -165,17 +174,7 @@ function GenreCollection({ genre }: { genre: Genre }) {
           <span className="muted" role="status" aria-live="polite">
             {displayed.length} {t.design.collectionsLoaded}
           </span>
-          {collection.hasNextPage ? (
-            <Action
-              secondary
-              pending={collection.isFetchingNextPage}
-              onClick={() => {
-                void collection.fetchNextPage();
-              }}
-            >
-              {t.design.loadMore}
-            </Action>
-          ) : null}
+          <SearchPagination query={collection} />
           <Feedback error={collection.isFetchNextPageError ? collection.error : null} />
         </div>
       </section>

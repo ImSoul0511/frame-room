@@ -7,7 +7,6 @@ import { PgDatabase } from './repositories/database.js';
 import { MediaService } from './services/media.js';
 import { AiService, projectPrompt } from './services/ai.js';
 import { project } from './services/access.js';
-import { requirePortfolioOwnership } from './services/catalog.js';
 import { requireCondition } from './lib/errors.js';
 import { createLogger } from './lib/logger.js';
 import { expireSearchReferences } from './services/maintenance.js';
@@ -48,35 +47,10 @@ async function work(job: Job) {
     .object({
       prompt: z.string().default(''),
       imageIds: z.array(z.string().uuid()).default([]),
-      imageId: z.string().uuid().optional(),
       referencePath: z.string().optional(),
       language: languageSchema.default('en'),
     })
     .parse(job.input);
-  if (job.kind === 'index') {
-    const image = await db.run(job.userId, async (tx) => {
-      const i = await tx.one<{ id: string; portfolioId: string; storagePath: string }>(
-        'select * from portfolio_images where id=$1 and not is_hidden',
-        [input.imageId],
-      );
-      await requirePortfolioOwnership(tx, job.userId, i.portfolioId);
-      return i;
-    });
-    const description = await ai.describe(
-      job.userId,
-      await media.download('portfolio-images', image.storagePath),
-    );
-    const text = Object.values(description).join('. ');
-    const vector = await ai.embedding(job.userId, text);
-    await db.run(job.userId, async (tx) => {
-      await requirePortfolioOwnership(tx, job.userId, image.portfolioId);
-      await tx.execute(
-        'insert into image_embeddings(image_id,description,model,embedding) values($1,$2,$3,$4) on conflict(image_id) do update set description=excluded.description,model=excluded.model,embedding=excluded.embedding',
-        [image.id, text, env.AI_EMBEDDING_MODEL, JSON.stringify(vector)],
-      );
-    });
-    return { imageId: image.id, description };
-  }
   requireCondition(job.projectId, 422, 'project_required');
   const context = await ai.context(job.userId, job.projectId);
   if (job.kind === 'cull') {
@@ -148,7 +122,7 @@ async function work(job: Job) {
   if (job.kind === 'concept') {
     const referencePath = input.referencePath ?? context.project.referencePaths[0];
     if (input.referencePath)
-      await media.verifyReference(job.userId, 'brief-references', input.referencePath);
+      await media.verify('brief-references', input.referencePath, job.userId);
     referenceImage = referencePath
       ? await media.download('brief-references', referencePath)
       : context.selectedArtifacts[0]
@@ -202,9 +176,7 @@ while (!stopping) {
       continue;
     }
     messageId = message.msgId;
-    const job = await db.run(null, (tx) =>
-      claimForWork(tx, message.message.jobId, env.AI_SEARCH_ENABLED),
-    );
+    const job = await db.run(null, (tx) => claimForWork(tx, message.message.jobId));
     if (job) {
       try {
         const result = await work(job);

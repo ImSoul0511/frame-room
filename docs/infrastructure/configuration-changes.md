@@ -1,5 +1,7 @@
 # Configuration change inventory
 
+> Historical proposal. For current behavior see the [implementation contract](../api/mvp.md) and [AI capabilities](../ai/current-ai-capabilities.md).
+
 No configuration file was modified in this documentation session. DevOps should review these after the contracts and Cloud project are ready.
 
 | File or command                                         | Current assumption                                                     | Future change                                                                                                              |
@@ -14,4 +16,4 @@ No configuration file was modified in this documentation session. DevOps should 
 | `.github/workflows/ci.yml.disabled`                     | Inactive                                                               | Design active checks, migration review and secret handling later                                                           |
 | Root scripts, `scripts/start-dev.bat`, setup guides     | Updated in the current repository to call `pnpm` directly              | Follow [pnpm without Corepack](pnpm-without-corepack.md); apply the same change to MVP-only scripts when transferred       |
 
-The MVP README and `docs/db/local-development.md` will need revision when implementation changes land. Development, integration tests and migration rehearsal should use designated Supabase Cloud projects; no local Supabase dependency should remain in the target workflow.
+The current [environment guide](current-environment.md) documents the implemented Cloud and local workflows. Development, integration tests and migration rehearsal should use designated Supabase Cloud projects; no local Supabase dependency should remain in the target workflow.

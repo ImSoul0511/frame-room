@@ -32,6 +32,9 @@ CREATE TABLE public.photographers (
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
   dataset_key text,
   dataset_sort_order integer NOT NULL DEFAULT 0,
+  contact_email text,
+  professional_roles ARRAY NOT NULL DEFAULT '{}'::text[] CHECK (professional_roles <@ ARRAY['photographer'::text, 'retoucher'::text, 'art_director'::text]),
+  cover_path text,
   CONSTRAINT photographers_pkey PRIMARY KEY (id),
   CONSTRAINT photographers_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id)
 );
@@ -48,8 +51,9 @@ CREATE TABLE public.studios (
   deleted_at timestamp with time zone,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  contact_email text,
   CONSTRAINT studios_pkey PRIMARY KEY (id),
-  CONSTRAINT studios_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.photographers(user_id)
+  CONSTRAINT studios_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id)
 );
 CREATE TABLE public.studio_members (
   studio_id uuid NOT NULL,
@@ -58,7 +62,7 @@ CREATE TABLE public.studio_members (
   joined_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT studio_members_pkey PRIMARY KEY (studio_id, user_id),
   CONSTRAINT studio_members_studio_id_fkey FOREIGN KEY (studio_id) REFERENCES public.studios(id),
-  CONSTRAINT studio_members_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.photographers(user_id)
+  CONSTRAINT studio_members_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id)
 );
 CREATE TABLE public.studio_invitations (
   id uuid NOT NULL DEFAULT uuid_generate_v7(),
@@ -91,6 +95,8 @@ CREATE TABLE public.services (
   deleted_at timestamp with time zone,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  selection_quota integer CHECK (selection_quota >= 1 AND selection_quota <= 200),
+  revision_limit integer CHECK (revision_limit >= 0 AND revision_limit <= 100),
   CONSTRAINT services_pkey PRIMARY KEY (id),
   CONSTRAINT services_photographer_id_fkey FOREIGN KEY (photographer_id) REFERENCES public.photographers(id),
   CONSTRAINT services_studio_id_fkey FOREIGN KEY (studio_id) REFERENCES public.studios(id)
@@ -154,9 +160,13 @@ CREATE TABLE public.portfolio_images (
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
   dataset_key text,
   content_sha256 text CHECK (content_sha256 IS NULL OR content_sha256 ~ '^[a-f0-9]{64}$'::text),
-  suggested_genre text CHECK (suggested_genre IS NULL OR (suggested_genre = ANY (ARRAY['portrait'::text, 'fashion'::text, 'wedding'::text, 'family'::text, 'product'::text, 'food'::text, 'event'::text, 'cosplay'::text]))),
+  suggested_genre text CHECK (suggested_genre IS NULL OR (suggested_genre = ANY (ARRAY['portrait'::text, 'fashion'::text, 'wedding'::text, 'family'::text, 'product'::text, 'food'::text, 'event'::text, 'cosplay'::text, 'drink'::text, 'yearbook'::text, 'outdoor'::text, 'tet_holiday'::text]))),
   label_status text NOT NULL DEFAULT 'unlabeled'::text CHECK (label_status = ANY (ARRAY['unlabeled'::text, 'suggested'::text, 'reviewed'::text])),
   import_metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+  source text,
+  collected_at timestamp with time zone,
+  license_note text,
+  crew_credits text NOT NULL DEFAULT ''::text,
   CONSTRAINT portfolio_images_pkey PRIMARY KEY (id),
   CONSTRAINT portfolio_images_portfolio_id_fkey FOREIGN KEY (portfolio_id) REFERENCES public.portfolios(id)
 );
@@ -193,6 +203,7 @@ CREATE TABLE public.creative_projects (
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
   selected_artifact_ids ARRAY NOT NULL DEFAULT '{}'::uuid[] CHECK (cardinality(selected_artifact_ids) <= 12),
+  deleted_at timestamp with time zone,
   CONSTRAINT creative_projects_pkey PRIMARY KEY (id),
   CONSTRAINT creative_projects_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES public.profiles(id)
 );
@@ -216,7 +227,13 @@ CREATE TABLE public.bookings (
   agreed_brief_version integer,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  completion_due_at timestamp with time zone,
+  completion_hold_at timestamp with time zone,
+  completion_remaining_ms integer,
+  conversation_id uuid,
+  request_key uuid,
   CONSTRAINT bookings_pkey PRIMARY KEY (id),
+  CONSTRAINT bookings_conversation_id_fkey FOREIGN KEY (conversation_id) REFERENCES public.conversations(id),
   CONSTRAINT bookings_client_id_fkey FOREIGN KEY (client_id) REFERENCES public.profiles(id),
   CONSTRAINT bookings_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.creative_projects(id),
   CONSTRAINT bookings_service_id_fkey FOREIGN KEY (service_id) REFERENCES public.services(id),
@@ -255,6 +272,7 @@ CREATE TABLE public.brief_versions (
   client_approved boolean NOT NULL DEFAULT false,
   provider_approved boolean NOT NULL DEFAULT false,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
+  status text NOT NULL DEFAULT 'open'::text CHECK (status = ANY (ARRAY['open'::text, 'closed'::text])),
   CONSTRAINT brief_versions_pkey PRIMARY KEY (id),
   CONSTRAINT brief_versions_booking_id_fkey FOREIGN KEY (booking_id) REFERENCES public.bookings(id),
   CONSTRAINT brief_versions_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id)
@@ -269,14 +287,17 @@ CREATE TABLE public.shoot_rooms (
 );
 CREATE TABLE public.room_messages (
   id uuid NOT NULL DEFAULT uuid_generate_v7(),
-  room_id uuid NOT NULL,
+  room_id uuid,
   sender_id uuid,
   text text NOT NULL,
   storage_path text,
   type text NOT NULL DEFAULT 'text'::text CHECK (type = ANY (ARRAY['text'::text, 'image'::text, 'system'::text])),
   is_hidden boolean NOT NULL DEFAULT false,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
+  conversation_id uuid,
+  submission_id uuid,
   CONSTRAINT room_messages_pkey PRIMARY KEY (id),
+  CONSTRAINT room_messages_conversation_id_fkey FOREIGN KEY (conversation_id) REFERENCES public.conversations(id),
   CONSTRAINT room_messages_room_id_fkey FOREIGN KEY (room_id) REFERENCES public.shoot_rooms(id),
   CONSTRAINT room_messages_sender_id_fkey FOREIGN KEY (sender_id) REFERENCES public.profiles(id)
 );
@@ -302,7 +323,9 @@ CREATE TABLE public.room_milestones (
   created_by uuid NOT NULL,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_by uuid,
   CONSTRAINT room_milestones_pkey PRIMARY KEY (id),
+  CONSTRAINT room_milestones_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.profiles(id),
   CONSTRAINT room_milestones_room_id_fkey FOREIGN KEY (room_id) REFERENCES public.shoot_rooms(id),
   CONSTRAINT room_milestones_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id)
 );
@@ -313,6 +336,7 @@ CREATE TABLE public.galleries (
   round integer NOT NULL DEFAULT 1,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  revision_requested_at timestamp with time zone,
   CONSTRAINT galleries_pkey PRIMARY KEY (id),
   CONSTRAINT galleries_booking_id_fkey FOREIGN KEY (booking_id) REFERENCES public.bookings(id)
 );
@@ -348,6 +372,7 @@ CREATE TABLE public.deliveries (
   file_name text NOT NULL,
   mime_type text NOT NULL CHECK (mime_type = ANY (ARRAY['image/jpeg'::text, 'image/png'::text, 'image/webp'::text])),
   created_at timestamp with time zone NOT NULL DEFAULT now(),
+  selection_round integer CHECK (selection_round > 0),
   CONSTRAINT deliveries_pkey PRIMARY KEY (id),
   CONSTRAINT deliveries_booking_id_fkey FOREIGN KEY (booking_id) REFERENCES public.bookings(id)
 );
@@ -363,6 +388,8 @@ CREATE TABLE public.reviews (
   deleted_at timestamp with time zone,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  moderation_reason text,
+  reassessment_requested_at timestamp with time zone,
   CONSTRAINT reviews_pkey PRIMARY KEY (id),
   CONSTRAINT reviews_booking_id_fkey FOREIGN KEY (booking_id) REFERENCES public.bookings(id),
   CONSTRAINT reviews_author_id_fkey FOREIGN KEY (author_id) REFERENCES public.profiles(id),
@@ -379,6 +406,7 @@ CREATE TABLE public.content_reports (
   status text NOT NULL DEFAULT 'open'::text CHECK (status = ANY (ARRAY['open'::text, 'resolved'::text])),
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  outcome text CHECK (outcome = ANY (ARRAY['actioned'::text, 'dismissed'::text])),
   CONSTRAINT content_reports_pkey PRIMARY KEY (id),
   CONSTRAINT content_reports_reporter_id_fkey FOREIGN KEY (reporter_id) REFERENCES public.profiles(id)
 );
@@ -494,4 +522,66 @@ CREATE TABLE public.dataset_image_rejections (
   fingerprint text NOT NULL CHECK (fingerprint ~ '^(pixel|sha256):[a-f0-9]{64}$'::text),
   reason text NOT NULL DEFAULT 'deleted'::text CHECK (reason = ANY (ARRAY['deleted'::text, 'legacy_orphan'::text])),
   CONSTRAINT dataset_image_rejections_pkey PRIMARY KEY (fingerprint)
+);
+CREATE TABLE public.conversations (
+  id uuid NOT NULL DEFAULT uuid_generate_v7(),
+  client_id uuid NOT NULL,
+  photographer_id uuid,
+  studio_id uuid,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT conversations_pkey PRIMARY KEY (id),
+  CONSTRAINT conversations_client_id_fkey FOREIGN KEY (client_id) REFERENCES public.profiles(id),
+  CONSTRAINT conversations_photographer_id_fkey FOREIGN KEY (photographer_id) REFERENCES public.photographers(id),
+  CONSTRAINT conversations_studio_id_fkey FOREIGN KEY (studio_id) REFERENCES public.studios(id)
+);
+CREATE TABLE public.notifications (
+  id uuid NOT NULL DEFAULT uuid_generate_v7(),
+  recipient_id uuid NOT NULL,
+  booking_id uuid,
+  studio_id uuid,
+  event text NOT NULL,
+  read_at timestamp with time zone,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT notifications_pkey PRIMARY KEY (id),
+  CONSTRAINT notifications_recipient_id_fkey FOREIGN KEY (recipient_id) REFERENCES public.profiles(id),
+  CONSTRAINT notifications_booking_id_fkey FOREIGN KEY (booking_id) REFERENCES public.bookings(id),
+  CONSTRAINT notifications_studio_id_fkey FOREIGN KEY (studio_id) REFERENCES public.studios(id)
+);
+CREATE TABLE public.booking_cancellations (
+  id uuid NOT NULL DEFAULT uuid_generate_v7(),
+  booking_id uuid NOT NULL,
+  proposed_by uuid NOT NULL,
+  is_client_proposal boolean NOT NULL,
+  reason text NOT NULL,
+  status text NOT NULL DEFAULT 'proposed'::text CHECK (status = ANY (ARRAY['proposed'::text, 'accepted'::text, 'declined'::text, 'expired'::text])),
+  decided_by uuid,
+  decided_at timestamp with time zone,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT booking_cancellations_pkey PRIMARY KEY (id),
+  CONSTRAINT booking_cancellations_booking_id_fkey FOREIGN KEY (booking_id) REFERENCES public.bookings(id),
+  CONSTRAINT booking_cancellations_proposed_by_fkey FOREIGN KEY (proposed_by) REFERENCES public.profiles(id),
+  CONSTRAINT booking_cancellations_decided_by_fkey FOREIGN KEY (decided_by) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.photo_feedback (
+  id uuid NOT NULL DEFAULT uuid_generate_v7(),
+  image_id uuid NOT NULL,
+  round integer NOT NULL CHECK (round > 0),
+  author_id uuid NOT NULL,
+  note text NOT NULL CHECK (length(btrim(note)) >= 1 AND length(btrim(note)) <= 1000),
+  x double precision,
+  y double precision,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT photo_feedback_pkey PRIMARY KEY (id),
+  CONSTRAINT photo_feedback_image_id_fkey FOREIGN KEY (image_id) REFERENCES public.gallery_images(id),
+  CONSTRAINT photo_feedback_author_id_fkey FOREIGN KEY (author_id) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.booking_add_ons (
+  booking_id uuid NOT NULL,
+  add_on_id uuid NOT NULL,
+  name text NOT NULL,
+  quantity integer NOT NULL DEFAULT 1 CHECK (quantity > 0),
+  unit_price integer NOT NULL CHECK (unit_price >= 0),
+  CONSTRAINT booking_add_ons_pkey PRIMARY KEY (booking_id, add_on_id),
+  CONSTRAINT booking_add_ons_booking_id_fkey FOREIGN KEY (booking_id) REFERENCES public.bookings(id),
+  CONSTRAINT booking_add_ons_add_on_id_fkey FOREIGN KEY (add_on_id) REFERENCES public.service_add_ons(id)
 );

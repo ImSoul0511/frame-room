@@ -1,7 +1,7 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import sharp from 'sharp';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { MediaService, requireStoragePath, thumbnailPath } from './media.js';
+import { MediaService, requireStoragePath, thumbnailPath, webpFileName } from './media.js';
 import { envSchema } from '../config/env.js';
 import type { Transaction } from '../repositories/database.js';
 
@@ -23,7 +23,7 @@ describe('media boundary', () => {
   it('rejects foreign owner paths before reading Storage', async () => {
     const download = vi.spyOn(media, 'download');
     await expect(
-      media.verifyReference('user', 'search-uploads', 'other/image.webp'),
+      media.verify('brief-references', 'other/image.webp', 'user'),
     ).rejects.toMatchObject({ status: 403 });
     expect(download).not.toHaveBeenCalled();
   });
@@ -56,6 +56,22 @@ describe('media boundary', () => {
       status: 400,
     });
     expect(put).not.toHaveBeenCalled();
+  });
+  it('stores final deliveries as a single full-resolution WebP with a matching download name', async () => {
+    const input = await sharp({
+      create: { width: 2400, height: 1500, channels: 3, background: 'white' },
+    })
+      .png({ compressionLevel: 0 })
+      .toBuffer();
+    const put = vi.spyOn(media, 'put').mockResolvedValue();
+    const file = await media.upload('deliveries', 'booking', input, 'image/png');
+    expect(file).toMatchObject({ mimeType: 'image/webp', width: 2400, height: 1500 });
+    expect(file.storagePath).toMatch(/^booking\/.+\.webp$/);
+    expect(put).toHaveBeenCalledTimes(1);
+    const bytes = put.mock.calls[0][2];
+    expect((await sharp(bytes).metadata()).format).toBe('webp');
+    expect(bytes.length).toBeLessThan(input.length);
+    expect(webpFileName('ceremony.edit.PNG')).toBe('ceremony.edit.webp');
   });
   it('removes the main object if its thumbnail upload fails', async () => {
     const input = await sharp({ create: { width: 1, height: 1, channels: 3, background: 'white' } })

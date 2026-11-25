@@ -1,6 +1,8 @@
+import { useVisible } from '../features/catalog/use-visible';
+import { SearchPagination } from '../features/catalog/SearchPagination';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Action, PageHeading, QueryState } from '../components/ui';
+import { PageHeading, QueryState } from '../components/ui';
 import { UserAvatar } from '../components/UserAvatar';
 import { RequestError, supabase } from '../lib/api';
 import { useStrings } from '../lib/i18n';
@@ -10,12 +12,13 @@ const PAGE_SIZE = 20;
 
 export function SearchPage() {
   const t = useStrings();
+  const { ref: resultsStart, visible } = useVisible<HTMLDivElement>();
   const [params] = useSearchParams();
   const term = (params.get('q') ?? '').trim().slice(0, 60);
   const keyword = term.replace(/[%_\\]/g, '').trim();
   const results = useInfiniteQuery({
     queryKey: ['people-search', keyword],
-    enabled: Boolean(keyword),
+    enabled: visible && Boolean(keyword),
     initialPageParam: 0,
     queryFn: async ({ pageParam, signal }) => {
       if (!supabase) throw new RequestError(503, 'network_unavailable');
@@ -59,6 +62,7 @@ export function SearchPage() {
             : t.discovery.searchPhotographersPrompt
         }
       />
+      <div className="search-start" ref={resultsStart} />
       {keyword ? <QueryState query={results} /> : null}
       {keyword && results.isSuccess && !people.length ? (
         <p className="empty-state">{t.discovery.searchPhotographersEmpty}</p>
@@ -85,15 +89,7 @@ export function SearchPage() {
           </Link>
         ))}
       </div>
-      {results.hasNextPage ? (
-        <Action
-          secondary
-          pending={results.isFetchingNextPage}
-          onClick={() => void results.fetchNextPage()}
-        >
-          {t.discovery.searchPhotographersMore}
-        </Action>
-      ) : null}
+      <SearchPagination query={results} />
     </section>
   );
 }

@@ -8,11 +8,7 @@ export type WorkerJob = {
   providerStartedAt: string | null;
   input: unknown;
 };
-export async function claimForWork(
-  tx: Transaction,
-  jobId: string,
-  aiSearchEnabled: boolean,
-): Promise<WorkerJob | null> {
+export async function claimForWork(tx: Transaction, jobId: string): Promise<WorkerJob | null> {
   const job = await tx.one<WorkerJob>('select * from ai_jobs where id=$1 for update', [jobId]);
   if (['succeeded', 'failed', 'uncertain'].includes(job.status)) return null;
   if (job.providerStartedAt) {
@@ -22,9 +18,9 @@ export async function claimForWork(
     );
     return null;
   }
-  if (job.kind === 'index' && !aiSearchEnabled) {
+  if (job.kind === 'index') {
     await tx.execute(
-      "update ai_jobs set status='failed',error='ai_search_disabled',completed_at=now() where id=$1",
+      "update ai_jobs set status='failed',error='retired_job_kind',completed_at=now() where id=$1",
       [job.id],
     );
     return null;

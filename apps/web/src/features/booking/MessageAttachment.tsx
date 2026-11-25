@@ -15,7 +15,8 @@ export function MessageAttachment({ messageId }: { messageId: string }) {
     const blob = URL.createObjectURL(data);
     const link = document.createElement('a');
     link.href = blob;
-    link.download = storagePath.split('/').at(-1) ?? 'reference.webp';
+    const name = storagePath.split('/').at(-1) ?? 'reference.webp';
+    link.download = data.type === 'image/webp' ? name.replace(/\.(png|jpe?g)$/i, '.webp') : name;
     link.click();
     window.setTimeout(() => URL.revokeObjectURL(blob), 1000);
   });

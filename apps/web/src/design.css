@@ -281,7 +281,7 @@ body {
   overflow-y: auto;
   overscroll-behavior: contain;
 }
-.notification-preview-list > p {
+.notification-preview-list > :is(.empty-state, .loading) {
   padding: 18px;
   color: #68748d;
   font-size: 0.875rem;
@@ -302,27 +302,20 @@ body {
 .notification-preview-item.is-unread {
   background: #f2f0f8;
 }
-.notification-preview-item strong,
-.notification-preview-item small {
+.notification-text,
+.notification-text > small {
   display: block;
 }
-.notification-preview-item strong {
+.notification-text > :is(h2, strong) {
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
   font-size: 0.875rem;
 }
-.notification-preview-item small {
+.notification-text > small {
   margin-top: 5px;
   color: #68748d;
   font-size: 0.75rem;
-}
-.notification-preview-dot {
-  width: 8px;
-  height: 8px;
-  flex: 0 0 8px;
-  margin-top: 6px;
-  border-radius: 50%;
-}
-.notification-preview-item.is-unread .notification-preview-dot {
-  background: #536894;
 }
 .notification-unread-dot {
   position: absolute;
@@ -1158,9 +1151,6 @@ body {
   flex: 1 1 240px;
   min-width: 0;
 }
-.notification-card h2 {
-  overflow-wrap: anywhere;
-}
 .notification-expand {
   margin-top: 6px;
   font-size: 0.8125rem;
@@ -1173,11 +1163,6 @@ body {
   gap: 14px;
   margin-top: 24px;
   color: #53617f;
-}
-.notification-card p {
-  font-size: 0.8125rem;
-  color: var(--fr-muted);
-  margin-top: 7px;
 }
 .page-footer {
   flex-wrap: wrap;

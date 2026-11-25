@@ -1,6 +1,6 @@
 # Endpoint inventory
 
-Source: `apps/api/src/routes/business.ts` at `feature/MVP-001-ai-focused-workflow` (`66f3779`). Checked out `main` (`a799dea`) has only `GET /health`. “MVP branch only” does not mean deployed. The route source and `packages/shared/src/business.ts` on that branch define validation; `docs/api/contract_v0.md` is historical design.
+This inventory compares the foundation and MVP branches at commits `a799dea` and `66f3779`. Its status column describes that historical comparison. The [current API contract](../api/mvp.md) and [route modules](../../apps/api/src/routes) include subsequent changes.
 
 | Method and path                                         | Input schema                        | Status                                      |
 | ------------------------------------------------------- | ----------------------------------- | ------------------------------------------- |

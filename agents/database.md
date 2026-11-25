@@ -2,7 +2,7 @@
 
 Read [rules](../docs/contributing.md#4-database), [ERD](../docs/database/erd.md), [API contract](../docs/backend/api-contract.md), and [Supabase Cloud workflow](../docs/infrastructure/migration-workflow.md).
 
-For concrete SQL/RLS work, load the [migration skill](skills/frameroom-supabase-migration/SKILL.md). Missing approval means a conditional plan, not executable SQL; the [auth ADR](../docs/adr/0003-auth-profile-initialization.md) is currently proposed.
+For SQL or RLS changes, load the [migration skill](skills/frameroom-supabase-migration/SKILL.md). Check current profile write behavior in the [API](../apps/api/src/routes/profile.ts) and [ordered migrations](../supabase/migrations).
 
 Migrations define schema; ERD is a design. Add new migrations, never edit merged ones/dashboard schema. Use fake seed data, UUIDv7 application IDs, preserved Auth IDs, explicit constraints, and deny-by-default RLS.
 

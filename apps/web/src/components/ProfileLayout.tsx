@@ -13,7 +13,7 @@ export function ProfileLayout() {
   const logout = useTask(async () => {
     const result = await supabase?.auth.signOut({ scope: 'local' });
     if (result?.error) throw result.error;
-    navigate('/explore');
+    navigate('/home');
   });
   const professional = profile?.roles.some((role) =>
     ['photographer', 'studio_manager'].includes(role),

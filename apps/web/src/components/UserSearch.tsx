@@ -12,9 +12,7 @@ function UserSearchForm() {
   const navigate = useNavigate();
   const location = useLocation();
   const [draft, setDraft] = useState(() =>
-    location.pathname === '/photographers'
-      ? (new URLSearchParams(location.search).get('q') ?? '')
-      : '',
+    location.pathname === '/explore' ? (new URLSearchParams(location.search).get('q') ?? '') : '',
   );
   return (
     <div className="user-search">
@@ -25,10 +23,10 @@ function UserSearchForm() {
           event.preventDefault();
           const query = draft.trim();
           const params = new URLSearchParams(
-            location.pathname === '/photographers' ? location.search : '',
+            location.pathname === '/explore' ? location.search : '',
           );
           params.set('q', query);
-          navigate(`/photographers?${params}`);
+          navigate(`/explore?${params}`);
         }}
       >
         <label htmlFor="user-search" className="sr-only">

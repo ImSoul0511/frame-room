@@ -21,6 +21,27 @@ import {
 } from '../schemas/catalog.js';
 import { buildPublicPortfolioImageUrl, singleDisplayNameMatch } from './catalog.js';
 
+const portfolioPreviewSchema = publicPortfolioSchema.extend({
+  photographers: z.object({ displayName: z.string() }).nullish(),
+  studios: z.object({ name: z.string() }).nullish(),
+  portfolioImages: z
+    .array(
+      z.object({
+        storagePath: z.string(),
+        sortOrder: z.number(),
+        isHidden: z.boolean(),
+        imageTags: z
+          .array(
+            z.object({
+              tags: tagSchema.extend({ isActive: z.boolean().optional() }).nullable(),
+            }),
+          )
+          .default([]),
+      }),
+    )
+    .default([]),
+});
+
 function check(error: PostgrestError | null, conflictReason = 'already_exists') {
   if (!error) return;
   if (error.code === '23505') throw new ApiError(409, 'CONFLICT', conflictReason);
@@ -37,6 +58,28 @@ export function createCloudCatalog(env: ApiEnv) {
       throw new ApiError(503, 'SERVICE_UNAVAILABLE', 'database_not_configured');
     return createClient(env.SUPABASE_URL!, env.SUPABASE_SERVICE_ROLE_KEY, options);
   };
+
+  function presentPortfolio(row: unknown, ownerName?: string) {
+    const { portfolioImages, photographers, studios, ...portfolio } = portfolioPreviewSchema.parse(
+      normalizeRow(row),
+    );
+    const images = portfolioImages
+      .filter((image) => !image.isHidden)
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+    const tags = images.flatMap((image) =>
+      image.imageTags.flatMap(({ tags }) => (tags && tags.isActive !== false ? [tags] : [])),
+    );
+    return {
+      ...portfolio,
+      ownerName: ownerName ?? photographers?.displayName ?? studios?.name ?? null,
+      coverUrl: buildPublicPortfolioImageUrl(
+        env.SUPABASE_URL,
+        images[0]?.storagePath,
+        env.API_PUBLIC_ORIGIN,
+      ),
+      tags: [...new Map(tags.map((tag) => [tag.id, tag])).values()],
+    };
+  }
 
   const list = async (query: ExploreQuery | ProviderListQuery, type?: string) => {
     let request = publicClient.from('providers').select('*');
@@ -107,6 +150,9 @@ export function createCloudCatalog(env: ApiEnv) {
           avatarPath: profile?.avatar_path ?? null,
         });
       }
+    }
+    if (type || !providers.length) {
+      return providers.map((provider) => ({ ...provider, ...identities.get(provider.id) }));
     }
     const { data: portfolios, error: portfolioError } = await publicClient
       .from('portfolios')
@@ -201,7 +247,7 @@ export function createCloudCatalog(env: ApiEnv) {
       let request = publicClient
         .from('portfolios')
         .select(
-          `*,portfolio_images(storage_path,sort_order,is_hidden,image_tags(tags(*)))${matching}`,
+          `*,photographers(display_name),studios(name),portfolio_images(storage_path,sort_order,is_hidden,image_tags(tags(*)))${matching}`,
         )
         .eq('status', 'published')
         .is('deleted_at', null);
@@ -225,40 +271,7 @@ export function createCloudCatalog(env: ApiEnv) {
       const start = (query.page - 1) * query.pageSize;
       const { data, error } = await request.order('id').range(start, start + query.pageSize - 1);
       check(error);
-      const rowSchema = publicPortfolioSchema.extend({
-        portfolioImages: z.array(
-          z.object({
-            storagePath: z.string(),
-            sortOrder: z.number(),
-            isHidden: z.boolean(),
-            imageTags: z.array(
-              z.object({ tags: tagSchema.extend({ isActive: z.boolean().optional() }).nullable() }),
-            ),
-          }),
-        ),
-      });
-      return rowSchema
-        .array()
-        .parse(normalizeRow(data ?? []))
-        .map(({ portfolioImages, ...portfolio }) => {
-          const images = portfolioImages
-            .filter((image) => !image.isHidden)
-            .sort((a, b) => a.sortOrder - b.sortOrder);
-          const tags = images.flatMap((image) =>
-            image.imageTags.flatMap((link) =>
-              link.tags && link.tags.isActive !== false ? [link.tags] : [],
-            ),
-          );
-          return {
-            ...portfolio,
-            coverUrl: buildPublicPortfolioImageUrl(
-              env.SUPABASE_URL,
-              images[0]?.storagePath,
-              env.API_PUBLIC_ORIGIN,
-            ),
-            tags: [...new Map(tags.map((tag) => [tag.id, tag])).values()],
-          };
-        });
+      return (data ?? []).map((row) => presentPortfolio(row));
     },
     async tags() {
       const { data, error } = await publicClient.from('tags').select('*').order('name');
@@ -383,7 +396,7 @@ export function createCloudCatalog(env: ApiEnv) {
           .is('deleted_at', null),
         publicClient
           .from('portfolios')
-          .select('*,portfolio_images(storage_path,sort_order,is_hidden)')
+          .select('*,portfolio_images(storage_path,sort_order,is_hidden,image_tags(tags(*)))')
           .eq(owner, id)
           .eq('status', 'published')
           .is('deleted_at', null),
@@ -415,24 +428,7 @@ export function createCloudCatalog(env: ApiEnv) {
             .nullable()
             .parse(cover.data)?.profiles?.avatar_path ?? null,
         services: normalizeRow(services.data ?? []),
-        portfolios: (portfolios.data ?? []).map((portfolio) => ({
-          ...(normalizeRow(portfolio) as object),
-          coverUrl: buildPublicPortfolioImageUrl(
-            env.SUPABASE_URL,
-            z
-              .array(
-                z.object({
-                  storage_path: z.string(),
-                  sort_order: z.number(),
-                  is_hidden: z.boolean(),
-                }),
-              )
-              .parse(portfolio.portfolio_images ?? [])
-              .filter((image) => !image.is_hidden)
-              .sort((a, b) => a.sort_order - b.sort_order)[0]?.storage_path,
-            env.API_PUBLIC_ORIGIN,
-          ),
-        })),
+        portfolios: (portfolios.data ?? []).map((row) => presentPortfolio(row, data.display_name)),
         reviews: (reviews.data ?? []).map((review) => ({
           ...(normalizeRow(review) as object),
           authorName: '',
@@ -465,7 +461,7 @@ export function createCloudCatalog(env: ApiEnv) {
       const providerId = portfolio.photographer_id ?? portfolio.studio_id;
       const provider = await publicClient
         .from('providers')
-        .select('id')
+        .select('id,display_name')
         .eq('id', providerId)
         .eq('type', providerType)
         .maybeSingle();
@@ -473,7 +469,7 @@ export function createCloudCatalog(env: ApiEnv) {
       if (!provider.data) throw new ApiError(404, 'NOT_FOUND', 'portfolio_not_found');
       const images = await publicClient
         .from('portfolio_images')
-        .select('*,image_tags(tags(id,name,slug,kind))')
+        .select('*,image_tags(tags(*))')
         .eq('portfolio_id', id)
         .eq('is_hidden', false)
         .order('sort_order')
@@ -483,7 +479,10 @@ export function createCloudCatalog(env: ApiEnv) {
         z.object({ tags: z.union([tagSchema, z.array(tagSchema)]).nullish() }),
       );
       return portfolioDetailSchema.parse({
-        portfolio: normalizeRow(portfolio),
+        portfolio: {
+          ...(normalizeRow(portfolio) as object),
+          ownerName: provider.data.display_name,
+        },
         images: (images.data ?? []).map((image) => ({
           ...(normalizeRow(image) as object),
           source: image.source ?? null,
@@ -494,7 +493,7 @@ export function createCloudCatalog(env: ApiEnv) {
             env.API_PUBLIC_ORIGIN,
           ),
           tags: linksSchema
-            .parse(image.image_tags ?? [])
+            .parse(normalizeRow(image.image_tags ?? []))
             .flatMap((link) =>
               Array.isArray(link.tags) ? link.tags : link.tags ? [link.tags] : [],
             ),

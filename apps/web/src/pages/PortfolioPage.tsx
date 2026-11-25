@@ -1,3 +1,4 @@
+import { PortfolioCard } from '../features/catalog/PortfolioCard';
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -14,7 +15,6 @@ import {
   FilePicker,
   Modal,
   PageHeading,
-  Provenance,
   QueryState,
   Select,
 } from '../components/ui';
@@ -22,8 +22,6 @@ import { PhotographerForm, ServiceForm } from '../features/catalog/ProviderForms
 import { ReportButton } from './SettingsPage';
 import { PhotoGallery } from '../features/profiles/PhotoGallery';
 import { TagPicker } from '../features/catalog/TagPicker';
-import { ImageTagsEditor } from '../features/catalog/ImageTagsEditor';
-import { FittedImage } from '../components/FittedImage';
 
 export function PortfolioPage() {
   const t = useStrings();
@@ -52,14 +50,9 @@ export function PortfolioPage() {
         }
       />
       <QueryState query={list} empty={list.data?.length === 0} />
-      <div className="project-grid">
-        {list.data?.map((p) => (
-          <Link className="portfolio-summary" key={p.id} to={`/portfolios/${p.id}?edit=1`}>
-            <span className="eyebrow">{t.portfolio[p.status]}</span>
-            <h2>{p.title}</h2>
-            <p>{p.description}</p>
-            <span>{t.genreLabels[p.genre as keyof typeof t.genreLabels]} ↗</span>
-          </Link>
+      <div className="media-grid">
+        {list.data?.map((portfolio) => (
+          <PortfolioCard key={portfolio.id} portfolio={portfolio} edit />
         ))}
       </div>
       <div className="section-header">
@@ -267,28 +260,11 @@ export function PortfolioDetailPage() {
           {detail.data.images.length} {t.profileUi.photos}
         </span>
       </div>
-      {!canEdit ? (
-        <PhotoGallery photos={detail.data.images} />
-      ) : (
-        <div className="moodboard">
-          {detail.data.images.map((i) => (
-            <figure key={i.id}>
-              <FittedImage src={i.url} alt={i.caption || p.title} loading="lazy" decoding="async" />
-              <figcaption>
-                <Provenance value={i.provenance} />
-                <p>{i.caption}</p>
-                {i.crewCredits ? (
-                  <p>
-                    {t.workspaceUi.credits} · {i.crewCredits}
-                  </p>
-                ) : null}
-                {i.tags?.length ? <p>{i.tags.map((tag) => tag.name).join(' · ')}</p> : null}
-                <ImageTagsEditor image={i} tags={availableTags.data ?? []} />
-              </figcaption>
-            </figure>
-          ))}
-        </div>
-      )}
+      <PhotoGallery
+        photos={detail.data.images}
+        portfolio={p}
+        editTags={canEdit ? (availableTags.data ?? []) : undefined}
+      />
     </>
   );
 }

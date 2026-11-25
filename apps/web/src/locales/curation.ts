@@ -24,9 +24,10 @@ export const curationEnglish = {
   ringDescription: 'Turn a little. Discover a new way to see.',
   previous: 'Previous genre',
   next: 'Next genre',
-  pause: 'Pause motion',
+  pause: 'Pause',
   play: 'Resume motion',
   selectGenre: 'Choose a genre',
+  dragLens: 'Hold and drag to turn',
   lensKeyboard: 'Use the arrow keys to change genre, or hold and drag to turn the lens.',
   carousel: 'Genre carousel',
   inspirationPhotos: 'Photographic inspiration',
@@ -100,9 +101,9 @@ export const curationEnglish = {
         'Old friends, familiar hallways and a whole future ahead. Hold on to the days you shared.',
     },
     outdoor: {
-      title: 'Follow the open light',
+      title: 'Portraits in the open air',
       description:
-        'A breeze, a stretch of sky and somewhere new to wander. Let the landscape become part of your story.',
+        'A café wall in the morning sun, a quiet corner of your street. Find a spot for your next portrait session.',
     },
     tet_holiday: {
       title: 'A little closer to home',
@@ -214,9 +215,9 @@ export const curationVietnamese: typeof curationEnglish = {
         'Những người bạn cũ, hành lang quen, cả tương lai phía trước. Giữ một thời thanh xuân từng đi qua cùng nhau.',
     },
     outdoor: {
-      title: 'Đi về phía ánh sáng',
+      title: 'Một buổi chụp ngoài trời',
       description:
-        'Một làn gió, một khoảng trời, một nơi chưa từng đến. Để cảnh sắc trở thành một phần câu chuyện của bạn.',
+        'Một góc phố quen hay khoảng nắng bên hiên quán cũng có thể thành nơi chụp bộ chân dung của bạn.',
     },
     tet_holiday: {
       title: 'Gần thêm một chút, là nhà',

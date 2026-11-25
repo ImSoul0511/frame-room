@@ -714,22 +714,11 @@ details summary {
   color: var(--fr-muted);
   font-size: 0.8125rem;
 }
-.loading-dot {
-  width: 7px;
-  height: 7px;
-  background: #a3b77e;
-  border-radius: 50%;
-  animation: pulse 1s infinite;
-}
 .empty-state {
   padding: 60px 24px;
   text-align: center;
   color: var(--fr-muted);
   font-size: 0.875rem;
-}
-.empty-mark {
-  font-size: 2.5rem;
-  color: #a4ad93;
 }
 .status {
   padding: 6px 10px;
@@ -1664,11 +1653,6 @@ details summary {
 }
 .auth-form > h2 {
   font-size: 1.625rem;
-}
-@keyframes pulse {
-  50% {
-    opacity: 0.35;
-  }
 }
 @media (min-width: 1600px) {
   .main-content {

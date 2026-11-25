@@ -1,6 +1,6 @@
 # Backend guide
 
-Read [contribution rules](../docs/contributing.md#backend), the [API draft](../docs/api/contract_v0.md), and the task.
+Read [contribution rules](../docs/contributing.md#backend), the [API contract](../docs/api/mvp.md), and the task. Confirm the registered route in `apps/api/src/routes` before changing callers.
 
 Separate Fastify construction from listening. Use Node ESM with .js imports. Routes delegate business logic to services and data access to repositories; add modules only when needed.
 

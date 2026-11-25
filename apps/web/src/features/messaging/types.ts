@@ -8,6 +8,9 @@ export type Conversation = {
   latestIncomingMessageId?: string | null;
   photographerId: string | null;
   studioId: string | null;
+  bookingId?: string;
+  projectTitle?: string;
+  roomStatus?: 'open' | 'closed';
 };
 
 export type Message = {

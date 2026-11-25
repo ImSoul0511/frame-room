@@ -42,7 +42,7 @@ describe('project mutation authorization', () => {
   it('checks reference ownership before updating and increments version in the write', async () => {
     vi.mocked(repo.findProject).mockResolvedValue(project);
     const verify = vi
-      .spyOn(media, 'verifyReference')
+      .spyOn(media, 'verify')
       .mockRejectedValue(Object.assign(new Error('denied'), { status: 403 }));
     const one = vi.fn();
     await expect(

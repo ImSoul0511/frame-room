@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test('botanical flowers stay joined to their stems while swaying', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto('/explore', { waitUntil: 'domcontentloaded' });
+  await page.goto('/home', { waitUntil: 'domcontentloaded' });
   await expect(page.locator('.hero-flower-left .botanical-main-head')).toBeVisible();
   expect(
     await page.locator('.hero-flower-left .botanical-main-head .botanical-petal').count(),
@@ -58,163 +58,199 @@ test('botanical flowers stay joined to their stems while swaying', async ({ page
 });
 
 for (const width of [1280, 375]) {
-  test(`photo discovery fits ${width}px and uses real collections and taxonomy`, async ({
-    page,
-    request,
-  }) => {
+  test(`Home uses fixed local samples at ${width}px`, async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.setViewportSize({ width, height: 900 });
-    const response = await request.get(
-      'http://localhost:4000/v1/portfolios?pageSize=12&sort=newest',
+    const lookups: string[] = [];
+    page.on('request', (request) => {
+      if (new URL(request.url()).pathname.startsWith('/v1/portfolios')) lookups.push(request.url());
+    });
+    await page.goto('/home#genres');
+    const photo = page.locator('.moodboard-photo img').first();
+    await photo.scrollIntoViewIfNeeded();
+    await expect
+      .poll(() => photo.evaluate((image: HTMLImageElement) => image.naturalWidth))
+      .toBeGreaterThan(0);
+    const samples = () =>
+      page.evaluate(() =>
+        performance
+          .getEntriesByType('resource')
+          .filter(
+            (entry) =>
+              (entry as PerformanceResourceTiming).initiatorType === 'fetch' &&
+              entry.name.includes('.webp'),
+          )
+          .map((entry) => new URL(entry.name).pathname),
+      );
+    const first = await samples();
+    expect(first.length).toBeGreaterThan(0);
+    await page.reload();
+    await photo.scrollIntoViewIfNeeded();
+    await expect.poll(() => samples()).toContain(first[0]);
+    const transfer = await page.evaluate(
+      (path) =>
+        performance
+          .getEntriesByType('resource')
+          .filter(
+            (entry) =>
+              new URL(entry.name).pathname === path &&
+              (entry as PerformanceResourceTiming).initiatorType === 'fetch',
+          )
+          .map((entry) => (entry as PerformanceResourceTiming).transferSize),
+      first[0],
     );
-    expect(response.ok()).toBe(true);
-    const { data: portfolios } = await response.json();
-    const tagsResponse = await request.get('http://localhost:4000/v1/tags');
-    expect(tagsResponse.ok()).toBe(true);
-    const { data: tags } = await tagsResponse.json();
-    await page.goto('/explore', { waitUntil: 'domcontentloaded' });
-    await expect(
-      page.getByRole('heading', { name: 'Every perspective, a story to tell.' }),
-    ).toBeVisible();
-    expect(
-      await page
-        .locator('.topbar-actions > *')
-        .evaluateAll((nodes) => nodes.slice(0, 3).map((node) => node.className)),
-    ).toEqual(['language-switcher', 'user-search', 'notification-bell']);
-    await expect(page.getByText('Reset demo', { exact: true })).toHaveCount(0);
-    await expect(page.locator('.collection-card')).toHaveCount(portfolios.length);
-    await page.screenshot({ path: `.artifacts/explore-${width}.png`, animations: 'disabled' });
-    await page.locator('#collections').scrollIntoViewIfNeeded();
-    await page.locator('.taxonomy-filter > summary').click();
-    const categories = new Set(
-      tags.map((tag: { category?: string; kind: string }) => tag.category || tag.kind),
-    );
-    await expect(page.locator('.taxonomy-groups fieldset')).toHaveCount(categories.size);
-    expect(await page.locator('.taxonomy-groups fieldset button').count()).toBe(tags.length);
+    expect(transfer).toContain(0);
+    expect(lookups).toEqual([]);
+    await expect(page.locator('.glimpse-thumbnail').first()).toHaveCSS('border-top-style', 'solid');
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
       width,
     );
-    await page.locator('.taxonomy-filter > summary').click();
-    await expect(page.locator('.collection-image img').first()).toHaveAttribute('loading', 'lazy');
-    if (portfolios.length) {
-      const first = page.locator('.collection-card').first();
-      await first.scrollIntoViewIfNeeded();
-      await expect(first.getByRole('heading')).toHaveText(portfolios[0].title);
-      if (portfolios[0].description) await expect(first).toContainText(portfolios[0].description);
-      expect(await first.locator('img').evaluate((node) => getComputedStyle(node).objectFit)).toBe(
-        'contain',
-      );
-      await expect
-        .poll(
-          () => first.locator('img').evaluate((node) => (node as HTMLImageElement).naturalWidth),
-          { timeout: 15000 },
-        )
-        .toBeGreaterThan(0);
-      const dimensions = await first.locator('img').evaluate((node) => {
-        const image = node as HTMLImageElement;
-        return {
-          width: image.clientWidth,
-          height: image.clientHeight,
-          ratio: image.clientWidth / image.clientHeight,
-          natural: image.naturalWidth / image.naturalHeight,
-          frameWidth: image.closest('.collection-image')!.clientWidth,
-          frameHeight: image.closest('.collection-image')!.clientHeight,
-        };
+  });
+
+  test(`catalog cards reveal captions over compact images and retain incremental results at ${width}px`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.setViewportSize({ width, height: 900 });
+    const tag = { id: 'tag', name: 'Natural light', slug: 'natural-light', kind: 'mood' };
+    const album = {
+      id: 'album',
+      title: 'Window light',
+      description: 'An afternoon in the studio',
+      ownerType: 'photographer',
+      photographerId: 'photographer',
+      ownerName: 'Linh Nguyen',
+      genre: 'portrait',
+      tags: [tag],
+      coverUrl: '/src/assets/genres/portrait.webp',
+    };
+    const pages: string[] = [];
+    await page.route('**/v1/tags', (route) => route.fulfill({ json: { data: [tag] } }));
+    await page.route('**/v1/portfolios?*', (route) => {
+      const params = new URL(route.request().url()).searchParams;
+      const number = params.get('page') || '1';
+      pages.push(number);
+      return route.fulfill({
+        json: {
+          data:
+            number === '1'
+              ? Array.from({ length: 12 }, (_, index) => ({ ...album, id: `album-${index}` }))
+              : [{ ...album, id: 'last' }],
+        },
       });
-      expect(dimensions.width).toBeLessThanOrEqual(420);
-      expect(dimensions.height).toBeLessThanOrEqual(360);
-      expect(dimensions.ratio).toBeCloseTo(dimensions.natural, 2);
-      expect(Math.abs(dimensions.width - dimensions.frameWidth)).toBeLessThanOrEqual(2);
-      expect(Math.abs(dimensions.height - dimensions.frameHeight)).toBeLessThanOrEqual(2);
-    }
-    await page.screenshot({ path: `.artifacts/collections-${width}.png`, animations: 'disabled' });
-    if (width === 1280) {
-      const nextPage = page.waitForResponse(
-        (response) =>
-          response.url().includes('/v1/portfolios?') &&
-          new URL(response.url()).searchParams.get('page') === '2',
-      );
-      await page.getByRole('button', { name: 'Load more collections' }).click();
-      const nextResponse = await nextPage;
-      expect(nextResponse.ok()).toBe(true);
-      const { data: more } = await nextResponse.json();
-      await expect(page.locator('.collection-card')).toHaveCount(portfolios.length + more.length);
-    }
+    });
+    await page.route('**/v1/portfolios/album-0', (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            portfolio: { ...album, id: 'album-0' },
+            images: [
+              {
+                id: 'photo',
+                caption: 'A quiet portrait',
+                tags: [tag],
+                provenance: 'captured',
+                url: album.coverUrl,
+              },
+            ],
+          },
+        },
+      }),
+    );
+    await page.goto('/genres/portrait?project=project-1');
+    await page.locator('.search-start').scrollIntoViewIfNeeded();
+    const cards = page.locator('.media-card');
+    await expect(cards).toHaveCount(12);
+    expect(pages).not.toContain('2');
+    const first = cards.first();
+    const caption = first.locator('.media-card-caption');
+    await expect(caption).toHaveCSS('opacity', '0');
+    await expect(first.locator('.media-card-copy, .card-tag, .media-card-badge')).toHaveCount(0);
+    await expect(first.getByRole('link', { name: album.title, exact: true })).toHaveAttribute(
+      'href',
+      '/portfolios/album-0?project=project-1',
+    );
+    const image = first.locator('img');
+    await expect.poll(() => image.evaluate((node) => node.naturalWidth)).toBeGreaterThan(0);
+    const dimensions = await image.evaluate((node) => ({
+      fit: getComputedStyle(node).objectFit,
+      width: node.clientWidth,
+      height: node.clientHeight,
+      sourceRatio: node.naturalWidth / node.naturalHeight,
+    }));
+    expect(dimensions.fit).toBe('contain');
+    expect(dimensions.height).toBeLessThanOrEqual(280);
+    expect(dimensions.width / dimensions.height).toBeCloseTo(dimensions.sourceRatio, 2);
+    await page.locator('.load-more button').scrollIntoViewIfNeeded();
+    await expect(cards).toHaveCount(13);
+    await first.getByRole('link').focus();
+    await expect(caption).toHaveCSS('opacity', '1');
+    await expect(caption).toContainText(album.description);
+    await first.getByRole('link').click();
+    await expect(page).toHaveURL(/portfolios\/album-0\?project=project-1$/);
+    await expect(cards).toHaveCount(1);
+    await expect(cards).toContainText('A quiet portrait');
+    await expect(cards.locator('.media-card-copy, .card-tag, .media-card-badge')).toHaveCount(0);
+    await cards.getByRole('button', { name: /A quiet portrait/ }).click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      width,
+    );
   });
 }
 
-test('collection keyword and ordering reach the API and return matching results', async ({
+test('each genre has two distinct, decodable samples and About has both prints', async ({
   page,
 }) => {
-  await page.goto('/explore', { waitUntil: 'domcontentloaded' });
-  await page.locator('#collections').scrollIntoViewIfNeeded();
-  await page.getByLabel('Search', { exact: true }).fill('portrait');
-  const search = page.waitForResponse(
-    (response) =>
-      response.url().includes('/v1/portfolios?') &&
-      new URL(response.url()).searchParams.get('q') === 'portrait',
-  );
-  await page
-    .locator('.collection-search')
-    .getByRole('button', { name: 'Search', exact: true })
-    .click();
-  expect((await search).ok()).toBe(true);
-  const sort = page.waitForResponse(
-    (response) =>
-      response.url().includes('/v1/portfolios?') &&
-      new URL(response.url()).searchParams.get('sort') === 'name',
-  );
-  await page.getByLabel('Sort by', { exact: true }).click();
-  await page.getByRole('option', { name: 'Name: A–Z', exact: true }).click();
-  const response = await sort;
-  expect(response.ok()).toBe(true);
-  const { data } = await response.json();
-  for (const portfolio of data)
-    expect(`${portfolio.title} ${portfolio.description}`.toLowerCase()).toContain('portrait');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/home#genres');
+  const controls = page.locator('.aperture-dots button');
+  await expect(controls).toHaveCount(12);
+  for (const control of await controls.all()) {
+    await control.click();
+    await expect(control).toHaveAttribute('aria-pressed', 'true');
+    const images = page.locator('.moodboard-photo img');
+    await expect(images).toHaveCount(2);
+    for (const image of await images.all()) {
+      await image.scrollIntoViewIfNeeded();
+      await expect.poll(() => image.evaluate((img) => img.naturalWidth)).toBeGreaterThan(0);
+    }
+    const sources = await images.evaluateAll((imgs) => imgs.map((img) => img.currentSrc));
+    expect(new Set(sources).size).toBe(2);
+  }
+  await page.goto('/about');
+  const prints = page.locator('.about-photographs img');
+  await expect(prints).toHaveCount(2);
+  for (const print of await prints.all()) {
+    await expect.poll(() => print.evaluate((img) => img.naturalWidth)).toBeGreaterThan(0);
+  }
 });
 
-for (const width of [1280, 375]) {
-  test(`Explore section transitions and highlights respect motion preferences at ${width}px`, async ({
-    page,
-  }) => {
-    await page.emulateMedia({ reducedMotion: 'no-preference' });
-    await page.setViewportSize({ width, height: 900 });
-    await page.goto('/explore', { waitUntil: 'domcontentloaded' });
-    const hero = page.locator('.hero-content');
-    await expect(hero).toHaveClass(/is-revealed/);
-    expect(
-      await page
-        .locator('.hero-flower-left')
-        .evaluate((node) => parseFloat(getComputedStyle(node).width)),
-    ).toBeLessThanOrEqual(width === 375 ? 225 : 370);
-    const template = page.locator('.template-section');
-    await expect(template).toHaveClass(/reveal-ready/);
-    await expect(template).toHaveCSS('opacity', '0');
-    for (const selector of ['.genre-stories', '.template-section', '.photographer-collection']) {
-      const layer = page.locator(selector);
-      await expect(layer).toBeAttached();
-      const style = await layer.evaluate((node) => {
-        const pseudo = getComputedStyle(node, '::before');
-        return { background: pseudo.backgroundImage, pointerEvents: pseudo.pointerEvents };
-      });
-      expect(style.background).toContain('gradient');
-      expect(style.pointerEvents).toBe('none');
-    }
-    await template.scrollIntoViewIfNeeded();
-    await expect(template).toHaveClass(/is-revealed/);
-    await expect(template).toHaveCSS('opacity', '1');
-    await expect(template.locator('.section-highlight')).toHaveCSS('background-size', /^100% /);
-    await expect(template.locator('.emphasis-link')).toHaveCSS('animation-iteration-count', '1');
-    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
-      width,
-    );
-    await template.screenshot({
-      path: `.artifacts/explore-transition-${width}.png`,
-      animations: 'disabled',
-    });
-    await page.emulateMedia({ reducedMotion: 'reduce' });
-    await expect(template.locator('.emphasis-link')).toHaveCSS('animation-name', 'none');
-    await page.reload({ waitUntil: 'domcontentloaded' });
-    await expect(page.locator('.hero-content')).toHaveCSS('opacity', '1');
-    await expect(page.locator('.template-section')).toHaveCSS('opacity', '1');
+test('collection keyword, taxonomy and ordering reach the catalog API', async ({ page }) => {
+  const queries: URLSearchParams[] = [];
+  const tag = { id: 'soft', name: 'Soft light', slug: 'soft-light', kind: 'mood' };
+  await page.route('**/v1/tags', (route) => route.fulfill({ json: { data: [tag] } }));
+  await page.route('**/v1/portfolios?*', (route) => {
+    queries.push(new URL(route.request().url()).searchParams);
+    return route.fulfill({ json: { data: [] } });
   });
-}
+  await page.goto('/genres/portrait');
+  await page.locator('.collection-search input').fill('window');
+  await page.locator('.collection-search button').click();
+  await page.locator('.taxonomy-filter summary').click();
+  await page.getByRole('button', { name: 'Soft light' }).click();
+  await page.locator('.taxonomy-filter summary').click();
+  await page.getByLabel('Sort by', { exact: true }).click();
+  await page.getByRole('option', { name: /A.Z/ }).click();
+  await expect
+    .poll(() =>
+      queries.some(
+        (query) =>
+          query.get('q') === 'window' &&
+          query.get('genre') === 'portrait' &&
+          query.get('tag') === 'soft-light' &&
+          query.get('sort') === 'name',
+      ),
+    )
+    .toBe(true);
+});

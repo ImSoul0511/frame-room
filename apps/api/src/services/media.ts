@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import sharp, { type Metadata, type OutputInfo } from 'sharp';
+import sharp, { type OutputInfo } from 'sharp';
 import { v7 as uuidv7 } from 'uuid';
 
 import type { ApiEnv } from '../config/env.js';
@@ -14,7 +14,6 @@ export const uploadBuckets = [
   'profile-covers',
   'portfolio-images',
   'brief-references',
-  'search-uploads',
   'gallery-previews',
   'room-files',
   'conversation-files',
@@ -35,6 +34,48 @@ export function uploadInputLimit(bucket: UploadBucket) {
 
 const publicBuckets = new Set(['avatars', 'profile-covers']);
 export const thumbnailPath = (path: string) => path.replace(/\.webp$/, '_thumb.webp');
+export const webpFileName = (name: string) =>
+  `${name.replace(/\.[^.]+$/, '').slice(0, 195) || 'photo'}.webp`;
+
+export async function inspectImage(input: Buffer, declaredMime?: string) {
+  const metadata = await sharp(input, { limitInputPixels: 40_000_000 })
+    .metadata()
+    .catch(() => {
+      throw new ApiError(400, 'VALIDATION_ERROR', 'invalid_image');
+    });
+  const mime = `image/${metadata.format}`;
+  requireCondition(
+    ['image/jpeg', 'image/png', 'image/webp'].includes(mime) &&
+      (declaredMime === undefined || declaredMime === mime) &&
+      (metadata.pages ?? 1) === 1,
+    400,
+    'unsupported_image',
+  );
+  requireCondition(metadata.width && metadata.height, 400, 'invalid_image');
+  return metadata;
+}
+
+// Final photographs retain the delivered resolution up to the WebP format's dimension limit.
+export async function encodeWebp(
+  input: Buffer,
+  maxSide: number,
+  quality: number,
+  byteLimit: number,
+) {
+  try {
+    const image = sharp(input, { limitInputPixels: 40_000_000 })
+      .rotate()
+      .resize(maxSide, maxSide, { fit: 'inside', withoutEnlargement: true });
+    for (let q = quality; q >= 45; q -= 10) {
+      const result = await image.clone().webp({ quality: q }).toBuffer({ resolveWithObject: true });
+      if (result.data.length <= byteLimit) return result;
+    }
+    throw new ApiError(400, 'VALIDATION_ERROR', 'image_too_large');
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(400, 'VALIDATION_ERROR', 'invalid_image');
+  }
+}
 
 export function requireStoragePath(path: string, prefix?: string) {
   requireCondition(
@@ -64,11 +105,11 @@ export class MediaService {
     requireCondition(data.size <= 20 * 1024 * 1024, 400, 'image_too_large');
     return Buffer.from(await data.arrayBuffer());
   }
-  async url(bucket: string, path: string) {
+  async url(bucket: string, path: string, downloadName?: string) {
     requireStoragePath(path);
     const storage = this.client().storage.from(bucket);
     if (publicBuckets.has(bucket)) return storage.getPublicUrl(path).data.publicUrl;
-    const { data, error } = await storage.createSignedUrl(path, 300);
+    const { data, error } = await storage.createSignedUrl(path, 300, { download: downloadName });
     if (error || !data) throw new ApiError(503, 'SERVICE_UNAVAILABLE', 'signed_url_unavailable');
     return data.signedUrl;
   }
@@ -118,41 +159,14 @@ export class MediaService {
   async upload(bucket: UploadBucket, prefix: string, input: Buffer, declaredMime: string) {
     this.client();
     requireCondition(input.length <= uploadInputLimit(bucket), 413, 'image_too_large');
-    let metadata: Metadata;
-    try {
-      metadata = await sharp(input, { limitInputPixels: 40000000 }).metadata();
-    } catch {
-      throw new ApiError(400, 'VALIDATION_ERROR', 'invalid_image');
-    }
-    const mime = metadata.format === 'jpeg' ? 'image/jpeg' : `image/${metadata.format}`;
-    requireCondition(
-      ['image/jpeg', 'image/png', 'image/webp'].includes(mime) &&
-        declaredMime === mime &&
-        (metadata.pages ?? 1) === 1,
-      400,
-      'unsupported_image',
-    );
-    requireCondition(metadata.width && metadata.height, 400, 'invalid_image');
+    await inspectImage(input, declaredMime);
+    const path = `${prefix}/${uuidv7()}.webp`;
     if (bucket === 'deliveries') {
-      try {
-        await sharp(input, { limitInputPixels: 40000000 }).raw().toBuffer();
-      } catch {
-        throw new ApiError(400, 'VALIDATION_ERROR', 'invalid_image');
-      }
-      const path = `${prefix}/${uuidv7()}.${metadata.format === 'jpeg' ? 'jpg' : metadata.format}`;
-      await this.put(bucket, path, input, mime);
-      return { storagePath: path, mimeType: mime, width: metadata.width, height: metadata.height };
+      const { data, info } = await encodeWebp(input, 16383, 88, defaultUploadInputLimit);
+      await this.put(bucket, path, data, 'image/webp');
+      return { storagePath: path, mimeType: 'image/webp', width: info.width, height: info.height };
     }
-    let main: { data: Buffer; info: OutputInfo };
-    try {
-      main = await sharp(input, { limitInputPixels: 40000000 })
-        .rotate()
-        .resize(1280, 1280, { fit: 'inside', withoutEnlargement: true })
-        .webp({ quality: 85 })
-        .toBuffer({ resolveWithObject: true });
-    } catch {
-      throw new ApiError(400, 'VALIDATION_ERROR', 'invalid_image');
-    }
+    let main: { data: Buffer; info: OutputInfo } = await encodeWebp(input, 1280, 85, 2097152);
     if (bucket === 'gallery-previews') {
       const { width, height } = main.info;
       const marks = Buffer.from(
@@ -173,7 +187,6 @@ export class MediaService {
       .webp({ quality: 75 })
       .toBuffer();
     requireCondition(thumbnail.length <= 2097152, 400, 'image_too_large');
-    const path = `${prefix}/${uuidv7()}.webp`;
     await this.put(bucket, path, main.data, 'image/webp');
     try {
       await this.put(bucket, thumbnailPath(path), thumbnail, 'image/webp');
@@ -223,22 +236,5 @@ export class MediaService {
     const result = await this.inspectUpload(bucket, path, 1280);
     await this.inspectUpload(bucket, thumbnailPath(path), 320);
     return result;
-  }
-  async verifyReference(
-    userId: string,
-    bucket: 'brief-references' | 'search-uploads',
-    path: string,
-  ) {
-    await this.verify(bucket, path, userId);
-    if (bucket === 'search-uploads') {
-      const { data, error } = await this.client().storage.from(bucket).info(path);
-      requireCondition(!error && data, 404, 'file_not_found');
-      requireCondition(
-        Number.isFinite(Date.parse(data.createdAt)) &&
-          Date.parse(data.createdAt) > Date.now() - 86400000,
-        410,
-        'reference_expired',
-      );
-    }
   }
 }

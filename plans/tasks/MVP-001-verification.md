@@ -48,6 +48,4 @@ retained as history. The input PDF remains untouched.
 Vite builds successfully with a remaining vendor chunk warning (~870 kB before gzip,
 ~252 kB gzip). Pages/chat load separately. No hosted performance claim is made.
 
-After setting a capped Gateway key, restart API/worker, expand to 100–200 permitted
-labeled images, run `pnpm ai:index`, then `pnpm ai:evaluate`. Inspect real concepts,
-briefs, culling and edited outputs. Retrieval recall and output quality remain unverified.
+Search indexing and evaluation commands in the historical results above have been retired. Review project concepts, briefs, culling suggestions and edits with a capped Gateway key.

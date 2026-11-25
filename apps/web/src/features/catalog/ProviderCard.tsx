@@ -1,71 +1,46 @@
+import { UserAvatar } from '../../components/UserAvatar';
+import { useVisible } from './use-visible';
+import { PortfolioCard } from './PortfolioCard';
 import { Link, useSearchParams } from 'react-router-dom';
 import type { Provider } from '@frameroom/shared';
 import { useApi } from '../../lib/hooks';
 import { useStrings } from '../../lib/i18n';
 import { currency } from '../../lib/format';
-import type { Image, ProviderDetail } from '../../lib/types';
+import type { ProviderDetail } from '../../lib/types';
 import { QueryState } from '../../components/ui';
 
-export function ProviderCard({ provider }: { provider: Provider }) {
+export function ProviderCard({
+  provider,
+}: {
+  provider: Provider & { avatarPath?: string | null };
+}) {
   const t = useStrings();
   const [params] = useSearchParams();
   const plural = provider.type === 'studio' ? 'studios' : 'photographers';
-  const detail = useApi<ProviderDetail>(`/v1/${plural}/${provider.id}`);
+  const { ref, visible } = useVisible<HTMLElement>();
+  const detail = useApi<ProviderDetail>(`/v1/${plural}/${provider.id}`, visible, undefined, 60_000);
   const portfolios = detail.data?.portfolios ?? [];
-  const covers = portfolios.filter((portfolio) => portfolio.coverUrl).slice(0, 3);
-  const firstPortfolio = portfolios[0]?.id;
-  const gallery = useApi<{ images: Image[] }>(
-    `/v1/portfolios/${firstPortfolio ?? ''}`,
-    Boolean(firstPortfolio) && covers.length < 3,
-  );
-  const pictures = [
-    ...new Map([
-      ...covers.map(
-        (portfolio) =>
-          [
-            portfolio.coverUrl!,
-            { url: portfolio.coverUrl!, title: portfolio.title, id: portfolio.id },
-          ] as const,
-      ),
-      ...(gallery.data?.images ?? []).map(
-        (image) =>
-          [
-            image.url,
-            { url: image.url, title: image.caption || portfolios[0].title, id: firstPortfolio! },
-          ] as const,
-      ),
-    ]).values(),
-  ].slice(0, 3);
+  const featured = portfolios.find((portfolio) => portfolio.coverUrl) ?? portfolios[0];
   const project = params.get('project');
   const destination = `/providers/${provider.type}/${provider.id}${project ? `?project=${encodeURIComponent(project)}` : ''}`;
   return (
-    <article className={`directory-card directory-card-${provider.type}`}>
-      <div className="directory-photos" aria-label={t.curation.recentWork}>
-        {pictures.map((picture, index) => (
-          <Link
-            className={`directory-photo photo-${index}`}
-            key={picture.url}
-            to={`/portfolios/${picture.id}`}
-          >
-            <img src={picture.url} alt={picture.title} loading="lazy" decoding="async" />
-          </Link>
-        ))}
-        {!pictures.length ? (
+    <article className={`directory-card directory-card-${provider.type}`} ref={ref}>
+      <div className="directory-featured" aria-label={t.curation.recentWork}>
+        {featured ? (
+          <PortfolioCard portfolio={{ ...featured, ownerName: provider.displayName }} />
+        ) : (
           <div className="directory-no-photo">
-            <span>FrameRoom.</span>
-            <p>
-              {detail.isPending || (firstPortfolio && gallery.isPending)
-                ? t.pending
-                : t.curation.noWork}
-            </p>
+            <p>{detail.isPending ? t.pending : t.curation.noWork}</p>
           </div>
-        ) : null}
+        )}
       </div>
       <div className="directory-card-copy">
         <div className="directory-identity">
-          <span className="directory-monogram" aria-hidden="true">
-            {provider.displayName.slice(0, 1)}
-          </span>
+          <UserAvatar
+            className="directory-monogram"
+            name={provider.displayName}
+            avatarPath={provider.avatarPath ?? detail.data?.avatarPath}
+          />
           <div>
             <p className="eyebrow">
               {provider.type === 'studio' ? t.curation.studios : t.curation.photographers}
@@ -122,8 +97,7 @@ export function ProviderCard({ provider }: { provider: Provider }) {
             </span>
           ) : null}
         </div>
-        <QueryState query={detail} />
-        {gallery.isError ? <QueryState query={gallery} /> : null}
+        {detail.isError ? <QueryState query={detail} /> : null}
         <Link className="text-button emphasis-link" to={destination}>
           {t.discovery.viewProfile}
         </Link>

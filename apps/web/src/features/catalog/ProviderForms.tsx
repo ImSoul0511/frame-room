@@ -1,15 +1,15 @@
-import { useState, type RefObject } from 'react';
+import { useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  genres,
   photographerInputSchema,
+  profileInputSchema,
   serviceInputSchema,
   type OwnPhotographer,
   type Profile,
   type Service,
 } from '@frameroom/shared';
-import { patch, post, upload } from '../../lib/api';
-import { AvatarEditor } from './AvatarEditor';
+import { patch, post, RequestError } from '../../lib/api';
+import { GenreChoices } from './GenreChoices';
 import { useAuth } from '../../lib/auth';
 import { useApi, useTask } from '../../lib/hooks';
 import { useStrings } from '../../lib/i18n';
@@ -42,9 +42,7 @@ function PhotographerEditor({ initial }: { initial: OwnPhotographer | null }) {
   const [selectedGenres, setGenres] = useState<OwnPhotographer['genres']>(
     initial?.genres ?? ['portrait'],
   );
-  const [styles, setStyles] = useState(initial?.styles.join(', ') ?? '');
   const [contact, setContact] = useState(initial?.contactEmail ?? '');
-  const [roles, setRoles] = useState(initial?.professionalRoles ?? []);
   const task = useTask(async () => {
     const input = photographerInputSchema.parse({
       displayName: name,
@@ -53,11 +51,7 @@ function PhotographerEditor({ initial }: { initial: OwnPhotographer | null }) {
       district,
       genres: selectedGenres,
       contactEmail: contact || null,
-      professionalRoles: roles,
-      styles: styles
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean),
+      styles: initial?.styles,
     });
     if (initial) {
       const queryKey = ['api', session?.user.id ?? 'public', '/v1/photographers/me'];
@@ -96,48 +90,7 @@ function PhotographerEditor({ initial }: { initial: OwnPhotographer | null }) {
         onChange={setContact}
         required
       />
-      <fieldset>
-        <legend>{t.portfolio.genre}</legend>
-        {genres.map((genre) => (
-          <label className="checkbox-row" key={genre}>
-            <input
-              type="checkbox"
-              checked={selectedGenres.includes(genre)}
-              disabled={!selectedGenres.includes(genre) && selectedGenres.length >= 5}
-              onChange={(event) =>
-                setGenres(
-                  event.target.checked
-                    ? [...selectedGenres, genre]
-                    : selectedGenres.filter((item) => item !== genre),
-                )
-              }
-            />
-            {t.genreLabels[genre]}
-          </label>
-        ))}
-      </fieldset>
-      <fieldset>
-        <legend>{t.workspaceUi.professionalRoles}</legend>
-        {(['photographer', 'retoucher', 'art_director'] as const).map((role) => (
-          <label className="checkbox-row" key={role}>
-            <input
-              type="checkbox"
-              checked={roles.includes(role)}
-              onChange={(event) =>
-                setRoles(
-                  event.target.checked ? [...roles, role] : roles.filter((item) => item !== role),
-                )
-              }
-            />
-            {role === 'art_director'
-              ? t.workspaceUi.artDirector
-              : role === 'retoucher'
-                ? t.workspaceUi.retoucher
-                : t.photographer}
-          </label>
-        ))}
-      </fieldset>
-      <Field label={t.portfolio.styles} value={styles} onChange={setStyles} />
+      <GenreChoices value={selectedGenres} onChange={setGenres} />
       <Feedback error={task.error} success={task.isSuccess ? t.saved : null} />
       <Action type="submit" pending={task.isPending} disabled={!selectedGenres.length}>
         {t.save}
@@ -238,53 +191,30 @@ export function ServiceForm({
     </Form>
   );
 }
-export function ProfileForm({
-  profile,
-  avatarTriggerRef,
-}: {
-  profile: Profile;
-  avatarTriggerRef?: RefObject<HTMLButtonElement | null>;
-}) {
+export function ProfileForm({ profile }: { profile: Profile }) {
   const t = useStrings();
   const client = useQueryClient();
+  const fields = useRef<HTMLFieldSetElement>(null);
   const [name, setName] = useState(profile.displayName);
   const [username, setUsername] = useState(profile.userName);
-  const [editing, setEditing] = useState(false);
-  const [file, setFile] = useState<File | null>(null);
+  const [saved, setSaved] = useState({
+    displayName: profile.displayName,
+    userName: profile.userName,
+  });
+  const [attempted, setAttempted] = useState(false);
+  const parsed = profileInputSchema.safeParse({ displayName: name, userName: username });
+  const changed =
+    name.trim() !== saved.displayName || username.trim().toLowerCase() !== saved.userName;
   const task = useMutation({
-    mutationFn: async (input: { displayName: string; userName: string; file: File | null }) => {
-      const updated = await patch<Profile>('/v1/me', {
-        displayName: input.displayName,
-        userName: input.userName,
-      });
+    mutationFn: (input: { displayName: string; userName: string }) =>
+      patch<Profile>('/v1/me', input),
+    onMutate: () => client.cancelQueries({ queryKey: ['profile', profile.id] }),
+    onSuccess: (updated) => {
       client.setQueryData(['profile', profile.id], updated);
-      if (input.file) {
-        const avatarPath = (await upload(input.file, 'avatars')).storagePath;
-        const withAvatar = await patch<Profile>('/v1/me/avatar', { avatarPath });
-        client.setQueryData(['profile', profile.id], withAvatar);
-        void client.invalidateQueries({ queryKey: ['conversation'] });
-        void client.invalidateQueries({ queryKey: ['people-search'] });
-      }
-    },
-    onMutate: async (input) => {
-      setEditing(false);
-      const queryKey = ['profile', profile.id];
-      await client.cancelQueries({ queryKey });
-      const previous = client.getQueryData<Profile>(queryKey);
-      client.setQueryData<Profile>(queryKey, (current) =>
-        current
-          ? { ...current, displayName: input.displayName, userName: input.userName }
-          : current,
-      );
-      return { previous };
-    },
-    onError: (_error, _input, context) => {
-      if (context?.previous) client.setQueryData(['profile', profile.id], context.previous);
-      setEditing(true);
-    },
-    onSuccess: () => {
-      setEditing(false);
-      setFile(null);
+      setName(updated.displayName);
+      setUsername(updated.userName);
+      setSaved({ displayName: updated.displayName, userName: updated.userName });
+      setAttempted(false);
     },
     onSettled: () =>
       Promise.all([
@@ -292,64 +222,81 @@ export function ProfileForm({
         client.invalidateQueries({ queryKey: ['api', profile.id, '/v1/me'] }),
       ]),
   });
+  const usernameTaken =
+    task.error instanceof RequestError && task.error.reason === 'user_name_taken';
+  const invalidField = (field: 'displayName' | 'userName') =>
+    attempted && !parsed.success && parsed.error.issues.some((issue) => issue.path[0] === field);
   return (
     <Form
       onSubmit={() => {
-        if (editing && !task.isPending)
-          task.mutate({ displayName: name, userName: username, file });
+        if (!changed || task.isPending) return;
+        setAttempted(true);
+        if (!parsed.success) {
+          const autocomplete =
+            parsed.error.issues[0].path[0] === 'displayName' ? 'nickname' : 'username';
+          fields.current
+            ?.querySelector<HTMLInputElement>(`input[autocomplete="${autocomplete}"]`)
+            ?.focus();
+          return;
+        }
+        task.mutate(parsed.data);
       }}
     >
-      <AvatarEditor
-        profile={profile}
-        file={file}
-        editing={editing}
-        disabled={task.isPending}
-        triggerRef={avatarTriggerRef}
-        onStartEdit={() => {
-          task.reset();
-          setEditing(true);
-        }}
-        onChange={setFile}
-      />
-      <fieldset className="profile-edit-fields" disabled={!editing || task.isPending}>
+      <fieldset ref={fields} className="profile-edit-fields" disabled={task.isPending}>
         <Field
           label={t.displayName}
           value={name}
-          onChange={setName}
-          disabled={!editing || task.isPending}
+          onChange={(value) => {
+            setName(value);
+            task.reset();
+          }}
+          description={t.profileUi.displayNameHint}
+          error={invalidField('displayName') ? t.profileUi.displayNameInvalid : undefined}
+          autoComplete="nickname"
+          required
+          disabled={task.isPending}
         />
         <Field
           label={t.userName}
           value={username}
-          onChange={setUsername}
-          disabled={!editing || task.isPending}
+          onChange={(value) => {
+            setUsername(value);
+            task.reset();
+          }}
+          description={t.profileUi.usernameHint}
+          error={
+            usernameTaken
+              ? t.errors.user_name_taken
+              : invalidField('userName')
+                ? t.profileUi.usernameHint
+                : undefined
+          }
+          autoComplete="username"
+          required
+          disabled={task.isPending}
         />
       </fieldset>
-      <Feedback error={task.error} />
+      <Feedback
+        error={usernameTaken ? null : task.error}
+        success={task.isSuccess ? t.saved : null}
+      />
       <div className="profile-update-action">
-        {editing ? (
+        <Action type="submit" pending={task.isPending} disabled={!changed}>
+          {t.save}
+        </Action>
+        {changed ? (
           <Action
-            onClick={() => task.mutate({ displayName: name, userName: username, file })}
-            pending={task.isPending}
-          >
-            {t.profileUi.confirmUpdate}
-          </Action>
-        ) : (
-          <Action
+            secondary
             disabled={task.isPending}
             onClick={() => {
+              setName(saved.displayName);
+              setUsername(saved.userName);
+              setAttempted(false);
               task.reset();
-              setEditing(true);
             }}
           >
-            {t.profileUi.update}
+            {t.cancel}
           </Action>
-        )}
-        {!editing && (task.isPending || task.isSuccess) ? (
-          <span className="profile-update-confirmed" role="status">
-            <span aria-hidden="true">✓</span>
-            <span className="sr-only">{task.isPending ? t.pending : t.saved}</span>
-          </span>
         ) : null}
       </div>
     </Form>

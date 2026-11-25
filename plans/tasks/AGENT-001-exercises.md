@@ -31,7 +31,7 @@ Prompt: "Read-only review: replace implicit GET /me initialization with an expli
 | Browser                | Distinguish explicit missing-profile outcome from outage; resume after failed initialization; clear user cache on account changes. Existing health view is unaffected                                                                                                |
 | Types / other services | Generated DB types wait for successful accepted migration replay. No Storage/Realtime/media/AI/Tauri behavior is introduced by onboarding                                                                                                                            |
 
-Result: [packet inventory](../../docs/features/auth/packet.md#4-boundary-map-and-contract-inventory) and [ADR](../../docs/adr/0003-auth-profile-initialization.md) label every addition proposed. Tests are future scenarios, including normalized username races, same-user retries, response loss, unauthorized access, and private/public projections. No endpoint/shared/schema edit was made. G1 remains unresolved in both numbered decision tables.
+Result: [packet inventory](../../docs/features/auth/packet.md#4-boundary-map-and-contract-inventory) and ADR (historical design) label every addition proposed. Tests are future scenarios, including normalized username races, same-user retries, response loss, unauthorized access, and private/public projections. No endpoint/shared/schema edit was made. G1 remains unresolved in both numbered decision tables.
 
 ## 3. Supabase migration
 

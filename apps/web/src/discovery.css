@@ -1,0 +1,343 @@
+.discovery-dashboard {
+  --fr-ink: #514251;
+  --fr-muted: #756574;
+  --fr-accent: #795d78;
+  --fr-line: #dfd0da;
+  --color-accent: #795d78;
+  --color-text-primary: #514251;
+  --color-text-secondary: #756574;
+  --color-border: #d8c6d2;
+  --color-background-popover: #fffaf5;
+  margin: 28px 0 48px;
+  padding: clamp(20px, 3vw, 40px);
+  border: 1px solid #ffffff80;
+  border-radius: 30px;
+  background: #eee2e5;
+  color: var(--fr-ink);
+}
+.discovery-heading {
+  padding: 4px 4px 28px;
+}
+.discovery-heading .eyebrow {
+  margin: 0 0 12px;
+  color: #795d78;
+}
+.discovery-heading h1 {
+  max-width: 850px;
+  margin: 0 0 12px;
+  font-size: clamp(1.8rem, 3.2vw, 2.65rem);
+  line-height: 1.3;
+  font-family: var(--font-family-body);
+  font-weight: 500;
+  letter-spacing: -0.045em;
+  color: #514251;
+}
+.discovery-heading > p:last-child {
+  max-width: 720px;
+  margin: 0;
+  color: var(--fr-muted);
+  font-size: 0.94rem;
+}
+.discovery-dashboard .discovery-layout {
+  grid-template-columns: 250px minmax(0, 1fr);
+  gap: 24px;
+  padding: 0;
+}
+.discovery-dashboard .discovery-sidebar {
+  position: sticky;
+  top: var(--sidebar-top, 24px);
+  width: auto;
+  padding: 24px 20px;
+  border: 1px solid #fff8;
+  border-radius: 22px;
+  background: #f7eee8;
+  max-height: calc(100dvh - var(--sidebar-top, 24px) - 24px);
+  scrollbar-gutter: stable;
+}
+.discovery-dashboard .discovery-sidebar-header {
+  position: static;
+  background: transparent;
+}
+.discovery-sidebar-header h2 {
+  margin: 0 0 18px;
+  font-family: var(--font-family-body);
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+.discovery-dashboard .discovery-sidebar-search {
+  border-color: #dacbd3;
+  border-radius: 14px;
+  background: #fffaf5;
+}
+.discovery-dashboard .discovery-sidebar-search input {
+  font-size: 0.8rem;
+  color: var(--fr-ink);
+}
+.discovery-dashboard .discovery-sidebar-search button {
+  color: #795d78;
+}
+.discovery-dashboard .discovery-tabs {
+  gap: 8px;
+}
+.discovery-dashboard .discovery-tabs button {
+  min-height: 54px;
+  gap: 10px;
+  border-radius: 14px;
+  color: #6b5369;
+  font-size: 0.875rem;
+}
+.discovery-dashboard .discovery-tabs button:hover {
+  background: #eee0e7;
+}
+.discovery-dashboard .discovery-tabs button.active {
+  background: #e5d4e0;
+}
+.discovery-dashboard .discovery-tab-icon {
+  width: 32px;
+  height: 32px;
+  background: #eadde5;
+}
+.discovery-dashboard .active .discovery-tab-icon {
+  background: #80617d;
+}
+.discovery-dashboard .directory-filters {
+  gap: 18px;
+  margin-top: 24px;
+  padding: 24px 0 0;
+  border-top: 1px solid #dfd0da;
+}
+.discovery-dashboard .directory-filters h2 {
+  font-family: var(--font-family-body);
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.discovery-dashboard .fr-selector-control {
+  border-color: #d8c6d2;
+  border-radius: 12px;
+  background: #fffaf5;
+  color: #514251;
+}
+.discovery-dashboard .astryx-button {
+  border-radius: 12px;
+}
+.discovery-dashboard .astryx-button[data-variant='primary'] {
+  background: #795d78;
+  color: #fffaf5;
+}
+.discovery-dashboard .text-button {
+  color: #795d78;
+}
+.discovery-dashboard .discovery-results {
+  padding: 26px;
+  border: 1px solid #fff9;
+  border-radius: 22px;
+  background: #faf4ed;
+}
+.discovery-results-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid #e6dce0;
+}
+.discovery-results-heading h2 {
+  margin: 0 0 8px;
+  font-size: 1.65rem;
+  font-family: var(--font-family-body);
+  font-weight: 500;
+  letter-spacing: -0.035em;
+  color: #514251;
+}
+.discovery-results-heading p {
+  margin: 0;
+  color: var(--fr-muted);
+  font-size: 0.875rem;
+}
+.discovery-results-heading .discovery-result-count {
+  display: grid;
+  flex: none;
+  max-width: 145px;
+  gap: 2px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: #eadce5;
+  font-size: 0.72rem;
+}
+.discovery-result-count strong {
+  color: #795d78;
+  font-size: 1.4rem;
+  font-weight: 500;
+  line-height: 1.2;
+}
+.discovery-dashboard .discovery-query {
+  margin: 18px 0 0;
+}
+.discovery-dashboard .photographer-search-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.discovery-dashboard .photographer-search-card {
+  display: flex;
+  flex-direction: column;
+  max-width: none;
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid #ddcdd8;
+  border-radius: 20px;
+  background: #eee1e8;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+.discovery-dashboard .photographer-search-card:nth-child(4n + 2),
+.discovery-dashboard .photographer-search-card:nth-child(4n + 3) {
+  background: #e8e1ec;
+}
+.discovery-dashboard .photographer-search-card:hover {
+  border-color: #af8da8;
+  box-shadow: 0 6px 18px #76577312;
+}
+.discovery-dashboard .photographer-search-link {
+  gap: 12px;
+  padding: 0;
+}
+.discovery-dashboard .photographer-search-card:hover .photographer-search-link {
+  background: transparent;
+}
+.discovery-dashboard .photographer-search-avatar {
+  width: 52px;
+  height: 52px;
+  border: 3px solid #fff8;
+  background: #d5bed1;
+  color: #654d62;
+  font-weight: 500;
+}
+.discovery-dashboard .photographer-search-identity strong {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #514251;
+}
+.discovery-dashboard .photographer-search-identity span {
+  font-size: 0.78rem;
+}
+.photographer-card-body {
+  display: grid;
+  gap: 12px;
+  padding: 18px 0;
+  font-size: 0.875rem;
+}
+.photographer-card-body p {
+  margin: 0;
+}
+.photographer-card-location {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #6e576b;
+  overflow-wrap: anywhere;
+}
+.photographer-card-location svg {
+  flex: none;
+}
+.discovery-dashboard .photographer-search-bio {
+  min-height: 2.8em;
+  color: #756574;
+  overflow-wrap: anywhere;
+  -webkit-line-clamp: 2;
+}
+.photographer-card-genres {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.photographer-card-genres span {
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: #fff8;
+  color: #6e576b;
+  font-size: 0.75rem;
+}
+.photographer-card-profile {
+  align-self: flex-start;
+  margin-top: auto;
+  padding: 8px 14px;
+  border: 1px solid #cdb7c8;
+  border-radius: 10px;
+  color: #674f63;
+  background: #faf4edb3;
+  font-size: 0.8rem;
+  text-decoration: none;
+}
+.photographer-card-profile:hover {
+  background: #fffaf5;
+}
+.discovery-dashboard :is(a, button, input):focus-visible {
+  outline: 2px solid #795d78;
+  outline-offset: 4px;
+}
+.discovery-end {
+  margin: 28px 0 0;
+  text-align: center;
+  color: var(--fr-muted);
+  font-size: 0.8rem;
+}
+@media (max-width: 1100px) {
+  .discovery-dashboard .discovery-layout {
+    grid-template-columns: 230px minmax(0, 1fr);
+    gap: 18px;
+  }
+  .discovery-dashboard .photographer-search-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 760px) {
+  .app-layout:has(.discovery-dashboard) .masthead .topbar-actions {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .app-layout:has(.discovery-dashboard) .masthead-auth {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-self: end;
+  }
+  .app-layout:has(.discovery-dashboard) .topbar-actions .user-search {
+    grid-row: 3;
+  }
+  .discovery-dashboard {
+    margin: 16px 0 28px;
+    padding: 16px;
+    border-radius: 22px;
+  }
+  .discovery-dashboard .discovery-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .discovery-dashboard .discovery-sidebar {
+    position: static;
+    padding: 20px 16px;
+    max-height: none;
+    overflow: visible;
+  }
+  .discovery-dashboard .discovery-results {
+    grid-column: 1;
+    padding: 20px 16px;
+  }
+  .discovery-results-heading {
+    flex-direction: column;
+  }
+  .discovery-results-heading .discovery-result-count {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    max-width: none;
+  }
+  .discovery-dashboard .photographer-search-card {
+    padding: 18px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .discovery-dashboard .photographer-search-card {
+    transition: none;
+  }
+}

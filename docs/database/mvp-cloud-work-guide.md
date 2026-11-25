@@ -19,15 +19,15 @@ migrations and key distribution are implementation tasks in this guide.
 
 ### Read and explain back
 
-1. [Database overview](database-overview.md) and [table specifications](table-specifications.md).
-2. [ERD](erd.md), [foreign keys](relationships.md), [constraints/indexes](constraints-and-indexes.md)
+1. [Ordered migrations](../../supabase/migrations) and [table specifications](table-specifications.md).
+2. [ERD](erd.md), [foreign keys](relationships.md), [migration SQL](../../supabase/migrations)
    and [functions/triggers](functions-and-triggers.md).
 3. [RLS policies](rls-policies.md), [Storage configuration](storage-configuration.md),
    [Cloud setup](../infrastructure/supabase-cloud-setup.md) and
    [migration workflow](../infrastructure/migration-workflow.md).
 4. [Contribution rules](../contributing.md), [database agent guide](../../agents/database.md),
    [Backend work plan](../backend/mvp-rebuild-work-plan.md) and
-   [AI Search plan](../ai/ai-search-work-plan.md).
+   [Current AI capabilities](../ai/current-ai-capabilities.md).
 
 After reading, Ly explains what identifies a user, who can manage a studio, why a
 booking needs one transaction, and which media is public. Quynh Anh uses a two-account
@@ -70,7 +70,6 @@ an empty educational seed. Inspect every source below through `git show`.
 | `apps/api/src/demo-seed.ts`                                        | Synthetic Auth/profile/provider/service/resource/media setup and ownership mapping. Hardcoded local guard, demo password and image sources require redesign. |
 | `apps/api/src/verify-database.ts`, `tests/e2e/mvp.spec.ts`         | Allowed/denied and workflow scenarios to adapt to designated Cloud test data.                                                                                |
 | `scripts/db-types.mjs`, `scripts/local-env.mjs`                    | Local-only type/env assumptions to replace with explicit Cloud project targeting.                                                                            |
-| `apps/api/src/index-portfolios.ts`, `evaluate-search.ts`           | Local-only indexing/evaluation entry points coordinated with AIS-104/105.                                                                                    |
 
 ```powershell
 git show feature/MVP-001-ai-focused-workflow:supabase/migrations/20261030000100_mvp_core.sql
@@ -162,7 +161,7 @@ as Storage paths and polymorphic report targets that lack declared FKs.
    check precedes migration/type generation. [Supabase connection guide](https://supabase.com/docs/guides/database/connecting-to-postgres)
 
 Decide explicit profile initialization with Khai and Khoa. The existing
-[proposed ADR](../adr/0003-auth-profile-initialization.md) and reference `POST /v1/me`
+proposed ADR (historical design) and reference `POST /v1/me`
 need reconciliation. Keep Auth signup and profile creation as their actual transaction
 boundaries when using API onboarding. An incomplete Auth account can resume onboarding.
 
@@ -214,8 +213,8 @@ assigned below.
 Use migrations to create buckets and `storage.objects` policies from the
 [Storage specification](storage-configuration.md). Public buckets are `avatars`,
 `profile-covers`, `portfolio-images`, capped at 2 MiB WebP. Private 2 MiB WebP buckets
-are `gallery-previews`, `brief-references`, `room-files`, `search-uploads`.
-`ai-artifacts` permits 5 MiB WebP. `deliveries` permits 20 MiB JPEG/PNG/WebP.
+include `gallery-previews`, `brief-references`, `room-files`, `conversation-files` and the legacy `search-uploads` bucket.
+`ai-artifacts` permits 5 MiB WebP. Final delivery uploads are encoded as WebP within 20 MiB. Deploy the updated API before applying the WebP-only delivery bucket migration.
 
 API image normalization and object ownership must agree with these caps. Test the
 five-minute signed URL expiry, wrong-owner reads and path registration. An existing

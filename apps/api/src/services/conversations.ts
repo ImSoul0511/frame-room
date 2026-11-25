@@ -44,7 +44,8 @@ export async function readConversation(tx: Transaction, id: string) {
   requireCondition(allowed, 404, 'not_found');
 }
 
-export function listConversations(tx: Transaction) {
+export function listConversations(tx: Transaction, directOnly = false) {
+  const scope = directOnly ? 'and m.room_id is null' : '';
   return tx.rows(
     `select c.*, p.display_name as client_name, p.avatar_path as client_avatar_path,
        coalesce(s.name, ph.display_name) as provider_name, pp.avatar_path as provider_avatar_path,
@@ -54,13 +55,39 @@ export function listConversations(tx: Transaction) {
      left join profiles pp on pp.id=ph.user_id
      left join lateral (
        select m.id from room_messages m
-       where m.conversation_id=c.id and m.sender_id <> auth.uid()
+       where m.conversation_id=c.id ${scope} and m.sender_id <> auth.uid()
          and m.type <> 'system' and private.can_read_conversation_message(m.id)
        order by m.created_at desc, m.id desc limit 1
      ) latest_incoming on true
      where private.can_read_conversation(c.id)
-     order by coalesce((select max(m.created_at) from room_messages m where m.conversation_id=c.id),
+     order by coalesce((select max(m.created_at) from room_messages m where m.conversation_id=c.id ${scope}),
        c.created_at) desc, c.id desc limit 100`,
+  );
+}
+
+// The booking creates its shoot room at confirmation, even before anyone sends a message.
+const readableRoom = `private.can_read_booking(b.id) and
+  (private.can_read_room(r.id) or private.can_read_conversation(b.conversation_id))`;
+
+export function listProjectThreads(tx: Transaction) {
+  return tx.rows(
+    `select r.id, case when b.status in ('confirmed', 'in_progress') then r.status
+         else 'closed' end as room_status, b.id as booking_id, cp.title as project_title,
+       b.client_id, b.photographer_id, b.studio_id, p.display_name as client_name,
+       p.avatar_path as client_avatar_path, coalesce(s.name, ph.display_name) as provider_name,
+       pp.avatar_path as provider_avatar_path, latest.id as latest_incoming_message_id
+     from shoot_rooms r join bookings b on b.id=r.booking_id
+     join creative_projects cp on cp.id=b.project_id join profiles p on p.id=b.client_id
+     left join studios s on s.id=b.studio_id left join photographers ph on ph.id=b.photographer_id
+     left join profiles pp on pp.id=ph.user_id
+     left join lateral (
+       select m.id from room_messages m where m.room_id=r.id and m.sender_id <> auth.uid()
+         and m.type <> 'system' and private.can_read_conversation_message(m.id)
+       order by m.created_at desc, m.id desc limit 1
+     ) latest on true
+     where ${readableRoom}
+     order by coalesce((select max(m.created_at) from room_messages m where m.room_id=r.id),
+       r.created_at) desc, r.id desc limit 100`,
   );
 }
 
@@ -73,16 +100,31 @@ export type ConversationMessage = {
   createdAt: string;
 };
 
-export async function listMessages(tx: Transaction, id: string, before: string | null) {
-  await readConversation(tx, id);
+export async function listMessages(
+  tx: Transaction,
+  id: string,
+  before: string | null,
+  scope: 'all' | 'direct' | 'room' = 'all',
+) {
+  if (scope === 'room') {
+    await tx.one(
+      `select r.id from shoot_rooms r join bookings b on b.id=r.booking_id
+       where r.id=$1 and ${readableRoom}`,
+      [id],
+    );
+  } else {
+    await readConversation(tx, id);
+  }
+  const contextColumn = scope === 'room' ? 'room_id' : 'conversation_id';
+  const directFilter = scope === 'direct' ? 'and m.room_id is null' : '';
   const rows = await tx.rows<ConversationMessage & { bookingId: string | null }>(
     `select m.*, r.booking_id, p.display_name as sender_name, p.avatar_path as sender_avatar_path
      from room_messages m left join shoot_rooms r on r.id=m.room_id
      left join profiles p on p.id=m.sender_id
-     where m.conversation_id=$1 and private.can_read_conversation_message(m.id)
+     where m.${contextColumn}=$1 ${directFilter} and private.can_read_conversation_message(m.id)
        and ($2::uuid is null or (m.created_at,m.id) <
-          (select created_at,id from room_messages where id=$2 and conversation_id=$1
-           and private.can_read_conversation_message(id)))
+          (select m.created_at,m.id from room_messages m where m.id=$2 and m.${contextColumn}=$1
+           ${directFilter} and private.can_read_conversation_message(m.id)))
      order by m.created_at desc, m.id desc limit 51`,
     [id, before],
   );

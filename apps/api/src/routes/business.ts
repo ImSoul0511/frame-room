@@ -13,17 +13,16 @@ import {
   type ApiModule,
   type RouteMethod,
 } from '../plugins/route.js';
-import { assertProviderOwnership, requirePortfolioOwnership } from '../services/catalog.js';
+import { assertProviderOwnership } from '../services/catalog.js';
 import * as bookings from '../services/bookings.js';
 import * as room from '../services/collaboration.js';
 import * as conversations from '../services/conversations.js';
 import * as moderation from '../services/moderation.js';
 import { access, admin, booking, manager, project, providerSide } from '../services/access.js';
-import { MediaService } from '../services/media.js';
+import { MediaService, webpFileName } from '../services/media.js';
 import { AiService } from '../services/ai.js';
-import { enqueue, enqueueIndex } from '../services/ai-jobs.js';
+import { enqueue } from '../services/ai-jobs.js';
 import { confirmAction } from '../services/ai-actions.js';
-import { search } from '../services/search.js';
 import { aiStreamError } from '../services/ai-language.js';
 
 type Context = {
@@ -116,23 +115,6 @@ function registerBusiness(app: FastifyInstance, deps: ApiDependencies) {
       ),
     };
   });
-  if (env.AI_SEARCH_ENABLED) {
-    route(
-      'POST',
-      '/v1/portfolio-images/:id/index',
-      empty,
-      async (c, tx) => {
-        ai.ready();
-        const image = await tx.one<{ portfolioId: string }>(
-          'select portfolio_id from portfolio_images where id=$1',
-          [c.params.id],
-        );
-        await requirePortfolioOwnership(tx, c.userId, image.portfolioId);
-        return enqueueIndex(tx, c.userId, c.params.id, env, uuidv7());
-      },
-      { status: 202 },
-    );
-  }
   route('GET', '/v1/creative-projects/:id/messages', empty, async (c, tx) => {
     await project(tx, c.params.id);
     return tx.rows(
@@ -213,7 +195,7 @@ function registerBusiness(app: FastifyInstance, deps: ApiDependencies) {
   );
   route('POST', '/v1/booking-requests', schemas.initialBookingInputSchema, async (c, tx, i) => {
     for (const path of i.brief.requirements.referencePaths)
-      await media.verifyReference(c.userId, 'brief-references', path);
+      await media.verify('brief-references', path, c.userId);
     return bookings.requestBooking(tx, c.userId, i, c.requestKey);
   });
   route('GET', '/v1/bookings/:id/available-photographers', empty, (c, tx) =>
@@ -287,7 +269,12 @@ function registerBusiness(app: FastifyInstance, deps: ApiDependencies) {
       [c.params.id, c.userId],
     ),
   );
-  route('GET', '/v1/conversations', empty, (_c, tx) => conversations.listConversations(tx));
+  route('GET', '/v1/conversations', empty, (c, tx) =>
+    conversations.listConversations(tx, c.query.scope === 'direct'),
+  );
+  route('GET', '/v1/project-conversations', empty, (_c, tx) =>
+    conversations.listProjectThreads(tx),
+  );
   route('POST', '/v1/conversations', schemas.conversationInputSchema, (c, tx, i) =>
     conversations.contact(tx, {
       clientId: c.userId,
@@ -300,6 +287,7 @@ function registerBusiness(app: FastifyInstance, deps: ApiDependencies) {
       tx,
       c.params.id,
       c.query.before ? schemas.idSchema.parse(c.query.before) : null,
+      c.query.scope === 'direct' ? 'direct' : 'all',
     ),
   );
   route(
@@ -364,8 +352,11 @@ function registerBusiness(app: FastifyInstance, deps: ApiDependencies) {
     );
     result.deliveries = await Promise.all(
       result.deliveries.map(async (i) => {
-        const file = i as { storagePath: string };
-        return { ...(i as object), url: await media.url('deliveries', file.storagePath) };
+        const file = i as { storagePath: string; fileName: string };
+        return {
+          ...(i as object),
+          url: await media.url('deliveries', file.storagePath, file.fileName),
+        };
       }),
     );
     return result;
@@ -378,7 +369,7 @@ function registerBusiness(app: FastifyInstance, deps: ApiDependencies) {
         "select id from brief_versions where booking_id=$1 and content->'requirements'->'referencePaths' ? $2 limit 1",
         [c.params.id, path],
       );
-      if (!inherited) await media.verifyReference(c.userId, 'brief-references', path);
+      if (!inherited) await media.verify('brief-references', path, c.userId);
     }
     return bookings.createBrief(tx, c.params.id, c.userId, i);
   });
@@ -404,6 +395,14 @@ function registerBusiness(app: FastifyInstance, deps: ApiDependencies) {
     empty,
     (c, tx) => bookings.approveBrief(tx, c.params.id, c.params.briefId, c.userId),
     { status: 200 },
+  );
+  route('GET', '/v1/shoot-rooms/:id/messages', empty, (c, tx) =>
+    conversations.listMessages(
+      tx,
+      c.params.id,
+      c.query.before ? schemas.idSchema.parse(c.query.before) : null,
+      'room',
+    ),
   );
   route('POST', '/v1/shoot-rooms/:id/messages', schemas.messageInputSchema, async (c, tx, i) => {
     await access(tx, 'room', c.params.id);
@@ -481,7 +480,13 @@ function registerBusiness(app: FastifyInstance, deps: ApiDependencies) {
       const file = await media.verify('deliveries', i.storagePath, c.params.id, false);
       return tx.one(
         'insert into deliveries(booking_id,storage_path,file_name,mime_type,selection_round) values($1,$2,$3,$4,$5) returning *',
-        [c.params.id, i.storagePath, i.fileName, file.mimeType, round],
+        [
+          c.params.id,
+          i.storagePath,
+          file.mimeType === 'image/webp' ? webpFileName(i.fileName) : i.fileName,
+          file.mimeType,
+          round,
+        ],
       );
     },
   );
@@ -625,18 +630,6 @@ function registerBusiness(app: FastifyInstance, deps: ApiDependencies) {
   );
 
   // AI network calls are outside DB transactions; persisted reservations serialize spend.
-  if (env.AI_SEARCH_ENABLED) {
-    app.post('/v1/search', async (request) => {
-      const actor = await authenticateVerified(authenticate, request.headers.authorization);
-      return search(
-        db,
-        ai,
-        actor.id,
-        schemas.searchInputSchema.parse(request.body),
-        schemas.requestLanguage(request.headers['accept-language']),
-      );
-    });
-  }
   app.post('/v1/creative-projects/:id/assistant', async (request) => {
     const actor = await authenticateVerified(authenticate, request.headers.authorization);
     const id = schemas.idSchema.parse((request.params as { id: string }).id);

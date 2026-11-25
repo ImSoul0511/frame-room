@@ -7,6 +7,7 @@ import { post } from '../lib/api';
 import { Feedback, QueryState } from '../components/ui';
 import { ProviderProfile } from '../features/profiles/ProviderProfile';
 import { useStrings } from '../lib/i18n';
+import { openDirectChat } from '../features/messaging/inbox-data';
 
 export function ProviderPage() {
   const t = useStrings();
@@ -21,7 +22,8 @@ export function ProviderPage() {
       providerType: type,
       providerId: id,
     });
-    navigate(`/messages?conversation=${conversation.id}`);
+    openDirectChat(conversation.id);
+    if (params.get('intent') === 'contact') navigate(`/providers/${type}/${id}`, { replace: true });
   });
   const resumeContact = contactTask.mutate;
   const contactIntent = params.get('intent') === 'contact';

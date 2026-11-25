@@ -96,6 +96,7 @@ export const publicPortfolioSchema = z.object({
   genre: genreSchema,
   status: portfolioStatusSchema,
   ownerType: providerTypeSchema,
+  ownerName: z.string().nullish(),
   photographerId: idSchema.nullable(),
   studioId: idSchema.nullable(),
   publishedAt: z.string().nullable(),
@@ -190,19 +191,7 @@ export const portfolioListQuerySchema = paginationSchema.extend({
   sort: z.enum(['newest', 'oldest', 'name']).optional(),
 });
 
-export const ownedPortfolioSchema = z.object({
-  id: idSchema,
-  title: shortText,
-  description,
-  genre: genreSchema,
-  status: portfolioStatusSchema,
-  ownerType: providerTypeSchema,
-  photographerId: idSchema.nullable(),
-  studioId: idSchema.nullable(),
-  publishedAt: z.string().nullable(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-});
+export const ownedPortfolioSchema = publicPortfolioSchema;
 
 export const portfolioImageInputSchema = sharedPortfolioImageInputSchema.extend({
   sortOrder: z.number().int().min(0).default(0),

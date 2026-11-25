@@ -1,5 +1,7 @@
 # AI implementation roadmap
 
+> Historical proposal. For current behavior see the [implementation contract](../api/mvp.md) and [AI capabilities](../ai/current-ai-capabilities.md).
+
 | Step | AI Developer deliverable                                                                                            | Required review evidence                                                      |
 | ---- | ------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | 1    | Agree [internal service contract](ai-service-contract.md) with Backend Developer and select model/version/dimension | Schema examples, timeout and failure mapping                                  |

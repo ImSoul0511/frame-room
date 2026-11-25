@@ -1,6 +1,6 @@
 # Table specifications
 
-Confirmed source: the eight ordered `supabase/migrations/20261030*.sql` files on the MVP branch. All are absent on checked out `main`. Definitions below preserve SQL column declarations. Read later ALTER statements in [constraints-and-indexes.md](constraints-and-indexes.md). `auth.users` and `storage.objects` are Supabase managed.
+The October migrations establish these baseline tables. Apply the complete [migration history](../../supabase/migrations) for later columns, constraints and indexes. Supabase manages `auth.users` and `storage.objects`.
 
 ## `public.profiles`
 

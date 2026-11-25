@@ -26,9 +26,26 @@ const DiscoverySearchPage = lazy(() =>
   import('./pages/DiscoverySearchPage').then((m) => ({ default: m.DiscoverySearchPage })),
 );
 const AboutPage = lazy(() => import('./pages/AboutPage').then((m) => ({ default: m.AboutPage })));
-function LegacySearchRedirect() {
+const GuidePage = lazy(() => import('./pages/GuidePage').then((m) => ({ default: m.GuidePage })));
+function GenreIndexRedirect() {
   const { search } = useLocation();
-  return <Navigate to={`/photographers${search}`} replace />;
+  return <Navigate to={{ pathname: '/home', search, hash: '#genres' }} replace />;
+}
+function ExploreRoute() {
+  const { hash } = useLocation();
+  return hash === '#genres' ? <GenreIndexRedirect /> : <DiscoverySearchPage />;
+}
+function PhotographerDirectoryRoute() {
+  const { search } = useLocation();
+  return new URLSearchParams(search).has('mode') ? (
+    <RedirectWithQuery to="/explore" />
+  ) : (
+    <ProviderDirectoryPage key="photographers" type="photographer" />
+  );
+}
+function RedirectWithQuery({ to }: { to: string }) {
+  const { search, hash } = useLocation();
+  return <Navigate to={{ pathname: to, search, hash }} replace />;
 }
 const ProviderPage = lazy(() =>
   import('./pages/ProviderPage').then((m) => ({ default: m.ProviderPage })),
@@ -99,24 +116,35 @@ export function App() {
             <AuthProvider>
               <Routes>
                 <Route element={<AppLayout />}>
-                  <Route path="/" element={<Navigate to="/explore" replace />} />
-                  <Route path="/explore" element={<ExplorePage />} />
-                  <Route path="/home" element={<Navigate to="/explore" replace />} />
-                  <Route path="/photographers" element={<DiscoverySearchPage />} />
+                  <Route path="/" element={<RedirectWithQuery to="/home" />} />
+                  <Route path="/home" element={<ExplorePage />} />
+                  <Route path="/explore" element={<ExploreRoute />} />
+                  <Route path="/photographers" element={<PhotographerDirectoryRoute />} />
                   <Route
                     path="/studios"
                     element={<ProviderDirectoryPage key="studios" type="studio" />}
                   />
-                  <Route path="/genres" element={<Navigate to="/explore#genres" replace />} />
+                  <Route path="/genres" element={<GenreIndexRedirect />} />
                   <Route path="/genres/:genre" element={<GenrePage />} />
                   <Route path="/about" element={<AboutPage />} />
-                  <Route path="/search" element={<LegacySearchRedirect />} />
+                  <Route path="/search" element={<RedirectWithQuery to="/explore" />} />
+                  <Route path="/support" element={<GuidePage topic="support" />} />
+                  <Route path="/community" element={<GuidePage topic="community" />} />
+                  <Route path="/privacy" element={<GuidePage topic="privacy" />} />
                   <Route path="/auth" element={<AuthPage />} />
                   <Route path="/auth/callback" element={<AuthPage callback />} />
                   <Route path="/reset-password" element={<AuthPage recovery />} />
                   <Route path="/onboarding" element={<OnboardingPage />} />
                   <Route path="/providers/:type/:id" element={<ProviderPage />} />
                   <Route path="/portfolios/:id" element={<PortfolioDetailPage />} />
+                  <Route
+                    path="/messages"
+                    element={
+                      <RequireAuth>
+                        <MessagesPage />
+                      </RequireAuth>
+                    }
+                  />
                   <Route
                     element={
                       <RequireAuth>
@@ -179,14 +207,6 @@ export function App() {
                       element={
                         <RequireAuth>
                           <BookingPage />
-                        </RequireAuth>
-                      }
-                    />
-                    <Route
-                      path="/messages"
-                      element={
-                        <RequireAuth>
-                          <MessagesPage />
                         </RequireAuth>
                       }
                     />

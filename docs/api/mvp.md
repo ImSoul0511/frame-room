@@ -7,15 +7,12 @@ are in `packages/shared/src/business.ts` and `locale.ts`.
 
 ## Common behavior
 
-- Business responses use `{ data }`; search additionally returns `parsedQuery`,
-  `effectiveFilters`, and `meta`. Health retains its original unenveloped response.
+- Business responses use `{ data }`. Health returns its own response shape.
 - Errors retain `{ error: { code, message, details: [{ reason }] } }`. Clients localize
   machine-readable reasons; backend English messages are not UI copy.
 - Protected requests require a verified Supabase bearer identity. Browser metadata
   never grants roles. The server verifies the identity with Supabase Auth.
-- `Accept-Language: en` or `vi` controls AI replies, briefs, proposals, culling, and
-  search explanations. Missing/unsupported language defaults to English. Existing
-  user content is not automatically translated; retrieval descriptions stay English.
+- `Accept-Language: en` or `vi` controls AI replies, briefs, proposals and culling suggestions. English is the default.
 - IDs are UUIDs. Business IDs use UUIDv7; profile IDs preserve Supabase Auth IDs.
 - AI job submissions accept a UUID `Idempotency-Key`; retries with that key return
   the existing own-project job. Reusing it across users/projects is a conflict.
@@ -38,7 +35,7 @@ are in `packages/shared/src/business.ts` and `locale.ts`.
 | AI actions | POST `/v1/ai-actions/:id/confirm` or `/reject`; caller, state, expiry, and versions checked again |
 | Booking | POST booking-requests; booking detail/workspace; versioned transitions, assignment, reassignment and cancellation |
 | Agreement | POST booking brief versions; approve the latest version or record a revision request |
-| Conversations | GET/POST conversations; cursor-paginated message history; idempotent send; authenticated attachment retrieval |
+| Conversations | Direct inbox via GET /v1/conversations?scope=direct; confirmed booking rooms via GET /v1/project-conversations; cursor-paginated messages and authorized attachments |
 | Shoot Room | Booking-scoped messages, milestones, decisions and protected attachments during collaboration |
 | Proofing | Watermarked gallery previews, round-specific photo feedback, quota, revision requests and final-file gate |
 | Completion | POST booking deliveries and reviews; 168-hour automatic completion; administrator dispute holds |
@@ -78,7 +75,7 @@ uploads through the API so Sharp can verify bytes, correct orientation, normaliz
 WebP, and create paired thumbnails. Storage path ownership is rechecked when the
 file is registered. JPEG, PNG and WebP images may have up to 40 million decoded
 pixels. The input limit is 50 MiB for portfolio images, brief references and Shoot
-Room or Conversation images, and 20 MiB for other uploads, including final deliveries. Normalized
+Room or Conversation images, and 20 MiB for other uploads, including final deliveries. Final deliveries use full-resolution WebP within the format and bucket limits. Normalized
 previews are at most 1280 px and thumbnails at most 320 px, with a 2 MiB limit
 per stored object. No RAW files or arbitrary remote image URLs.
 
@@ -130,10 +127,7 @@ that is not evidence of named team reviewers' approval.
 - Questions 9/11: retain the booking state machine and no cancellation fees.
   UC3 adds automatic completion and an administrator dispute hold.
   Room access belongs to client/current assignee/relevant current managers.
-- Question 16: the MVP uses keyword search and filters. The AI search and portfolio
-  indexing endpoints require `AI_SEARCH_ENABLED=true`. The uploads API returns 503
-  for the search reference bucket when the flag is off. Existing search references
-  retain their 24-hour expiry.
+- Explore supports keyword search and catalog filters. Existing private search references expire after 24 hours.
 - Question 18: selection rounds retain history. Mutual cancellation remains
   available through proofing until delivery.
 - Each AI proposal is only a draft. Confirmation calls the normal booking, brief,
@@ -151,19 +145,7 @@ retain their original kind/name labels. No schema migration is required.
 
 The browser has no role switcher, seeded fallback state or simulated workflow. Existing account
 routes use authenticated APIs. Bookings include a month calendar and owned schedule blocks;
-the notification bell uses the same account feed as the notification page. Home remains at
-`/explore` and introduces the twelve shared genres through a draggable animated aperture ring.
-Its original rim/blade geometry surrounds an independently moving colour wash in the central
-opening. The botanical, watercolor and paper-frame presentation is drawn in SVG/CSS, with
-portfolio photographs supplying the actual imagery.
-Genre introductions show one or two portfolio photographs, neighbouring previews and a
-separate Explore action; interface labels follow the selected language.
-Public directories at `/photographers` and `/studios` use the existing provider list/detail
-endpoints and published portfolio imagery. `/genres/:genre` scopes collection discovery to
-one primary genre, retains secondary tag/search/sort filters, loads twelve collections per
-request, offers explicit loading of the next page and lazy-loads photographs. Account
-workspace links live inside Profile; the floating chat launcher keeps `/messages` and its
-existing unread state. No API contract or workspace endpoint changed.
+the notification bell uses the same account feed as the notification page. Home at `/home` presents the twelve genres with two fixed, browser-cached WebP samples per genre. `/explore` searches the catalog and `/photographers` and `/studios` open their respective directories. The search and genre pages load subsequent results as needed. Album and photo cards show attribution and available metadata. The compact chat panel expands to `/messages` with the selected conversation and draft. Direct messages and confirmed booking rooms have separate lists.
 
 Unknown paid-provider outcomes remain uncertain and are not automatically repeated.
 The worker rechecks project access before reading private inputs. Originals are
@@ -175,5 +157,5 @@ until expiry. The portfolio media API rechecks publication and image visibility
 for each managed Storage object. Legacy external image URLs retain the external
 host's own access policy.
 
-Model availability, measured retrieval quality, and real-output human review require
+Model availability and human review of generated outputs require
 a configured, budgeted Gateway key. No mocked AI output is used as a substitute.

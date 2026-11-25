@@ -1,6 +1,6 @@
 # Supabase Cloud setup handoff
 
-Future DevOps/Database tasks: provision isolated project, record project ref/region/Postgres version, configure Auth email/password and redirect allowlist for local UI, obtain anon and service-role credentials securely, enable required extensions, apply reviewed schema in order, create Storage buckets and policies, enable Realtime publication, then regenerate types. Use [database setup plan](../database/database-setup-plan.md) for order and [RLS policies](../database/rls-policies.md) for access verification. None of these actions has occurred in this session.
+Future DevOps/Database tasks: provision isolated project, record project ref/region/Postgres version, configure Auth email/password and redirect allowlist for local UI, obtain anon and service-role credentials securely, enable required extensions, apply reviewed schema in order, create Storage buckets and policies, enable Realtime publication, then regenerate types. Use [migration workflow](migration-workflow.md) for order and [RLS policies](../database/rls-policies.md) for access verification. None of these actions has occurred in this session.
 
 Target variables: browser `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_API_URL`; API `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`, `WEB_ORIGIN`, `HOST`, `PORT`, `LOG_LEVEL`; AI connection/key/model/budget variables depend on the accepted replacement architecture. Match API URL/port and CORS origin. Never expose `DATABASE_URL`, service role or AI secrets through `VITE_` names.
 

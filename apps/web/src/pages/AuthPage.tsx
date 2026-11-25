@@ -1,11 +1,16 @@
 import { useState } from 'react';
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { profileInputSchema, photographerInputSchema } from '@frameroom/shared';
+import {
+  profileInputSchema,
+  photographerInputSchema,
+  type OwnPhotographer,
+} from '@frameroom/shared';
 import { supabase, post, api, RequestError } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useTask } from '../lib/hooks';
-import { Action, Area, Field, Feedback, Form, GenreSelect, Select } from '../components/ui';
+import { Action, Area, Field, Feedback, Form, Select } from '../components/ui';
+import { GenreChoices } from '../features/catalog/GenreChoices';
 import { Botanical } from '../components/Botanical';
 import { useStrings } from '../lib/i18n';
 import { accountDestination, safeReturnPath, authErrorReason } from '../lib/auth-navigation';
@@ -27,6 +32,7 @@ export function AuthPage({
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
   const [role, setRole] = useState('client');
+  const [genres, setGenres] = useState<OwnPhotographer['genres']>(['portrait']);
   const [notice, setNotice] = useState<'' | 'checkEmail' | 'emailSent'>('');
   const auth = useAuth();
   const queryClient = useQueryClient();
@@ -57,6 +63,7 @@ export function AuthPage({
     } else if (mode === 'signup') {
       const profile = profileInputSchema.safeParse({ displayName: name, userName: username });
       if (!profile.success) throw new RequestError(400, 'invalid_input');
+      if (role === 'photographer' && !genres.length) throw new RequestError(400, 'invalid_input');
       const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
         password,
@@ -66,6 +73,7 @@ export function AuthPage({
             display_name: profile.data.displayName,
             user_name: profile.data.userName,
             registration_role: role,
+            ...(role === 'photographer' ? { registration_genres: genres } : {}),
           },
         },
       });
@@ -173,10 +181,7 @@ export function AuthPage({
           </>
         ) : notice ? (
           <div className="confirmation-panel">
-            <span className="confirmation-icon" aria-hidden="true">
-              ✉
-            </span>
-            <p role="status">{notice === 'emailSent' ? t.discovery.emailSent : t.checkEmail}</p>
+            <Feedback success={notice === 'emailSent' ? t.discovery.emailSent : t.checkEmail} />
             <strong>{email}</strong>
             {mode === 'signup' ? (
               <Action secondary pending={resend.isPending} onClick={() => resend.mutate()}>
@@ -216,6 +221,7 @@ export function AuthPage({
                     <option value="client">{t.client}</option>
                     <option value="photographer">{t.photographer}</option>
                   </Select>
+                  {role === 'photographer' && <GenreChoices value={genres} onChange={setGenres} />}
                 </>
               ) : null}
               {!recovery ? (
@@ -246,7 +252,11 @@ export function AuthPage({
               <Action
                 type="submit"
                 pending={task.isPending}
-                disabled={!supabase || (recovery && !auth.session)}
+                disabled={
+                  !supabase ||
+                  (recovery && !auth.session) ||
+                  (mode === 'signup' && role === 'photographer' && !genres.length)
+                }
               >
                 {recovery
                   ? t.updatePassword
@@ -319,22 +329,17 @@ function OnboardingForm() {
   const [role, setRole] = useState(
     metadata?.registration_role === 'photographer' ? 'photographer' : 'client',
   );
-  const [genre, setGenre] = useState('portrait');
-  const [bio, setBio] = useState('');
-  const [completed, setCompleted] = useState(false);
-  const signInAgain = useTask(async () => {
-    const result = await supabase?.auth.signOut({ scope: 'local' });
-    if (result?.error) throw new RequestError(400, 'auth_failed');
-    navigate(next ? `/auth?next=${encodeURIComponent(safeReturnPath(next))}` : '/auth', {
-      replace: true,
-    });
+  const [genres, setGenres] = useState<OwnPhotographer['genres']>(() => {
+    const saved = photographerInputSchema.shape.genres.safeParse(metadata?.registration_genres);
+    return saved.success ? [...new Set(saved.data)] : ['portrait'];
   });
+  const [bio, setBio] = useState('');
   const task = useTask(async () => {
     const parsed = profileInputSchema.safeParse({ displayName: name, userName: username });
     if (!parsed.success) throw new RequestError(400, 'invalid_input');
     const photographer =
       role === 'photographer'
-        ? photographerInputSchema.parse({ displayName: name, bio, genres: [genre] })
+        ? photographerInputSchema.parse({ displayName: name, bio, genres })
         : null;
     await post('/v1/me', parsed.data);
     if (photographer) {
@@ -342,26 +347,12 @@ function OnboardingForm() {
       if (!existing) await post('/v1/photographers/me', photographer);
     }
     await client.invalidateQueries({ queryKey: ['profile'] });
-    setCompleted(true);
+    navigate(safeReturnPath(next, accountDestination([...(auth.profile?.roles ?? []), role])), {
+      replace: true,
+    });
   });
   if (auth.loading) return <p role="status">{t.pending}</p>;
   if (!auth.session) return <Navigate to="/auth" replace />;
-  if (completed)
-    return (
-      <section className="onboarding-page narrow-page">
-        <h1 role="status">{t.discovery.registrationComplete}</h1>
-        <Link
-          className="button-link dark"
-          to={safeReturnPath(next, accountDestination(auth.profile?.roles ?? []))}
-        >
-          {t.continue}
-        </Link>
-        <Action secondary pending={signInAgain.isPending} onClick={() => signInAgain.mutate()}>
-          {t.login}
-        </Action>
-        <Feedback error={signInAgain.error} />
-      </section>
-    );
   return (
     <section className="onboarding-page narrow-page">
       <p className="eyebrow">FRAMEROOM</p>
@@ -406,12 +397,16 @@ function OnboardingForm() {
         />
         {role === 'photographer' ? (
           <>
-            <GenreSelect value={genre} onChange={setGenre} />
+            <GenreChoices value={genres} onChange={setGenres} />
             <Area label={t.bio} value={bio} onChange={setBio} />
           </>
         ) : null}
         <Feedback error={task.error} />
-        <Action type="submit" pending={task.isPending}>
+        <Action
+          type="submit"
+          pending={task.isPending}
+          disabled={role === 'photographer' && !genres.length}
+        >
           {t.continue}
         </Action>
       </Form>

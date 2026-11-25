@@ -11,6 +11,7 @@
     "dev:worker": "pnpm --filter @frameroom/shared build && pnpm --filter api worker",
     "demo:configure": "node scripts/local-env.mjs",
     "demo:seed": "pnpm --filter api exec tsx src/demo-seed.ts",
+    "media:webp": "pnpm --filter api exec tsx src/migrate-media-webp.ts",
     "test:e2e": "playwright test",
     "test:db": "pnpm --filter api exec tsx src/verify-database.ts",
     "dev": "node scripts/dev.mjs",
@@ -32,9 +33,7 @@
     "db:reset": "supabase db reset --local",
     "db:types": "node scripts/db-types.mjs",
     "db:types:cloud": "node scripts/db-types.mjs --cloud",
-    "docs:check": "node scripts/check-docs.mjs",
-    "ai:index": "pnpm --filter @frameroom/shared build && pnpm --filter api exec tsx src/index-portfolios.ts",
-    "ai:evaluate": "pnpm --filter @frameroom/shared build && pnpm --filter api exec tsx src/evaluate-search.ts"
+    "docs:check": "node scripts/check-docs.mjs"
   },
   "devDependencies": {
     "@commitlint/cli": "19.8.1",

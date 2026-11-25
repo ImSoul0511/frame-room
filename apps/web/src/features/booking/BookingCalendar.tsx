@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { Booking } from '@frameroom/shared';
 import { useAuth } from '../../lib/auth';
-import { useApi } from '../../lib/hooks';
+import { useApi, useTask } from '../../lib/hooks';
 import { useLanguage, useStrings } from '../../lib/i18n';
-import { dateTime } from '../../lib/api';
-import { QueryState, Status } from '../../components/ui';
+import { api, dateTime } from '../../lib/api';
+import { Action, Feedback, QueryState, Status } from '../../components/ui';
+import { UnavailableTimeForm } from './UnavailableTimeForm';
 
 type Block = {
   id: string;
@@ -24,10 +25,12 @@ export function BookingCalendar({ bookings }: { bookings: Booking[] }) {
   const t = useStrings();
   const { language } = useLanguage();
   const { profile } = useAuth();
-  const professional = Boolean(
-    profile?.roles.some((role) => ['photographer', 'studio_manager'].includes(role)),
-  );
+  const personal = profile?.roles.includes('photographer') ?? false;
+  const manager = profile?.roles.includes('studio_manager') ?? false;
+  const professional = personal || manager;
+  const remove = useTask((id: string) => api(`/v1/me/schedule/blocks/${id}`, { method: 'DELETE' }));
   const blocks = useApi<Block[]>('/v1/me/schedule', professional, 30000);
+  const [creatingBlock, setCreatingBlock] = useState(false);
   const [month, setMonth] = useState(
     () => new Date(new Date().getFullYear(), new Date().getMonth(), 1),
   );
@@ -164,6 +167,7 @@ export function BookingCalendar({ bookings }: { bookings: Booking[] }) {
             }).format(day)}
           </h3>
           {professional ? <QueryState query={blocks} /> : null}
+          <Feedback error={remove.error} />
           {!shoots.length && !dayBlocks.length && (!professional || blocks.isSuccess) ? (
             <p className="muted">{t.design.noEvents}</p>
           ) : null}
@@ -180,12 +184,20 @@ export function BookingCalendar({ bookings }: { bookings: Booking[] }) {
               <span>
                 {dateTime(block.startsAt)} – {dateTime(block.endsAt)}
               </span>
+              <Action
+                secondary
+                disabled={remove.isPending}
+                pending={remove.isPending && remove.variables === block.id}
+                onClick={() => remove.mutate(block.id)}
+              >
+                {t.delete}
+              </Action>
             </div>
           ))}
           {professional ? (
-            <Link className="text-button" to="/settings">
-              {t.design.manageBlocks}
-            </Link>
+            <Action secondary onClick={() => setCreatingBlock(true)}>
+              {t.studio.newBlock}
+            </Action>
           ) : null}
         </aside>
       </div>
@@ -199,6 +211,14 @@ export function BookingCalendar({ bookings }: { bookings: Booking[] }) {
           {t.design.busy}
         </span>
       </div>
+      {creatingBlock ? (
+        <UnavailableTimeForm
+          date={selected}
+          personal={personal}
+          manager={manager}
+          onClose={() => setCreatingBlock(false)}
+        />
+      ) : null}
     </section>
   );
 }

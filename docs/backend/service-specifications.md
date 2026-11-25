@@ -1,6 +1,6 @@
 # Service specifications
 
-Source: MVP branch `apps/api/src/services/`, `repositories/database.ts`, `routes/business.ts`, and `worker.ts`. These are implementation references for a rebuild, not code on checked out `main`.
+These specifications record the earlier rebuild proposal. See the [implemented services](../../apps/api/src/services) and [current contract](../api/mvp.md) for present behavior.
 
 | Service                                    | Responsibility and transaction boundary                                                                                                              | Failure/invariant                                                                                                                          |
 | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |

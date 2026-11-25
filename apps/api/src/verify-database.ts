@@ -306,11 +306,11 @@ try {
         );
       }
       const queued = await tx.one<{ id: string }>(
-        "insert into ai_jobs(user_id,kind,input,request_key) values($1,'index','{}',$2) returning id",
-        [client, randomUUID()],
+        "insert into ai_jobs(user_id,project_id,kind,input,request_key) values($1,$2,'concept','{}',$3) returning id",
+        [client, b.projectId, randomUUID()],
       );
-      assert.ok(await claimForWork(tx, queued.id, true));
-      assert.equal(await claimForWork(tx, queued.id, true), null);
+      assert.ok(await claimForWork(tx, queued.id));
+      assert.equal(await claimForWork(tx, queued.id), null);
       assert.equal(
         (await tx.one<{ status: string }>('select status from ai_jobs where id=$1', [queued.id]))
           .status,
@@ -318,7 +318,7 @@ try {
       );
       checks++;
       await tx.execute("update ai_jobs set status='succeeded' where id=$1", [queued.id]);
-      assert.equal(await claimForWork(tx, queued.id, true), null);
+      assert.equal(await claimForWork(tx, queued.id), null);
       checks++;
       await actor(tx, outsider);
       await tx.execute('set local role authenticated');

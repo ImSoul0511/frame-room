@@ -305,15 +305,16 @@ export function Feedback({ error, success }: { error?: Error | null; success?: s
 export function QueryState({
   query,
   empty = false,
+  emptyMessage,
 }: {
   query: { isPending: boolean; error: Error | null; refetch: () => unknown };
   empty?: boolean;
+  emptyMessage?: string;
 }) {
   const t = useStrings();
   if (query.isPending)
     return (
       <div className="loading" role="status">
-        <span className="loading-dot" />
         {t.pending}
       </div>
     );
@@ -328,10 +329,9 @@ export function QueryState({
     );
   if (empty)
     return (
-      <div className="empty-state">
-        <span className="empty-mark">◎</span>
-        <p>{t.empty}</p>
-      </div>
+      <p className="empty-state" role="status">
+        {emptyMessage ?? t.empty}
+      </p>
     );
   return null;
 }

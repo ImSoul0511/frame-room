@@ -1,11 +1,10 @@
 import { useState, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { PortfolioCard } from '../catalog/PortfolioCard';
 import type { Service } from '@frameroom/shared';
 import type { ProviderDetail } from '../../lib/types';
 import { currency, supabase } from '../../lib/api';
 import { useStrings } from '../../lib/i18n';
 import { Action } from '../../components/ui';
-import { FittedImage } from '../../components/FittedImage';
 import { UserAvatar } from '../../components/UserAvatar';
 import { ReportButton } from '../../pages/SettingsPage';
 
@@ -15,61 +14,62 @@ export function ProviderProfile({
   onContact,
   canRequest = true,
   coverAction,
-  avatarPath,
+  avatar,
 }: {
   detail: ProviderDetail;
   onBook: (service: Service) => void;
   onContact?: () => void;
   canRequest?: boolean;
   coverAction?: ReactNode;
-  avatarPath?: string | null;
+  avatar?: ReactNode;
 }) {
   const t = useStrings();
   const { provider, services, portfolios, reviews } = detail;
   const [tab, setTab] = useState('works');
+  const [failedCover, setFailedCover] = useState<string>();
   const customCover =
     detail.coverPath && supabase
       ? supabase.storage.from('profile-covers').getPublicUrl(detail.coverPath).data.publicUrl
       : null;
-  const cover = customCover || portfolios.find((portfolio) => portfolio.coverUrl)?.coverUrl;
+  const cover = customCover && customCover !== failedCover ? customCover : null;
   return (
-    <div className="public-profile">
-      <div
-        className={`profile-cover ${!cover ? 'profile-cover-empty' : ''} ${customCover ? 'profile-cover-custom' : ''}`}
-      >
-        {customCover ? (
-          <img src={customCover} alt="" />
-        ) : cover ? (
-          <FittedImage src={cover} alt={provider.displayName} />
-        ) : (
-          <span aria-hidden="true">FrameRoom.</span>
-        )}
-        <span className="profile-kind">{t.explore[provider.type]}</span>
-        {coverAction}
-      </div>
-      <header className="profile-identity">
-        <UserAvatar
-          name={provider.displayName}
-          avatarPath={avatarPath === undefined ? detail.avatarPath : avatarPath}
-          className="profile-monogram"
-        />
-        <div className="profile-name">
-          <p className="eyebrow">{provider.city || t.eyebrow}</p>
-          <h1>{provider.displayName}</h1>
-          <div className="profile-tags">
-            {provider.genres.map((genre) => (
-              <span className="card-tag" key={genre}>
-                {t.genreLabels[genre]}
-              </span>
-            ))}
-          </div>
+    <div className={coverAction ? 'public-profile account-overview' : 'public-profile'}>
+      <div className={coverAction ? 'account-portrait' : undefined}>
+        <div className={`profile-cover ${cover ? 'profile-cover-custom' : 'profile-cover-empty'}`}>
+          {cover ? (
+            <img src={cover} alt="" onError={() => setFailedCover(cover)} />
+          ) : (
+            <span aria-hidden="true">FrameRoom.</span>
+          )}
+          <span className="profile-kind">{t.explore[provider.type]}</span>
+          {coverAction}
         </div>
-        {canRequest ? (
-          <button className="button-link dark" onClick={onContact}>
-            {t.profileUi.contact}
-          </button>
-        ) : null}
-      </header>
+        <header className="profile-identity">
+          {avatar ?? (
+            <UserAvatar
+              name={provider.displayName}
+              avatarPath={detail.avatarPath}
+              className="profile-monogram"
+            />
+          )}
+          <div className="profile-name">
+            <p className="eyebrow">{provider.city || t.eyebrow}</p>
+            <h1>{provider.displayName}</h1>
+            <div className="profile-tags">
+              {provider.genres.map((genre) => (
+                <span className="card-tag" key={genre}>
+                  {t.genreLabels[genre]}
+                </span>
+              ))}
+            </div>
+          </div>
+          {canRequest ? (
+            <button className="button-link dark" onClick={onContact}>
+              {t.profileUi.contact}
+            </button>
+          ) : null}
+        </header>
+      </div>
       <div className="profile-content-layout">
         <div className="profile-main">
           <nav className="profile-tabs" aria-label={t.profileUi.publicProfile}>
@@ -93,33 +93,12 @@ export function ProviderProfile({
                 </span>
               </div>
               {portfolios.length ? (
-                <div className="profile-album-grid">
+                <div className="media-grid">
                   {portfolios.map((portfolio) => (
-                    <Link
+                    <PortfolioCard
                       key={portfolio.id}
-                      className="profile-album"
-                      to={`/portfolios/${portfolio.id}`}
-                    >
-                      {portfolio.coverUrl ? (
-                        <FittedImage
-                          src={portfolio.coverUrl}
-                          alt={portfolio.title}
-                          loading="lazy"
-                          decoding="async"
-                        />
-                      ) : (
-                        <div className="profile-album-placeholder">
-                          {portfolio.title.slice(0, 1)}
-                        </div>
-                      )}
-                      <div>
-                        <span className="eyebrow">
-                          {t.genreLabels[portfolio.genre as keyof typeof t.genreLabels]}
-                        </span>
-                        <h3>{portfolio.title}</h3>
-                        <p>{portfolio.description}</p>
-                      </div>
-                    </Link>
+                      portfolio={{ ...portfolio, ownerName: provider.displayName }}
+                    />
                   ))}
                 </div>
               ) : (

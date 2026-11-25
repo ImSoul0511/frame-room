@@ -1,7 +1,6 @@
 import { useStrings } from '../../lib/i18n';
-import { useApi } from '../../lib/hooks';
-import type { Portfolio } from '../../lib/types';
-import { genreImage, type Genre } from './genre-art';
+import { GenreSample } from './GenreSample';
+import { genreImages, type Genre } from './genre-art';
 
 export function GenreGlimpse({
   genre,
@@ -13,13 +12,6 @@ export function GenreGlimpse({
   previous?: boolean;
 }) {
   const t = useStrings();
-  const portfolios = useApi<Portfolio[]>(
-    `/v1/portfolios?genre=${genre}&pageSize=2`,
-    true,
-    undefined,
-    60_000,
-  );
-  const picture = portfolios.data?.find((portfolio) => portfolio.coverUrl);
   return (
     <button
       className={`genre-glimpse ${previous ? 'glimpse-before' : 'glimpse-after'}`}
@@ -31,7 +23,7 @@ export function GenreGlimpse({
         <strong>{t.curation.genreStories[genre].title}</strong>
       </span>
       <span className="glimpse-thumbnail" aria-hidden="true">
-        <img src={picture?.coverUrl || genreImage(genre)} alt="" loading="lazy" decoding="async" />
+        <GenreSample src={genreImages(genre)[0]!} alt="" />
       </span>
     </button>
   );

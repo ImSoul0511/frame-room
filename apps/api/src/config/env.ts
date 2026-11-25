@@ -34,13 +34,8 @@ export const envSchema = z.object({
   SUPABASE_URL: optionalUrl,
   SUPABASE_ANON_KEY: optionalString,
   SUPABASE_SERVICE_ROLE_KEY: optionalString,
-  AI_SEARCH_ENABLED: z
-    .enum(['true', 'false'])
-    .default('false')
-    .transform((value) => value === 'true'),
   AI_GATEWAY_API_KEY: optionalString,
   AI_TEXT_MODEL: z.string().min(1).default('google/gemini-3.8-flash'),
-  AI_EMBEDDING_MODEL: z.string().min(1).default('google/gemini-embedding-2'),
   AI_IMAGE_MODEL: z.string().min(1).default('google/gemini-3.1-flash-image'),
   AI_MONTHLY_BUDGET_USD: z.coerce.number().positive().max(30).default(30),
 });

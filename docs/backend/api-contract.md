@@ -1,6 +1,6 @@
 # API contract for reconstruction
 
-**Status:** target contract to review, derived from the implemented MVP branch `apps/api/src/routes/business.ts`, `packages/shared/src/business.ts` and `docs/api/mvp.md` at `66f3779`. The checked out `main` implements only `GET /health`. [Inventory](endpoint-inventory.md) enumerates the concrete paths. No route in this document is deployed by this session. Retain MVP paths and wire shapes unless frontend/backend owners agree a versioned change.
+This reconstruction proposal records the interface discussed at commit `66f3779`. Use the [current API contract](../api/mvp.md) and the [registered routes](../../apps/api/src/routes) for implementation.
 
 ## Common endpoint rules
 

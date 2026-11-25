@@ -29,7 +29,7 @@ h2 {
 }
 .editorial-hero {
   /* Extend the lower edge while keeping the headline and flower heads in place. */
-  --flower-room: 192px;
+  --flower-room: 135px;
   --flower-width: clamp(240px, 29vw, 440px);
   --flower-bottom: calc(var(--flower-room) - 134px);
   min-height: calc(660px + var(--flower-room));
@@ -244,14 +244,17 @@ h2 {
 .photographer-account-nav {
   display: flex;
   flex-direction: column;
-  border-top: 1px solid #ddd6e5;
+  gap: 4px;
+  padding: 10px;
+  border-radius: 16px;
+  background: #eee8ee;
 }
 .photographer-account-nav a {
   display: flex;
   align-items: center;
   min-height: 44px;
-  padding: 12px 4px;
-  border-bottom: 1px solid #ddd6e5;
+  padding: 10px 16px;
+  border-radius: 9px;
   color: #53617f;
   font-size: 0.875rem;
 }
@@ -261,21 +264,24 @@ h2 {
 }
 .photographer-account-nav a.active {
   font-weight: 600;
+  background: #fffdf9;
+  box-shadow: 0 1px 5px #47394d12;
 }
 .photographer-logout-box {
-  border-bottom: 1px solid #ddd6e5;
+  border-top: 1px solid #d9d1dd;
 }
 .photographer-logout-box button {
   min-height: 44px;
   width: 100%;
-  padding: 12px 4px;
+  padding: 10px 16px;
   text-align: left;
 }
 @media (min-width: 761px) and (min-height: 600px) {
   .photographer-account-sidebar {
-    position: fixed;
+    position: sticky;
+    align-self: start;
     top: var(--sidebar-top);
-    width: 230px;
+    width: 100%;
     max-height: calc(100vh - var(--sidebar-top) - 12px);
     overflow-y: auto;
     z-index: 5;
@@ -297,6 +303,24 @@ h2 {
   .photographer-account-sidebar {
     grid-column: 1;
     grid-row: 1;
+  }
+  .photographer-account-nav {
+    flex-direction: row;
+    overflow-x: auto;
+    padding: 5px;
+    scrollbar-width: thin;
+  }
+  .photographer-account-nav > * {
+    flex: none;
+    white-space: nowrap;
+  }
+  .photographer-account-nav a,
+  .photographer-logout-box button {
+    padding-inline: 12px;
+  }
+  .photographer-logout-box {
+    margin-left: auto;
+    border-top: 0;
   }
   .photographer-account-content {
     grid-column: 1;
@@ -320,7 +344,7 @@ h2 {
   isolation: isolate;
   overflow: hidden;
   margin: 0 -4.95%;
-  padding: 85px 4.5% 65px;
+  padding: 55px 4.5% 65px;
   scroll-margin-top: 75px;
 }
 .aperture-section::before {
@@ -442,7 +466,7 @@ h2 {
 }
 .genre-glimpse {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 145px;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 25px;
   align-items: center;
   width: 100%;
@@ -471,14 +495,22 @@ h2 {
 }
 .glimpse-thumbnail {
   height: 76px;
+  aspect-ratio: 4 / 5;
   overflow: hidden;
-  opacity: 0.6;
+  border: 5px solid #fff;
+  background: #fff;
+  box-shadow: 0 2px 8px #3545682b;
+  transform: rotate(2deg);
+}
+.glimpse-before .glimpse-thumbnail {
+  transform: rotate(-2deg);
 }
 .glimpse-thumbnail img {
   width: 100%;
   height: 100%;
   display: block;
-  object-fit: cover;
+  object-fit: contain;
+  object-position: center;
 }
 .genre-glimpse:hover {
   color: var(--fr-ink);
@@ -492,7 +524,15 @@ h2 {
   gap: 30px;
   align-items: center;
   padding: 34px 0 26px;
-  animation: genre-arrive 260ms ease-out both;
+  animation: genre-fade-in 420ms ease-out both;
+}
+@keyframes genre-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 .genre-feature-copy {
   padding: 40px 0 76px;
@@ -529,6 +569,9 @@ h2 {
   position: absolute;
   inset: 0;
   z-index: 1;
+  display: flex;
+  justify-content: center;
+  gap: clamp(16px, 2vw, 28px);
 }
 .moodboard-sprig {
   position: absolute;
@@ -545,57 +588,45 @@ h2 {
 .moodboard-sprig-front {
   width: 78px;
   height: 165px;
-  left: 43%;
+  left: 36%;
   bottom: 5px;
   z-index: 2;
   transform: rotate(22deg);
 }
 .moodboard-photo {
-  position: absolute;
   display: block;
+  aspect-ratio: 3 / 4;
   min-width: 0;
-  min-height: 0;
   overflow: hidden;
-  background: #e7ebe7;
+  background: #fffdf5;
   border: 7px solid #fffdf5;
   box-shadow: 0 5px 12px #3545681c;
 }
 .moodboard-photo:first-child {
-  top: 0;
-  right: 0;
-  width: 94%;
-  height: 66%;
+  order: 1;
+  max-width: 56%;
+  height: 92%;
   transform: rotate(0.6deg);
   box-shadow:
     -5px -7px 0 #e9e0cd,
     0 5px 12px #3545681c;
 }
 .moodboard-photo:nth-child(2) {
-  left: -3%;
-  top: 44%;
-  width: 53%;
-  height: 47%;
-  border: 0;
-  padding: 7px 7px 26px;
-  background: #fffdf5;
+  align-self: end;
+  max-width: 38%;
+  height: 65%;
+  border-bottom-width: 18px;
   transform: rotate(-7deg);
 }
 .moodboard-photo img {
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  transition: transform 450ms ease;
-}
-.moodboard-photo:hover img {
-  transform: scale(1.025);
-}
-.moodboard-placeholder {
-  background: linear-gradient(135deg, #e4e9e5, #e9e5ef 60%, #f4eee7);
+  object-fit: contain;
+  object-position: center;
 }
 .genre-moodboard[data-count='1'] .moodboard-photo {
-  width: 100%;
-  height: 100%;
+  max-width: 100%;
   transform: none;
 }
 .genre-explore-action {
@@ -658,16 +689,6 @@ h2 {
   background: none;
   border: 0;
   padding: 6px;
-}
-@keyframes genre-arrive {
-  from {
-    opacity: 0;
-    translate: 0 10px;
-  }
-  to {
-    opacity: 1;
-    translate: 0 0;
-  }
 }
 .section-header h1,
 .section-header h2 {
@@ -964,59 +985,6 @@ h2 {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.discovery-results .collection-grid {
-  align-items: stretch;
-}
-.collection-card-compact {
-  display: flex;
-  height: 100%;
-  flex-direction: column;
-}
-.collection-card-compact .collection-image {
-  width: 100%;
-  height: 180px;
-  overflow: hidden;
-}
-.collection-card-compact .collection-image img {
-  width: 100%;
-  height: 100%;
-  max-height: none;
-  object-fit: cover;
-}
-.collection-card-compact .fitted-image {
-  width: 100%;
-  height: 100%;
-}
-.collection-card-compact .image-unavailable {
-  display: grid;
-  height: 100%;
-  place-items: center;
-}
-.collection-card-compact .collection-body {
-  display: flex;
-  flex: 0 0 260px;
-  flex-direction: column;
-  overflow: hidden;
-}
-.collection-card-compact .collection-body h3 {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.collection-card-compact .collection-body > p {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.collection-card-compact .provider-tags {
-  max-height: 34px;
-  overflow: hidden;
-}
-.collection-card-compact .collection-links {
-  margin-top: auto;
-}
 @media (max-width: 760px) {
   .discovery-layout {
     grid-template-columns: minmax(0, 1fr);
@@ -1310,7 +1278,7 @@ h2 {
     white-space: nowrap;
   }
   .editorial-hero {
-    --flower-room: 166px;
+    --flower-room: 125px;
     --flower-width: 265px;
     --flower-bottom: calc(var(--flower-room) - 123px);
     min-height: calc(620px + var(--flower-room));
@@ -1337,7 +1305,7 @@ h2 {
     right: -70px;
   }
   .aperture-section {
-    padding-top: 55px;
+    padding-top: 36px;
     padding-bottom: 35px;
   }
   .aperture-heading {
@@ -1420,7 +1388,6 @@ h2 {
   .genre-glimpse {
     padding-block: 15px;
     gap: 12px;
-    grid-template-columns: minmax(0, 1fr) 95px;
   }
   .glimpse-thumbnail {
     height: 65px;
@@ -1504,7 +1471,7 @@ h2 {
     min-width: 180px;
   }
   .editorial-hero {
-    --flower-room: 124px;
+    --flower-room: 92px;
     --flower-width: 220px;
     --flower-bottom: calc(var(--flower-room) - 84px);
     min-height: calc(600px + var(--flower-room));
@@ -1532,7 +1499,6 @@ h2 {
   }
   .genre-moodboard {
     height: 320px;
-    gap: 7px;
   }
   .genre-feature-copy {
     min-height: 0;
@@ -1541,7 +1507,6 @@ h2 {
     font-size: 2.7rem;
   }
   .genre-glimpse {
-    grid-template-columns: minmax(0, 1fr) 75px;
     gap: 10px;
   }
   .glimpse-thumbnail {
@@ -1581,11 +1546,124 @@ h2 {
   .aperture-rotor {
     will-change: auto;
   }
-  .genre-feature,
   .directory-photo img,
-  .moodboard-photo img,
+  .genre-feature,
   .floating-chat {
     animation: none;
     transition: none;
   }
+}
+
+.search-start {
+  height: 1px;
+}
+.media-grid,
+.discovery-results .collection-grid.media-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 15.5rem), 1fr));
+  align-items: start;
+  gap: 1.5rem;
+  margin-block: 1.5rem;
+}
+.media-grid > .media-card,
+.media-grid > .scroll-reveal {
+  width: 100%;
+  max-width: 26.25rem;
+  justify-self: center;
+}
+.media-card {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0.85rem;
+  color: var(--fr-ink);
+  min-width: 0;
+}
+.media-card .media-card-image {
+  --photo-max-height: min(280px, 42svh);
+  display: block;
+  position: relative;
+  margin: 0 auto;
+  border: 0;
+  border-radius: 0.8rem;
+  overflow: hidden;
+  padding: 0;
+  max-width: 100%;
+  background: var(--fr-surface);
+}
+.media-card-image .fitted-image {
+  border-radius: inherit;
+  overflow: hidden;
+}
+.media-card-image .fitted-image img {
+  max-height: var(--photo-max-height);
+}
+.media-card-caption {
+  position: absolute;
+  inset: auto 0 0;
+  z-index: 1;
+  display: grid;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 2.2rem 0.85rem 0.85rem;
+  background: linear-gradient(transparent, #201a28b8 45%, #201a28e6);
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 400;
+  line-height: 1.5;
+  text-align: left;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+  opacity: 0;
+  transform: translateY(8px);
+  pointer-events: none;
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
+}
+.media-card-caption > span {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.media-card-caption strong,
+.media-card-caption small {
+  color: inherit;
+  font-size: inherit;
+}
+.media-card-image:is(:hover, :focus) .media-card-caption,
+.photo-lightbox-image:is(:hover, :focus) .media-card-caption {
+  opacity: 1;
+  transform: translateY(0);
+}
+.media-card.collection-card:is(:hover, :focus-within) {
+  box-shadow: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .media-card-caption {
+    transition: none;
+  }
+}
+.directory-card {
+  border-radius: 1.15rem;
+  overflow: hidden;
+}
+.directory-featured {
+  min-width: 0;
+  padding: 0.7rem;
+  background: var(--fr-surface);
+}
+.directory-featured .media-card {
+  max-width: 26.25rem;
+  margin-inline: auto;
+}
+.directory-no-photo {
+  min-height: 12rem;
+}
+.directory-monogram img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }

@@ -1,9 +1,8 @@
-import { createGateway, embed, generateText, Output, streamText } from 'ai';
+import { createGateway, generateText, Output, streamText } from 'ai';
 import { z } from 'zod';
 import {
   actionProposalSchema,
   briefContentSchema,
-  parsedSearchSchema,
   type CreativeProject,
   type BriefContent,
   type Language,
@@ -96,24 +95,6 @@ export class AiService {
       await this.settle(reservation.id, undefined, undefined, true);
       if (error instanceof ApiError) throw error;
       throw new ApiError(502, 'SERVICE_UNAVAILABLE', 'ai_generation_failed');
-    }
-  }
-  async embedding(userId: string, text: string) {
-    const reservation = await this.reserve(userId, 'embedding', this.env.AI_EMBEDDING_MODEL);
-    try {
-      const result = await embed({
-        model: this.gateway.embeddingModel(this.env.AI_EMBEDDING_MODEL),
-        value: text.slice(0, 6000),
-        dimensions: 768,
-        maxRetries: 0,
-        abortSignal: AbortSignal.timeout(45000),
-      });
-      const vector = z.array(z.number().finite()).length(768).parse(result.embedding);
-      await this.settle(reservation.id, { inputTokens: result.usage.tokens });
-      return vector;
-    } catch {
-      await this.settle(reservation.id, undefined, undefined, true);
-      throw new ApiError(502, 'SERVICE_UNAVAILABLE', 'embedding_failed');
     }
   }
   async context(userId: string, projectId: string) {
@@ -272,30 +253,6 @@ export class AiService {
       await this.settle(reservation.id, undefined, undefined, true);
       throw new ApiError(502, 'SERVICE_UNAVAILABLE', 'image_generation_uncertain');
     }
-  }
-  async describe(userId: string, image: Buffer) {
-    const schema = z.object({
-      description: z.string().max(1500),
-      tone: z.string().max(100),
-      setting: z.string().max(100),
-      mood: z.string().max(100),
-    });
-    return this.structured(
-      userId,
-      'image_description',
-      schema,
-      'Describe photographic genre, subject, composition, lighting, color tone, setting, mood. Do not identify people or infer private attributes. Use searchable English visual terms.',
-      image,
-    );
-  }
-  async parseSearch(userId: string, query: string, image?: Buffer) {
-    return this.structured(
-      userId,
-      'search',
-      parsedSearchSchema,
-      `Interpret this photography search in Vietnamese or English. Return a visual English description, supported genres, free-form styles, and explicitly requested city/district/maximum VND price. Unknown location/price must be null. Query: ${query}`,
-      image,
-    );
   }
 }
 export function projectPrompt(project: CreativeProject, prompt: string) {

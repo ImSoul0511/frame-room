@@ -34,8 +34,6 @@ export const uploadsModule: ApiModule = {
     app.post('/v1/uploads', async (request, reply) => {
       const actor = await authenticateVerified(deps.authenticate, request.headers.authorization);
       const query = querySchema.parse(request.query);
-      if (query.bucket === 'search-uploads')
-        requireCondition(deps.env.AI_SEARCH_ENABLED, 503, 'ai_search_disabled');
       const prefix =
         (query.bucket === 'avatars' || query.bucket === 'profile-covers') && !deps.db.isConfigured
           ? actor.id
