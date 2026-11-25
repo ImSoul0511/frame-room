@@ -704,6 +704,7 @@ h2 {
   width: 270px;
   z-index: 5;
   min-width: 0;
+  padding-right: 12px;
   max-height: calc(100vh - var(--sidebar-top) - 12px);
   overflow-y: auto;
   transition:
@@ -1003,6 +1004,7 @@ h2 {
   .discovery-sidebar {
     position: static;
     width: auto;
+    padding-right: 0;
     max-height: none;
     overflow: visible;
   }
