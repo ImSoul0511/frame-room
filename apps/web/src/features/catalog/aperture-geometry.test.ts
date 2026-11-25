@@ -1,7 +1,24 @@
 import { describe, expect, it } from 'vitest';
-import { angularDelta, nearestGenreAngle, pointerAngle, wrapGenre } from './aperture-geometry';
+import {
+  GENRE_STEP,
+  angularDelta,
+  bladePivot,
+  nearestGenreAngle,
+  pointerAngle,
+  wrapGenre,
+} from './aperture-geometry';
 
 describe('aperture drag geometry', () => {
+  it.each([-1, 1])('alternates one blade stroke per genre in direction %i', (direction) => {
+    const pivots = Array.from({ length: 17 }, (_, i) =>
+      parseFloat(bladePivot((direction * i * GENRE_STEP) / 8).slice('rotate('.length)),
+    );
+    for (let i = 1; i <= 8; i++) {
+      expect(pivots[i]).toBeLessThan(pivots[i - 1]);
+      expect(pivots[i + 8]).toBeGreaterThan(pivots[i + 7]);
+    }
+    expect(pivots[16]).toBe(pivots[0]);
+  });
   it('keeps clockwise dragging continuous across the polar angle boundary', () => {
     expect(angularDelta(179, -179)).toBe(2);
     expect(angularDelta(-179, 179)).toBe(-2);

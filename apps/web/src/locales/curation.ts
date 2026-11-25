@@ -27,7 +27,6 @@ export const curationEnglish = {
   pause: 'Pause motion',
   play: 'Resume motion',
   selectGenre: 'Choose a genre',
-  dragLens: 'Drag to turn the lens',
   lensKeyboard: 'Use the arrow keys to change genre, or hold and drag to turn the lens.',
   carousel: 'Genre carousel',
   inspirationPhotos: 'Photographic inspiration',

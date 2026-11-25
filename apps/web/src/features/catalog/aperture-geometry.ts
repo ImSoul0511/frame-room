@@ -1,6 +1,13 @@
 import { genres } from '@frameroom/shared';
 
 export const GENRE_STEP = 360 / genres.length;
+
+export function bladePivot(angle: number) {
+  // A full open–close cycle spans two genre steps.
+  const spread = (1 - Math.cos((angle / GENRE_STEP) * Math.PI)) / 2;
+  return `rotate(${(6 - 41 * spread).toFixed(3)} 130 320)`;
+}
+
 export const wrapGenre = (index: number) =>
   ((index % genres.length) + genres.length) % genres.length;
 

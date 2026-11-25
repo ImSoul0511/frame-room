@@ -16,7 +16,7 @@ export function ApertureGenres() {
   const {
     stage,
     ring,
-    innerRing,
+    blade,
     dragging,
     dragHandlers,
     setInteracting,
@@ -24,6 +24,7 @@ export function ApertureGenres() {
     paused,
     setPaused,
     select,
+    stepBy,
   } = useApertureMotion();
   const current = genres[active];
   const story = t.curation.genreStories[current];
@@ -76,12 +77,12 @@ export function ApertureGenres() {
                 event.preventDefault();
                 if (event.key === 'Home') select(0);
                 else if (event.key === 'End') select(genres.length - 1);
-                else select(active + (['ArrowRight', 'ArrowDown'].includes(event.key) ? 1 : -1));
+                else stepBy(['ArrowRight', 'ArrowDown'].includes(event.key) ? 1 : -1);
               }
             }}
           >
             <div className="aperture-rotor" ref={ring}>
-              <ApertureRing innerRef={innerRing} />
+              <ApertureRing bladeRef={blade} />
             </div>
           </div>
         </div>
@@ -119,7 +120,7 @@ export function ApertureGenres() {
           <div className="aperture-controls">
             <button
               className="round-control"
-              onClick={() => select(active - 1)}
+              onClick={() => stepBy(-1)}
               aria-label={t.curation.previous}
             >
               ‹
@@ -138,7 +139,7 @@ export function ApertureGenres() {
             </div>
             <button
               className="round-control"
-              onClick={() => select(active + 1)}
+              onClick={() => stepBy(1)}
               aria-label={t.curation.next}
             >
               ›

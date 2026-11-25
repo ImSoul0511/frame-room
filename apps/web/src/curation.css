@@ -28,16 +28,38 @@ h2 {
   font-style: normal;
 }
 .editorial-hero {
-  min-height: 660px;
-  padding: 95px 24px 140px;
+  /* Extend the lower edge while keeping the headline and flower heads in place. */
+  --flower-room: 192px;
+  --flower-width: clamp(240px, 29vw, 440px);
+  --flower-bottom: calc(var(--flower-room) - 134px);
+  min-height: calc(660px + var(--flower-room));
+  padding: 95px 24px calc(140px + var(--flower-room));
 }
+.editorial-hero > .watercolor-wash {
+  height: calc(100% - var(--flower-room));
+}
+.editorial-hero::before,
 .editorial-hero::after {
-  height: 32px;
+  content: '';
+  position: absolute;
+  inset: auto auto 0;
+  width: min(50%, var(--flower-width));
+  height: calc(var(--flower-bottom) + 28px);
+  z-index: 0;
+  pointer-events: none;
+  backdrop-filter: blur(3px);
+  mask-image: linear-gradient(transparent, black 80%);
   background: linear-gradient(transparent, var(--fr-paper));
 }
+.editorial-hero::before {
+  left: 0;
+}
+.editorial-hero::after {
+  right: 0;
+}
 .editorial-hero > .botanical {
-  width: clamp(240px, 29vw, 440px);
-  bottom: -110px;
+  width: var(--flower-width);
+  bottom: var(--flower-bottom);
 }
 .hero-flower-left {
   left: -6px;
@@ -368,7 +390,7 @@ h2 {
 }
 .aperture-ornament {
   position: absolute;
-  z-index: 2;
+  z-index: 0;
   inset: 0;
   width: 100%;
   height: 100%;
@@ -470,7 +492,7 @@ h2 {
   gap: 30px;
   align-items: center;
   padding: 34px 0 26px;
-  animation: genre-arrive 700ms ease both;
+  animation: genre-arrive 260ms ease-out both;
 }
 .genre-feature-copy {
   padding: 40px 0 76px;
@@ -1288,15 +1310,14 @@ h2 {
     white-space: nowrap;
   }
   .editorial-hero {
-    min-height: 620px;
-    padding: 105px 28px 150px;
+    --flower-room: 166px;
+    --flower-width: 265px;
+    --flower-bottom: calc(var(--flower-room) - 123px);
+    min-height: calc(620px + var(--flower-room));
+    padding: 105px 28px calc(150px + var(--flower-room));
   }
   .hero-content h1 {
     font-size: clamp(3.5rem, 9vw, 4.5rem);
-  }
-  .editorial-hero > .botanical {
-    width: 265px;
-    bottom: -105px;
   }
   .hero-flower-left {
     left: -70px;
@@ -1330,13 +1351,16 @@ h2 {
     font-size: 0.7rem;
   }
   .aperture-stage {
-    margin-top: 30px;
-    min-height: 840px;
+    flex-direction: column;
+    gap: 28px;
+    margin-top: 34px;
+    min-height: 0;
   }
   .aperture-clip {
-    --aperture-diameter: 360px;
-    left: -295px;
-    top: 44%;
+    --aperture-diameter: min(80vw, 360px);
+    position: relative;
+    inset: auto;
+    transform: none;
   }
   .aperture-drag-hint {
     display: none;
@@ -1359,8 +1383,8 @@ h2 {
     opacity: 0.55;
   }
   .aperture-stories {
-    width: calc(100% - 80px);
-    margin-left: 80px;
+    width: 100%;
+    margin-left: 0;
   }
   .genre-feature {
     grid-template-columns: 1fr;
@@ -1480,8 +1504,11 @@ h2 {
     min-width: 180px;
   }
   .editorial-hero {
-    min-height: 600px;
-    padding: 90px 24px 150px;
+    --flower-room: 124px;
+    --flower-width: 220px;
+    --flower-bottom: calc(var(--flower-room) - 84px);
+    min-height: calc(600px + var(--flower-room));
+    padding: 90px 24px calc(150px + var(--flower-room));
   }
   .hero-content h1 {
     font-size: 3.45rem;
@@ -1493,10 +1520,6 @@ h2 {
   .hero-description {
     font-size: 0.875rem;
   }
-  .editorial-hero > .botanical {
-    width: 220px;
-    bottom: -70px;
-  }
   .hero-flower-left {
     left: -60px;
   }
@@ -1506,14 +1529,6 @@ h2 {
   .aperture-section {
     margin-inline: -20px;
     padding-inline: 20px;
-  }
-  .aperture-stories {
-    margin-left: 55px;
-    width: calc(100% - 55px);
-  }
-  .aperture-clip {
-    --aperture-diameter: 330px;
-    left: -285px;
   }
   .genre-moodboard {
     height: 320px;
