@@ -26,22 +26,31 @@ export function PhotographerSearchCard({ person }: { person: SearchPhotographer 
           {person.userName ? <span>@{person.userName}</span> : null}
         </span>
       </Link>
-      {person.city || person.district || person.bio || person.genres.length ? (
-        <div className="photographer-search-details">
-          {person.city || person.district ? (
-            <p>{[person.district, person.city].filter(Boolean).join(', ')}</p>
-          ) : null}
-          {person.bio ? <p className="photographer-search-bio">{person.bio}</p> : null}
-          {person.genres.length ? (
-            <p>
-              {person.genres
-                .slice(0, 3)
-                .map((genre) => t.genreLabels[genre])
-                .join(' · ')}
-            </p>
-          ) : null}
+      <div className="photographer-search-details">
+        <div className="photographer-preview-heading">
+          <UserAvatar
+            className="photographer-preview-avatar"
+            name={person.displayName}
+            avatarPath={person.avatarPath}
+          />
+          <div className="photographer-search-identity">
+            <strong>{person.displayName}</strong>
+            {person.userName ? <span>@{person.userName}</span> : null}
+          </div>
         </div>
-      ) : null}
+        <p className="photographer-search-bio">{person.bio || t.profileUi.noBio}</p>
+        {person.city || person.district ? (
+          <p>{[person.district, person.city].filter(Boolean).join(', ')}</p>
+        ) : null}
+        {person.genres.length ? (
+          <p>
+            {person.genres
+              .slice(0, 3)
+              .map((genre) => t.genreLabels[genre])
+              .join(' · ')}
+          </p>
+        ) : null}
+      </div>
     </article>
   );
 }

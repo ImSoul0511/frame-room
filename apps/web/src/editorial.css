@@ -440,6 +440,9 @@ select {
   background: #e3ddeb;
 }
 .page-footer {
+  position: relative;
+  z-index: 30;
+  background: var(--fr-paper);
   margin: 0 4.5%;
   padding: 28px 0;
   font-size: 0.8125rem;
