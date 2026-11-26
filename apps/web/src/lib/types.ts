@@ -31,6 +31,11 @@ export interface Tag {
   category?: string | null;
 }
 export interface Image {
+  width?: number;
+  height?: number;
+  source?: string | null;
+  licenseNote?: string | null;
+  proofRound?: number;
   id: string;
   storagePath: string;
   url: string;
@@ -78,12 +83,16 @@ export interface Decision {
   description: string;
   proposedBy: string;
   status: 'proposed' | 'agreed' | 'rejected';
+  changes?: {
+    before: { scheduledStart?: string; scheduledEnd?: string; quantity?: number };
+    proposed: { scheduledStart?: string; scheduledEnd?: string; quantity?: number; notes?: string };
+  };
 }
 export interface Member {
   userId: string;
   displayName: string;
   userName: string;
-  photographerId: string;
+  photographerId: string | null;
   role: 'manager' | 'photographer';
 }
 export interface Resource {
@@ -111,12 +120,19 @@ export interface Workspace {
   messages: Message[];
   decisions: Decision[];
   milestones: Milestone[];
-  gallery: { id: string; status: string; round: number; revisionRequestedAt: string | null } | null;
-  proofing: { quota: number; revisions: number };
+  gallery: {
+    id: string;
+    status: string;
+    round: number;
+    revisionRequestedAt: string | null;
+    approvedRound?: number | null;
+  } | null;
+  proofing: { quota: number; revisions: number; mode?: 'select' | 'album' | 'print' };
+  roundNotes?: { round: number; note: string }[];
   photoFeedback: PhotoFeedback[];
   images: Image[];
   selections: { imageId: string }[];
-  deliveries: { id: string; fileName: string; url: string }[];
+  deliveries: { id: string; fileName: string; url: string; sizeBytes?: string | number | null }[];
   resources: { resourceId: string; name: string }[];
   review: {
     rating: number;
@@ -128,6 +144,7 @@ export interface Workspace {
   } | null;
 }
 export interface ProviderDetail {
+  userName?: string | null;
   provider: Provider;
   coverPath?: string | null;
   avatarPath?: string | null;

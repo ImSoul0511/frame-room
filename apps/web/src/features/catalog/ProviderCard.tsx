@@ -12,7 +12,7 @@ import { QueryState } from '../../components/ui';
 export function ProviderCard({
   provider,
 }: {
-  provider: Provider & { avatarPath?: string | null };
+  provider: Provider & { avatarPath?: string | null; userName?: string | null };
 }) {
   const t = useStrings();
   const [params] = useSearchParams();
@@ -22,7 +22,7 @@ export function ProviderCard({
   const portfolios = detail.data?.portfolios ?? [];
   const featured = portfolios.find((portfolio) => portfolio.coverUrl) ?? portfolios[0];
   const project = params.get('project');
-  const destination = `/providers/${provider.type}/${provider.id}${project ? `?project=${encodeURIComponent(project)}` : ''}`;
+  const destination = `/providers/${provider.type}/${encodeURIComponent(provider.type === 'photographer' ? (provider.userName ?? detail.data?.userName ?? provider.id) : provider.id)}${project ? `?project=${encodeURIComponent(project)}` : ''}`;
   return (
     <article className={`directory-card directory-card-${provider.type}`} ref={ref}>
       <div className="directory-featured" aria-label={t.curation.recentWork}>

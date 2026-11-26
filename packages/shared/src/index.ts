@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export * from './business.js';
 export * from './locale.js';
+export * from './locations.js';
 
 export const roleSchema = z.enum(['client', 'photographer', 'studio_manager', 'system_admin']);
 export type Role = z.infer<typeof roleSchema>;

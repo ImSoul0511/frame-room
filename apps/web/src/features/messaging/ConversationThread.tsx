@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
+import type { PrivateQuote } from '@frameroom/shared';
+import { Action, Modal, QueryState } from '../../components/ui';
+import { ServiceForm } from '../catalog/ProviderForms';
 import { UserAvatar } from '../../components/UserAvatar';
-import { api, post, supabase, upload } from '../../lib/api';
-import { useTask } from '../../lib/hooks';
+import { api, currency, post, RequestError, supabase, upload } from '../../lib/api';
+import { useApi, useTask } from '../../lib/hooks';
 import { useStrings } from '../../lib/i18n';
 import { ConversationHistory } from './ConversationHistory';
 import { MessageComposer } from './MessageComposer';
@@ -27,6 +30,9 @@ export function ConversationThread({
   const client = useQueryClient();
   const id = conversation.id;
   const isRoom = Boolean(conversation.bookingId);
+  const [showQuoteForm, setShowQuoteForm] = useState(false);
+  const quotePath = `/v1/conversations/${id}/quotes`;
+  const quotes = useApi<PrivateQuote[]>(quotePath, !isRoom, 10000);
   const queryKey = ['conversation', userId, isRoom ? 'room' : 'direct', id];
   const draftKey = ['message-draft', userId, id];
   const [connected, setConnected] = useState(false);
@@ -60,7 +66,12 @@ export function ConversationThread({
       return api<Messages>(`${path}?${params}`, { signal });
     },
     getNextPageParam: (page) => page.before ?? undefined,
-    refetchInterval: connected ? false : 5000,
+    refetchInterval: (query) =>
+      connected ||
+      (query.state.error instanceof RequestError &&
+        query.state.error.reason === 'network_unavailable')
+        ? false
+        : 5000,
   });
 
   useEffect(() => {
@@ -190,6 +201,55 @@ export function ConversationThread({
           {connected ? t.messaging.liveUpdates : t.discovery.messageUpdatesDelayed}
         </span>
       </header>
+      {!isRoom && (
+        <details className="messenger-quote-panel" open={quotes.data?.length ? true : undefined}>
+          <summary>{t.workspaceUi.quote}</summary>
+          <QueryState query={quotes} />
+          {quotes.data?.map((quote, index) => (
+            <div key={quote.id} className="row between wrap">
+              <p>
+                <strong>{quote.terms.name}</strong> · {quote.terms.quantity} ×{' '}
+                {currency(quote.terms.price)}
+              </p>
+              {quote.bookingId ? (
+                <Link to={`/bookings/${quote.bookingId}`}>{t.booking.title}</Link>
+              ) : index === 0 && isClient ? (
+                <Link to={`/bookings/new?conversation=${id}&quote=${quote.id}`}>
+                  {t.workspaceUi.bookQuote}
+                </Link>
+              ) : index > 0 ? (
+                <span className="muted">{t.workspaceUi.previousQuotes}</span>
+              ) : null}
+            </div>
+          ))}
+          {!isClient && (
+            <Action secondary onClick={() => setShowQuoteForm(true)}>
+              {t.workspaceUi.quote}
+            </Action>
+          )}
+          {isClient && !quotes.data?.length && (
+            <Link
+              to={`/bookings/new?${new URLSearchParams({
+                providerType: conversation.studioId ? 'studio' : 'photographer',
+                providerId: conversation.studioId ?? conversation.photographerId ?? '',
+              })}`}
+            >
+              {t.workspaceUi.bookQuote}
+            </Link>
+          )}
+        </details>
+      )}
+      {showQuoteForm && (
+        <Modal title={t.workspaceUi.quote} onClose={() => setShowQuoteForm(false)}>
+          <ServiceForm
+            onQuote={async (terms) => {
+              await post(quotePath, terms);
+              await quotes.refetch();
+              setShowQuoteForm(false);
+            }}
+          />
+        </Modal>
+      )}
 
       <ConversationHistory
         query={messages}

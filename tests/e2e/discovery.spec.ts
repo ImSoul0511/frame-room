@@ -104,6 +104,7 @@ test('a stationary pagination sentinel continues loading and recovers from failu
 
 test('search, genre filters, reset, and style mode use their own results', async ({ page }) => {
   const searches: URLSearchParams[] = [];
+  const portfolios: URLSearchParams[] = [];
   await page.route('**/v1/photographers?*', (route) => {
     const params = new URL(route.request().url()).searchParams;
     searches.push(params);
@@ -120,11 +121,15 @@ test('search, genre filters, reset, and style mode use their own results', async
             slug: 'soft-light',
             category: 'mood',
           },
+          { id: 'vintage', name: 'Vintage', nameVi: 'Hoài cổ', slug: 'vintage', category: 'style' },
         ],
       },
     }),
   );
-  await page.route('**/v1/portfolios?*', (route) => route.fulfill({ json: { data: [] } }));
+  await page.route('**/v1/photos?*', (route) => {
+    portfolios.push(new URL(route.request().url()).searchParams);
+    return route.fulfill({ json: { data: [] } });
+  });
   await page.goto('/explore?project=project-1');
   const search = page.locator('.discovery-sidebar-search');
   await search.getByRole('searchbox').fill('Linh');
@@ -143,9 +148,15 @@ test('search, genre filters, reset, and style mode use their own results', async
   await search.getByRole('searchbox').fill('');
   await search.getByRole('searchbox').press('Enter');
   await page.getByRole('button', { name: 'Phong cách', exact: true }).click();
-  await expect(page.locator('.discovery-results h2')).toHaveText('Bộ ảnh theo phong cách');
+  await expect(page.locator('.discovery-results h2')).toHaveCount(0);
   await expect(page.locator('.photographer-search-card')).toHaveCount(0);
   await expect(page.locator('.discovery-results .empty-state')).toBeVisible();
+  await page.locator('.tag-filter-trigger').click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Ánh sáng dịu', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Hoài cổ', exact: true }).click();
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Áp dụng bộ lọc' }).click();
+  await expect.poll(() => portfolios.at(-1)?.get('tags')).toBe('soft-light,vintage');
 });
 
 test('live catalog can reach every public photographer', async ({ page }) => {

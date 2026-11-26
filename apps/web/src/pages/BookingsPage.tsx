@@ -4,7 +4,8 @@ import type { Booking } from '@frameroom/shared';
 import type { Workspace } from '../lib/types';
 import { useApi, useTask } from '../lib/hooks';
 import { useStrings } from '../lib/i18n';
-import { api, currency, dateTime, patch, post, supabase, upload } from '../lib/api';
+import { api, currency, dateTime, patch, post, supabase } from '../lib/api';
+import { uploadDelivery, type DeliveryUpload } from '../features/booking/deliveryUpload';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   Action,
@@ -226,6 +227,7 @@ function BriefPanel({ workspace: w }: { workspace: Workspace }) {
         <section className="panel">
           <h2>{t.booking.proposeBrief}</h2>
           <BriefEditor
+            booking
             key={latest?.id ?? w.booking.id}
             initial={{
               ...baseline,
@@ -269,10 +271,14 @@ function BriefRequirements({
   return (
     <>
       <p>
-        {t.genreLabels[scope.genre]} · {t.workspaceUi.people} {scope.people}
+        {t.genreLabels[scope.genre]}
+        {scope.quantity !== undefined && ` · ${t.workspaceUi.quantity} ${scope.quantity}`}
+        {['event', 'yearbook', 'wedding', 'family'].includes(scope.genre) &&
+          ` · ${t.workspaceUi.shootSize} ${scope.people}`}
       </p>
       <p>
-        {scope.location} · {scope.scheduledStart ? dateTime(scope.scheduledStart) : ''}
+        {scope.location ? `${scope.location} · ` : ''}
+        {scope.scheduledStart ? dateTime(scope.scheduledStart) : ''}
         {scope.scheduledEnd ? ` – ${dateTime(scope.scheduledEnd)}` : ''}
       </p>
       <p>
@@ -280,6 +286,16 @@ function BriefRequirements({
         · {t.workspaceUi.revisions} {scope.revisionLimit} · {currency(scope.budget)}
       </p>
       {scope.crew ? <p>{scope.crew}</p> : null}
+      {scope.highlightsDueAt && (
+        <p>
+          {t.workspaceUi.highlightsDue} · {dateTime(scope.highlightsDueAt)}
+        </p>
+      )}
+      {scope.deliveryDueAt && (
+        <p>
+          {t.workspaceUi.deliveryDue} · {dateTime(scope.deliveryDueAt)}
+        </p>
+      )}
       {scope.notes ? <p>{scope.notes}</p> : null}
       {scope.referencePaths.map((path, index) => (
         <BriefReference
@@ -322,13 +338,7 @@ function DeliveryPanel({ workspace: w }: { workspace: Workspace }) {
     !w.review.reassessmentRequestedAt &&
     !w.review.deletedAt,
   );
-  const add = useTask(async (file: File) => {
-    const result = await upload(file, 'deliveries', w.booking.id);
-    return post(`/v1/bookings/${w.booking.id}/deliveries`, {
-      storagePath: result.storagePath,
-      fileName: file.name,
-    });
-  });
+  const add = useTask((transfer: DeliveryUpload) => uploadDelivery(w.booking.id, transfer));
   const review = useTask(async () =>
     canResubmit
       ? patch(`/v1/bookings/${w.booking.id}/review`, { rating, comment })
@@ -340,20 +350,33 @@ function DeliveryPanel({ workspace: w }: { workspace: Workspace }) {
       {w.isProvider &&
       w.booking.status === 'proofing' &&
       w.gallery?.status === 'selection_submitted' &&
+      (!w.proofing.mode || w.gallery.approvedRound === w.gallery.round) &&
       !w.gallery.revisionRequestedAt ? (
-        <FilePicker
-          label={t.booking.addDelivery}
-          onFile={(file) => add.mutate(file)}
-          disabled={add.isPending}
-        />
+        <>
+          <p className="muted">{t.workspaceUi.originalFileHint}</p>
+          <FilePicker
+            label={t.booking.addDelivery}
+            accept="image/jpeg,image/png,image/webp,.zip,.dng,.cr2,.cr3,.nef,.arw,.raf,.orf,.rw2,.raw"
+            onFile={(file) => add.mutate({ file })}
+            disabled={add.isPending}
+          />
+        </>
       ) : null}
       {w.deliveries.map((file) => (
         <a className="list-row" href={file.url} key={file.id} target="_blank" rel="noreferrer">
-          <span>{file.fileName}</span>
+          <span>
+            {file.fileName}
+            {file.sizeBytes ? ` · ${(Number(file.sizeBytes) / 1048576).toFixed(1)} MiB` : ''}
+          </span>
           <span>{t.booking.download} ↗</span>
         </a>
       ))}
       <Feedback error={add.error} />
+      {add.isError && add.variables && (
+        <Action secondary onClick={() => add.mutate(add.variables)}>
+          {t.retry}
+        </Action>
+      )}
       {w.isClient && w.review?.moderationReason ? (
         <p>
           {t.workspaceUi.reviewHidden} · {w.review.moderationReason}

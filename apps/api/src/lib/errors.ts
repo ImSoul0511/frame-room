@@ -59,6 +59,7 @@ interface DatabaseError {
 const KNOWN_CHECK_REASONS = new Set([
   'invalid_state',
   'invalid_interval',
+  'invalid_locality',
   'invalid_assignment',
   'invalid_resource',
   'duplicate_resource',

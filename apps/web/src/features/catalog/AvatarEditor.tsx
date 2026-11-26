@@ -2,7 +2,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import type { Profile } from '@frameroom/shared';
 import { UserAvatar } from '../../components/UserAvatar';
-import { Action, Feedback, Modal } from '../../components/ui';
+import { Feedback, Modal } from '../../components/ui';
 import { patch, supabase, upload } from '../../lib/api';
 import { useTask } from '../../lib/hooks';
 import { useStrings } from '../../lib/i18n';
@@ -56,7 +56,6 @@ export function PhotoEditButton({
   const trigger = useRef<HTMLButtonElement>(null);
   const [viewing, setViewing] = useState(false);
   const [source, setSource] = useState('');
-  const [selected, setSelected] = useState<File | null>(null);
   const [invalid, setInvalid] = useState(false);
   const save = useTask(onSave);
   const avatar = kind === 'avatar';
@@ -99,12 +98,9 @@ export function PhotoEditButton({
   const close = () => {
     setViewing(false);
     setSource('');
-    setSelected(null);
     setInvalid(false);
   };
   const apply = (file: File) => {
-    setSelected(file);
-    if (avatar) setSource('');
     save.mutate(file, { onSuccess: close });
   };
   const fileInput = (
@@ -126,7 +122,6 @@ export function PhotoEditButton({
           return;
         }
         setInvalid(false);
-        setSelected(file);
         setSource(URL.createObjectURL(file));
       }}
     />
@@ -193,27 +188,19 @@ export function PhotoEditButton({
           <img className="avatar-full-preview" src={current} alt={viewLabel} />
         </Modal>
       )}
-      {avatar && source && <AvatarCropDialog source={source} onClose={close} onApply={apply} />}
-      {avatar && <Feedback error={invalid ? new Error(t.profileUi.avatarInvalid) : save.error} />}
-      {!avatar && (source || invalid) && (
-        <Modal title={title} onClose={close}>
-          {source && <img className="cover-edit-preview" alt="" src={source} />}
-          <Feedback error={invalid ? new Error(t.profileUi.avatarInvalid) : save.error} />
-          <div className="row wrap">
-            <Action secondary disabled={save.isPending} onClick={() => input.current?.click()}>
-              {t.profileUi.chooseCover}
-            </Action>
-            {selected && (
-              <Action disabled={invalid} pending={save.isPending} onClick={() => apply(selected)}>
-                {t.save}
-              </Action>
-            )}
-            <Action secondary disabled={save.isPending} onClick={close}>
-              {t.cancel}
-            </Action>
-          </div>
-        </Modal>
+      {source && (
+        <AvatarCropDialog
+          key={source}
+          kind={kind}
+          source={source}
+          busy={save.isPending}
+          uploadError={save.error}
+          onClose={close}
+          onApply={apply}
+          onReplace={() => input.current?.click()}
+        />
       )}
+      {invalid && <Feedback error={new Error(t.profileUi.avatarInvalid)} />}
     </>
   );
 }

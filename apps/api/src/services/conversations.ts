@@ -1,7 +1,48 @@
 import type { z } from 'zod';
-import type { conversationMessageInputSchema } from '@frameroom/shared';
+import type {
+  conversationMessageInputSchema,
+  quoteInputSchema,
+  PrivateQuote,
+} from '@frameroom/shared';
 import { requireCondition } from '../lib/errors.js';
 import type { Transaction } from '../repositories/database.js';
+import { manageProvider } from './access.js';
+
+export async function listQuotes(tx: Transaction, conversationId: string) {
+  await readConversation(tx, conversationId);
+  return tx.rows<PrivateQuote>(
+    `select q.id,q.version,q.terms,b.id as booking_id from conversation_quotes q
+    left join bookings b on b.quote_id=q.id where q.conversation_id=$1 order by q.version desc limit 20`,
+    [conversationId],
+  );
+}
+
+export async function sendQuote(
+  tx: Transaction,
+  conversationId: string,
+  userId: string,
+  terms: z.infer<typeof quoteInputSchema>,
+) {
+  const pair = await tx.one<ConversationPair>(
+    'select client_id,photographer_id,studio_id from conversations where id=$1 and private.can_read_conversation(id) for update',
+    [conversationId],
+  );
+  requireCondition(pair.clientId !== userId);
+  await manageProvider(tx, pair.photographerId, pair.studioId);
+  requireCondition(
+    terms.price * terms.quantity <= 2147483647 &&
+      terms.photoCount * terms.quantity <= 10000 &&
+      terms.retouchedCount <= terms.photoCount,
+    422,
+    'invalid_input',
+  );
+  return tx.one<PrivateQuote>(
+    `insert into conversation_quotes(conversation_id,author_id,version,terms)
+      select $1,$2,coalesce(max(version),0)+1,$3 from conversation_quotes where conversation_id=$1
+      returning id,version,terms,null::uuid as booking_id`,
+    [conversationId, userId, JSON.stringify(terms)],
+  );
+}
 
 export type ConversationPair = {
   clientId: string;

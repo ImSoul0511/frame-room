@@ -1,5 +1,4 @@
 import { Botanical, LeafBranch, WatercolorWash } from '../components/Botanical';
-import { Reveal } from '../components/Reveal';
 import { ApertureGenres } from '../features/catalog/ApertureGenres';
 import { useStrings } from '../lib/i18n';
 
@@ -13,7 +12,7 @@ export function ExplorePage() {
         <LeafBranch className="hero-leaves-right" />
         <Botanical className="hero-flower-left" meadow />
         <Botanical className="hero-flower-right" meadow />
-        <Reveal className="hero-content">
+        <div className="hero-content">
           <p className="eyebrow">{t.discovery.heroKicker}</p>
           <h1>
             {t.discovery.heroFirst}
@@ -23,7 +22,7 @@ export function ExplorePage() {
           <a className="button-link hero-cta emphasis-link" href="#genres">
             {t.design.browsePhotos}
           </a>
-        </Reveal>
+        </div>
       </section>
       <ApertureGenres />
     </div>

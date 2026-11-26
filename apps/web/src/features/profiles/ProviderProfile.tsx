@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { PortfolioCard } from '../catalog/PortfolioCard';
+import { ProviderWorks } from './ProviderWorks';
 import type { Service } from '@frameroom/shared';
 import type { ProviderDetail } from '../../lib/types';
 import { currency, supabase } from '../../lib/api';
@@ -15,6 +15,7 @@ export function ProviderProfile({
   canRequest = true,
   coverAction,
   avatar,
+  availability,
 }: {
   detail: ProviderDetail;
   onBook: (service: Service) => void;
@@ -22,6 +23,7 @@ export function ProviderProfile({
   canRequest?: boolean;
   coverAction?: ReactNode;
   avatar?: ReactNode;
+  availability?: ReactNode;
 }) {
   const t = useStrings();
   const { provider, services, portfolios, reviews } = detail;
@@ -86,24 +88,8 @@ export function ProviderProfile({
           </nav>
           {tab === 'works' ? (
             <section className="profile-section">
-              <div className="row between">
-                <h2>{t.provider.portfolios}</h2>
-                <span className="muted">
-                  {portfolios.length} {t.profileUi.albums.toLowerCase()}
-                </span>
-              </div>
-              {portfolios.length ? (
-                <div className="media-grid">
-                  {portfolios.map((portfolio) => (
-                    <PortfolioCard
-                      key={portfolio.id}
-                      portfolio={{ ...portfolio, ownerName: provider.displayName }}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <p className="profile-empty">{t.profileUi.noWork}</p>
-              )}
+              <ProviderWorks type={provider.type} id={provider.id} />
+              {availability}
             </section>
           ) : null}
           {tab === 'about' ? (
@@ -142,9 +128,11 @@ export function ProviderProfile({
                       <h3>{service.name}</h3>
                       <p>{service.description}</p>
                       <div className="package-details">
-                        <span>
-                          {service.durationMinutes} {t.provider.minutes}
-                        </span>
+                        {service.billingUnit === 'hour' && (
+                          <span>
+                            {service.durationMinutes} {t.provider.minutes}
+                          </span>
+                        )}
                         <span>
                           {service.photoCount} {t.provider.photos}
                         </span>
@@ -154,7 +142,10 @@ export function ProviderProfile({
                       </div>
                     </div>
                     <div className="package-price">
-                      <strong>{currency(service.price)}</strong>
+                      <strong>
+                        {currency(service.price)} /{' '}
+                        {t.workspaceUi[`unit_${service.billingUnit ?? 'package'}`]}
+                      </strong>
                       {canRequest ? (
                         <Action onClick={() => onBook(service)}>{t.provider.book}</Action>
                       ) : null}

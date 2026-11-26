@@ -1,4 +1,4 @@
-import { useId, type RefObject } from 'react';
+import { memo, useId, type RefObject } from 'react';
 import { genres } from '@frameroom/shared';
 import { useStrings } from '../../lib/i18n';
 import { PIGMENT_PATCHES } from '../../components/botanical-art';
@@ -6,7 +6,11 @@ import { bladePivot, GENRE_STEP } from './aperture-geometry';
 
 const BLADE_COLORS = ['#aab4cf', '#cdded8', '#c0b8d3', '#91a8b5', '#d6d5e4', '#b6c9c4'];
 
-export function ApertureRing({ bladeRef }: { bladeRef: RefObject<SVGPathElement | null> }) {
+export const ApertureRing = memo(function ApertureRing({
+  bladeRef,
+}: {
+  bladeRef: RefObject<SVGPathElement | null>;
+}) {
   const t = useStrings();
   const id = useId().replace(/:/g, '');
   return (
@@ -102,4 +106,4 @@ export function ApertureRing({ bladeRef }: { bladeRef: RefObject<SVGPathElement 
       ))}
     </svg>
   );
-}
+});

@@ -12,6 +12,7 @@ import { patch, post, RequestError } from '../../lib/api';
 import { GenreChoices } from './GenreChoices';
 import { useAuth } from '../../lib/auth';
 import { useApi, useTask } from '../../lib/hooks';
+import { ProvinceSelect } from './ProvinceSelect';
 import { useStrings } from '../../lib/i18n';
 import {
   Action,
@@ -35,7 +36,6 @@ function PhotographerEditor({ initial }: { initial: OwnPhotographer | null }) {
   const t = useStrings();
   const { profile, session } = useAuth();
   const client = useQueryClient();
-  const [name, setName] = useState(initial?.displayName ?? profile?.displayName ?? '');
   const [bio, setBio] = useState(initial?.bio ?? '');
   const [city, setCity] = useState(initial?.city ?? '');
   const [district, setDistrict] = useState(initial?.district ?? '');
@@ -45,7 +45,7 @@ function PhotographerEditor({ initial }: { initial: OwnPhotographer | null }) {
   const [contact, setContact] = useState(initial?.contactEmail ?? '');
   const task = useTask(async () => {
     const input = photographerInputSchema.parse({
-      displayName: name,
+      displayName: profile?.displayName ?? initial?.displayName ?? '',
       bio,
       city,
       district,
@@ -77,10 +77,9 @@ function PhotographerEditor({ initial }: { initial: OwnPhotographer | null }) {
   });
   return (
     <Form onSubmit={() => task.mutate()}>
-      <Field label={t.displayName} value={name} onChange={setName} required />
       <Area label={t.bio} value={bio} onChange={setBio} />
       <div className="two-col">
-        <Field label={t.city} value={city} onChange={setCity} required />
+        <ProvinceSelect value={city} onChange={setCity} required />
         <Field label={t.district} value={district} onChange={setDistrict} />
       </div>
       <Field
@@ -92,7 +91,7 @@ function PhotographerEditor({ initial }: { initial: OwnPhotographer | null }) {
       />
       <GenreChoices value={selectedGenres} onChange={setGenres} />
       <Feedback error={task.error} success={task.isSuccess ? t.saved : null} />
-      <Action type="submit" pending={task.isPending} disabled={!selectedGenres.length}>
+      <Action type="submit" pending={task.isPending} disabled={!selectedGenres.length || !city}>
         {t.save}
       </Action>
     </Form>
@@ -102,10 +101,12 @@ export function ServiceForm({
   studioId,
   initial,
   onDone,
+  onQuote,
 }: {
   studioId?: string;
   initial?: Service;
   onDone?: () => void;
+  onQuote?: (input: import('@frameroom/shared').PrivateQuote['terms']) => Promise<unknown>;
 }) {
   const t = useStrings();
   const { session } = useAuth();
@@ -122,6 +123,15 @@ export function ServiceForm({
     initial?.selectionQuota ?? Math.max(1, Math.min(200, initial?.retouchedCount ?? 5)),
   );
   const [revisions, setRevisions] = useState(initial?.revisionLimit ?? 2);
+  const [quantity, setQuantity] = useState(1);
+  const [selectedUnit, setUnit] = useState<Service['billingUnit']>(initial?.billingUnit);
+  const unit =
+    selectedUnit ??
+    (genre === 'product' ? 'sku' : genre === 'food' || genre === 'drink' ? 'dish' : 'package');
+  const [mode, setMode] = useState<NonNullable<Service['proofingMode']> | ''>(
+    initial?.proofingMode ?? '',
+  );
+  const proofingMode = mode || (genre === 'event' || genre === 'yearbook' ? 'album' : 'select');
   const task = useTask(async () => {
     const input = serviceInputSchema.parse({
       name,
@@ -132,10 +142,14 @@ export function ServiceForm({
       photoCount: photos,
       retouchedCount: retouched,
       isActive: active,
-      selectionQuota: quota,
+      selectionQuota: proofingMode === 'album' ? 0 : quota,
       revisionLimit: revisions,
+      billingUnit: unit,
+      proofingMode,
     });
-    if (initial) {
+    if (onQuote) {
+      await onQuote({ ...input, quantity });
+    } else if (initial) {
       const queryKey = ['api', session?.user.id ?? 'public', '/v1/me/services'];
       await client.cancelQueries({ queryKey });
       const previous = client
@@ -169,21 +183,58 @@ export function ServiceForm({
       <Area label={t.studio.description} value={description} onChange={setDescription} />
       <GenreSelect value={genre} onChange={(value) => setGenre(value as Service['genre'])} />
       <div className="two-col">
+        <Select
+          label={t.workspaceUi.billingUnit}
+          value={unit}
+          onChange={(value) => setUnit(value as typeof unit)}
+        >
+          {(['package', 'hour', 'sku', 'dish', 'day'] as const).map((key) => (
+            <option key={key} value={key}>
+              {t.workspaceUi[`unit_${key}`]}
+            </option>
+          ))}
+        </Select>
         <NumberField label={t.studio.price} value={price} onChange={setPrice} />
-        <NumberField label={t.studio.duration} value={duration} onChange={setDuration} min={15} />
+        {unit === 'hour' ? (
+          <NumberField label={t.studio.duration} value={duration} onChange={setDuration} min={15} />
+        ) : null}
+        {onQuote ? (
+          <NumberField
+            label={t.workspaceUi.quantity}
+            value={quantity}
+            onChange={setQuantity}
+            min={1}
+            max={1000}
+          />
+        ) : null}
         <NumberField label={t.studio.photos} value={photos} onChange={setPhotos} />
         <NumberField label={t.studio.retouched} value={retouched} onChange={setRetouched} />
-        <NumberField label={t.workspaceUi.quota} value={quota} onChange={setQuota} min={1} />
+        <Select
+          label={t.workspaceUi.proofingMode}
+          value={proofingMode}
+          onChange={(value) => setMode(value as typeof mode)}
+        >
+          {(['select', 'album', 'print'] as const).map((key) => (
+            <option key={key} value={key}>
+              {t.workspaceUi[`proof_${key}`]}
+            </option>
+          ))}
+        </Select>
+        {proofingMode !== 'album' ? (
+          <NumberField label={t.workspaceUi.quota} value={quota} onChange={setQuota} min={0} />
+        ) : null}
         <NumberField label={t.workspaceUi.revisions} value={revisions} onChange={setRevisions} />
       </div>
-      <Select
-        label={t.portfolio.status}
-        value={String(active)}
-        onChange={(v) => setActive(v === 'true')}
-      >
-        <option value="true">{t.studio.active}</option>
-        <option value="false">{t.studio.inactive}</option>
-      </Select>
+      {!onQuote && (
+        <Select
+          label={t.portfolio.status}
+          value={String(active)}
+          onChange={(v) => setActive(v === 'true')}
+        >
+          <option value="true">{t.studio.active}</option>
+          <option value="false">{t.studio.inactive}</option>
+        </Select>
+      )}
       <Feedback error={task.error} success={task.isSuccess && !onDone ? t.saved : null} />
       <Action type="submit" pending={task.isPending}>
         {t.save}
@@ -219,7 +270,9 @@ export function ProfileForm({ profile }: { profile: Profile }) {
     onSettled: () =>
       Promise.all([
         client.invalidateQueries({ queryKey: ['profile', profile.id] }),
-        client.invalidateQueries({ queryKey: ['api', profile.id, '/v1/me'] }),
+        client.invalidateQueries({ queryKey: ['api'] }),
+        client.invalidateQueries({ queryKey: ['conversation'] }),
+        client.invalidateQueries({ queryKey: ['people-search'] }),
       ]),
   });
   const usernameTaken =

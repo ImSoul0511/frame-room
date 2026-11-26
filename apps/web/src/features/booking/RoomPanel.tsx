@@ -3,7 +3,16 @@ import type { Workspace } from '../../lib/types';
 import { post, patch, upload, dateTime } from '../../lib/api';
 import { useTask } from '../../lib/hooks';
 import { useStrings } from '../../lib/i18n';
-import { Action, Area, DateField, Feedback, Field, FilePicker, Form } from '../../components/ui';
+import {
+  Action,
+  Area,
+  DateField,
+  Feedback,
+  Field,
+  FilePicker,
+  Form,
+  NumberField,
+} from '../../components/ui';
 import { MessageAttachment } from './MessageAttachment';
 
 export function RoomPanel({ workspace: w }: { workspace: Workspace }) {
@@ -14,6 +23,11 @@ export function RoomPanel({ workspace: w }: { workspace: Workspace }) {
   const [title, setTitle] = useState('');
   const [due, setDue] = useState('');
   const [decision, setDecision] = useState('');
+  const [description, setDescription] = useState('');
+  const [changeTerms, setChangeTerms] = useState(false);
+  const [newStart, setNewStart] = useState('');
+  const [newEnd, setNewEnd] = useState('');
+  const [quantity, setQuantity] = useState(w.booking.quantity ?? 1);
   const room = w.room!;
   const closed = room.status === 'closed';
   const send = useTask(
@@ -42,8 +56,19 @@ export function RoomPanel({ workspace: w }: { workspace: Workspace }) {
     setDue('');
   });
   const propose = useTask(async () => {
-    await post(`/v1/shoot-rooms/${room.id}/decisions`, { title: decision, description: '' });
+    const iso = (value: string) => (value ? new Date(`${value}+07:00`).toISOString() : undefined);
+    await post(`/v1/shoot-rooms/${room.id}/decisions`, {
+      title: decision,
+      description,
+      changes: changeTerms
+        ? { scheduledStart: iso(newStart), scheduledEnd: iso(newEnd), quantity }
+        : undefined,
+    });
     setDecision('');
+    setDescription('');
+    setChangeTerms(false);
+    setNewStart('');
+    setNewEnd('');
   });
   const update = useTask(async (value: { path: string; body: unknown }) =>
     patch(value.path, value.body),
@@ -136,7 +161,24 @@ export function RoomPanel({ workspace: w }: { workspace: Workspace }) {
                     ? t.booking.reject
                     : t.booking.waiting}
               </span>
-              {d.status === 'proposed' && !closed ? (
+              {d.description && <p>{d.description}</p>}
+              {d.changes?.proposed.scheduledStart && d.changes.before.scheduledStart && (
+                <p>
+                  {dateTime(d.changes.before.scheduledStart)} →{' '}
+                  {dateTime(d.changes.proposed.scheduledStart)}
+                </p>
+              )}
+              {d.changes?.proposed.quantity !== undefined &&
+                d.changes.proposed.quantity !== d.changes.before.quantity && (
+                  <p>
+                    {t.workspaceUi.quantity} {d.changes.before.quantity ?? 1} →{' '}
+                    {d.changes.proposed.quantity}
+                  </p>
+                )}
+              {d.status === 'proposed' &&
+              !closed &&
+              (d.proposedBy === w.booking.clientId) !== w.isClient &&
+              (!d.changes || w.isClient || w.canManage) ? (
                 <div className="row">
                   <Action
                     secondary
@@ -167,7 +209,48 @@ export function RoomPanel({ workspace: w }: { workspace: Workspace }) {
           {!closed ? (
             <Form onSubmit={() => propose.mutate()}>
               <Field label={t.booking.newDecision} value={decision} onChange={setDecision} />
-              <Action type="submit" pending={propose.isPending} disabled={!decision.trim()}>
+              <Area label={t.workspaceUi.notes} value={description} onChange={setDescription} />
+              {(w.isClient || w.canManage) && (
+                <label className="checkbox-row">
+                  <input
+                    type="checkbox"
+                    checked={changeTerms}
+                    onChange={(event) => setChangeTerms(event.target.checked)}
+                  />
+                  {t.booking.reschedule} / {t.workspaceUi.quantity}
+                </label>
+              )}
+              {changeTerms && (
+                <>
+                  <DateField
+                    label={t.booking.start}
+                    value={newStart}
+                    onChange={setNewStart}
+                    required={false}
+                  />
+                  <DateField
+                    label={t.booking.end}
+                    value={newEnd}
+                    onChange={setNewEnd}
+                    required={false}
+                  />
+                  <p className="muted">UTC+7</p>
+                  <NumberField
+                    label={t.workspaceUi.quantity}
+                    value={quantity}
+                    onChange={setQuantity}
+                    min={1}
+                    max={1000}
+                  />
+                </>
+              )}
+              <Action
+                type="submit"
+                pending={propose.isPending}
+                disabled={
+                  !decision.trim() || (changeTerms && Boolean(newStart) !== Boolean(newEnd))
+                }
+              >
                 {t.booking.newDecision}
               </Action>
             </Form>

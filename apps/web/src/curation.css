@@ -13,8 +13,8 @@
   --color-background-card: #fdfaf3;
   --font-family-script: 'Imperial Script', cursive;
 }
-h1,
-h2 {
+.hero-content h1,
+.about-intro h1 {
   font-family: var(--font-family-script);
   font-weight: 400;
   letter-spacing: 0;
@@ -26,6 +26,19 @@ h2 {
 }
 .hero-content h1 em {
   font-style: normal;
+}
+.home-page .hero-content,
+.glimpse-caption[aria-hidden='false'],
+.genre-feature-copy[aria-hidden='false'] {
+  animation: home-fade-in 220ms ease-out;
+}
+@keyframes home-fade-in {
+  from {
+    opacity: 0.7;
+  }
+  to {
+    opacity: 1;
+  }
 }
 .editorial-hero {
   /* Extend the lower edge while keeping the headline and flower heads in place. */
@@ -477,17 +490,30 @@ h2 {
   background: none;
   color: #718096;
 }
-.glimpse-copy {
+.glimpse-copy,
+.genre-feature-text {
+  display: grid;
+}
+/* Stack the localized stories so the longest copy reserves space at each width. */
+.glimpse-caption,
+.genre-feature-copy {
+  grid-area: 1 / 1;
+}
+.glimpse-caption[aria-hidden='true'],
+.genre-feature-copy[aria-hidden='true'] {
+  visibility: hidden;
+}
+.glimpse-caption {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
-.glimpse-copy > span {
+.glimpse-caption > span {
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.1em;
 }
-.glimpse-copy > strong {
+.glimpse-caption > strong {
   font-family: var(--font-family-script);
   font-size: 1.9rem;
   font-weight: 400;
@@ -524,15 +550,6 @@ h2 {
   gap: 30px;
   align-items: center;
   padding: 34px 0 26px;
-  animation: genre-fade-in 420ms ease-out both;
-}
-@keyframes genre-fade-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
 }
 .genre-feature-copy {
   padding: 40px 0 76px;
@@ -624,6 +641,18 @@ h2 {
   height: 100%;
   object-fit: contain;
   object-position: center;
+}
+.genre-sample {
+  opacity: 0;
+}
+.genre-sample[data-loaded='true'] {
+  opacity: 1;
+  animation: genre-photo-fade-in 220ms ease-out;
+}
+@keyframes genre-photo-fade-in {
+  from {
+    opacity: 0;
+  }
 }
 .genre-moodboard[data-count='1'] .moodboard-photo {
   max-width: 100%;
@@ -1083,7 +1112,7 @@ h2 {
   text-align: center;
 }
 .directory-no-photo > span {
-  font: 2rem var(--font-family-script);
+  font: 2rem var(--font-family-heading);
 }
 .directory-no-photo > p {
   font-size: 0.8125rem;
@@ -1263,7 +1292,7 @@ h2 {
   .genre-glimpse {
     gap: 10px;
   }
-  .glimpse-copy > strong {
+  .glimpse-caption > strong {
     font-size: 1.65rem;
   }
 }
@@ -1392,10 +1421,10 @@ h2 {
   .glimpse-thumbnail {
     height: 65px;
   }
-  .glimpse-copy > span {
+  .glimpse-caption > span {
     font-size: 0.7rem;
   }
-  .glimpse-copy > strong {
+  .glimpse-caption > strong {
     font-size: 1.6rem;
   }
   .aperture-dots button {
@@ -1547,7 +1576,6 @@ h2 {
     will-change: auto;
   }
   .directory-photo img,
-  .genre-feature,
   .floating-chat {
     animation: none;
     transition: none;
@@ -1559,17 +1587,25 @@ h2 {
 }
 .media-grid,
 .discovery-results .collection-grid.media-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 15.5rem), 1fr));
-  align-items: start;
-  gap: 1.5rem;
+  display: block;
+  columns: 12rem;
+  column-gap: 4px;
   margin-block: 1.5rem;
 }
 .media-grid > .media-card,
 .media-grid > .scroll-reveal {
   width: 100%;
-  max-width: 26.25rem;
-  justify-self: center;
+  break-inside: avoid;
+  margin-bottom: 4px;
+}
+.media-grid .media-card-image,
+.media-grid .fitted-image,
+.media-grid .fitted-image img {
+  width: 100%;
+}
+.media-grid .fitted-image img {
+  height: auto;
+  max-height: none;
 }
 .media-card {
   padding: 0;
@@ -1639,6 +1675,12 @@ h2 {
 }
 .media-card.collection-card:is(:hover, :focus-within) {
   box-shadow: none;
+}
+@media (hover: none) {
+  .media-card-caption {
+    opacity: 1;
+    transform: none;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .media-card-caption {

@@ -199,7 +199,25 @@ function registerBusiness(app: FastifyInstance, deps: ApiDependencies) {
     return bookings.requestBooking(tx, c.userId, i, c.requestKey);
   });
   route('GET', '/v1/bookings/:id/available-photographers', empty, (c, tx) =>
-    bookings.availablePhotographers(tx, c.params.id),
+    bookings.availablePhotographers(tx, c.params.id, c.query.attendance === 'true'),
+  );
+  const photographerIds = z
+    .array(schemas.idSchema)
+    .min(1)
+    .max(20)
+    .refine((ids) => new Set(ids).size === ids.length);
+  route(
+    'POST',
+    '/v1/bookings/:id/team',
+    z.object({
+      photographerIds,
+      version: z.number().int().positive(),
+      reason: z.string().trim().max(1000).default(''),
+    }),
+    (c, tx, i) => bookings.updateTeam(tx, c.params.id, c.userId, i),
+  );
+  route('POST', '/v1/bookings/:id/attendance', z.object({ photographerIds }), (c, tx, i) =>
+    bookings.recordAttendance(tx, c.params.id, c.userId, i.photographerIds),
   );
   route('POST', '/v1/bookings/:id/assignment', schemas.assignmentInputSchema, (c, tx, i) =>
     bookings.assignPhotographer(tx, c.params.id, c.userId, i),
@@ -271,6 +289,12 @@ function registerBusiness(app: FastifyInstance, deps: ApiDependencies) {
   );
   route('GET', '/v1/conversations', empty, (c, tx) =>
     conversations.listConversations(tx, c.query.scope === 'direct'),
+  );
+  route('GET', '/v1/conversations/:id/quotes', empty, (c, tx) =>
+    conversations.listQuotes(tx, c.params.id),
+  );
+  route('POST', '/v1/conversations/:id/quotes', schemas.quoteInputSchema, (c, tx, i) =>
+    conversations.sendQuote(tx, c.params.id, c.userId, i),
   );
   route('GET', '/v1/project-conversations', empty, (_c, tx) =>
     conversations.listProjectThreads(tx),
@@ -344,12 +368,9 @@ function registerBusiness(app: FastifyInstance, deps: ApiDependencies) {
   );
   route('GET', '/v1/bookings/:id/workspace', empty, async (c, tx) => {
     const result = await bookings.workspace(tx, c.params.id, c.userId);
-    result.images = await Promise.all(
-      result.images.map(async (i) => {
-        const image = i as { storagePath: string };
-        return { ...(i as object), url: await media.url('gallery-previews', image.storagePath) };
-      }),
-    );
+    const images = result.images as { storagePath: string }[];
+    const urls = await media.galleryUrls(images.map((image) => image.storagePath));
+    result.images = images.map((image, index) => ({ ...image, url: urls[index] }));
     result.deliveries = await Promise.all(
       result.deliveries.map(async (i) => {
         const file = i as { storagePath: string; fileName: string };
@@ -440,20 +461,42 @@ function registerBusiness(app: FastifyInstance, deps: ApiDependencies) {
     async (c, tx, i) => {
       const b = await booking(tx, c.params.id, true);
       await providerSide(tx, c.params.id);
-      requireCondition(b.status === 'in_progress', 422, 'gallery_locked');
-      const file = await media.verify('gallery-previews', i.storagePath, c.params.id);
-      const gallery = await tx.one<{ id: string }>(
-        "select id from galleries where booking_id=$1 and status='draft' for update",
-        [c.params.id],
+      requireCondition(
+        b.status === 'in_progress' || b.status === 'proofing',
+        422,
+        'gallery_locked',
       );
+      const gallery =
+        b.status === 'in_progress'
+          ? await tx.one<{ id: string; round: number }>(
+              "select id,round from galleries where booking_id=$1 and status='draft' for update",
+              [b.id],
+            )
+          : await tx.optional<{ id: string; round: number }>(
+              "select id,round from galleries where booking_id=$1 and status='open_for_selection' and round>1 for update",
+              [b.id],
+            );
+      requireCondition(gallery, 422, 'gallery_locked');
+      const file = await media.verify('gallery-previews', i.storagePath, c.params.id);
       return tx.one(
-        'insert into gallery_images(gallery_id,storage_path,width,height,caption,provenance) values($1,$2,$3,$4,$5,$6) returning *',
-        [gallery.id, i.storagePath, file.width, file.height, i.caption, i.provenance],
+        'insert into gallery_images(gallery_id,storage_path,width,height,caption,provenance,proof_round) values($1,$2,$3,$4,$5,$6,$7) returning *',
+        [
+          gallery.id,
+          i.storagePath,
+          file.width,
+          file.height,
+          i.caption,
+          i.provenance,
+          gallery.round,
+        ],
       );
     },
   );
   route('POST', '/v1/bookings/:id/selections', schemas.selectionInputSchema, (c, tx, i) =>
     room.submitSelection(tx, c.userId, c.params.id, i),
+  );
+  route('POST', '/v1/bookings/:id/selections/approve', empty, (c, tx) =>
+    room.approveProof(tx, c.params.id, c.userId),
   );
   route('POST', '/v1/bookings/:id/photo-feedback', schemas.photoFeedbackInputSchema, (c, tx, i) =>
     room.addPhotoFeedback(tx, c.params.id, c.userId, i),
@@ -468,15 +511,62 @@ function registerBusiness(app: FastifyInstance, deps: ApiDependencies) {
     (c, tx) => room.reopenSelection(tx, c.params.id),
     { status: 200 },
   );
+  const deliveryFileName = z
+    .string()
+    .trim()
+    .min(1)
+    .max(200)
+    .refine(
+      (name) =>
+        !/[\\/]/.test(name) && Array.from(name).every((character) => character.charCodeAt(0) >= 32),
+    );
+  route(
+    'POST',
+    '/v1/bookings/:id/delivery-upload',
+    z.object({
+      fileName: deliveryFileName,
+      size: z.number().int().positive(),
+    }),
+    async (c, tx, i) => {
+      const b = await booking(tx, c.params.id, true);
+      await providerSide(tx, c.params.id);
+      requireCondition(b.status === 'proofing', 422, 'delivery_locked');
+      await room.requireSubmittedSelection(tx, b.id);
+      if (room.proofingTerms(b).mode) await room.requireApprovedProof(tx, b);
+      return media.prepareDelivery(b.id, i.fileName, i.size);
+    },
+  );
   route(
     'POST',
     '/v1/bookings/:id/deliveries',
-    z.object({ storagePath: z.string().max(500), fileName: z.string().min(1).max(200) }),
+    z.object({
+      storagePath: z.string().max(500),
+      fileName: deliveryFileName,
+      size: z.number().int().positive().optional(),
+    }),
     async (c, tx, i) => {
       const b = await booking(tx, c.params.id, true);
       await providerSide(tx, c.params.id);
       requireCondition(b.status === 'proofing', 422, 'delivery_locked');
       const round = await room.requireSubmittedSelection(tx, c.params.id);
+      if (room.proofingTerms(b).mode) await room.requireApprovedProof(tx, b);
+      if (i.size !== undefined) {
+        const existing = await tx.optional(
+          'select * from deliveries where booking_id=$1 and storage_path=$2 and selection_round=$3',
+          [b.id, i.storagePath, round],
+        );
+        if (existing) return existing;
+        const original = await media.verifyOriginalDelivery(
+          i.storagePath,
+          b.id,
+          i.fileName,
+          i.size,
+        );
+        return tx.one(
+          'insert into deliveries(booking_id,storage_path,file_name,mime_type,selection_round,size_bytes) values($1,$2,$3,$4,$5,$6) returning *',
+          [b.id, i.storagePath, i.fileName, original.contentType, round, i.size],
+        );
+      }
       const file = await media.verify('deliveries', i.storagePath, c.params.id, false);
       return tx.one(
         'insert into deliveries(booking_id,storage_path,file_name,mime_type,selection_round) values($1,$2,$3,$4,$5) returning *',

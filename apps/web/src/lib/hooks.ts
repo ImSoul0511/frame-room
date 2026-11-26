@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from './api';
+import { api, RequestError } from './api';
 import { useAuth } from './auth';
 export function useApi<T>(path: string, enabled = true, poll?: number, staleTime?: number) {
   const { session } = useAuth();
@@ -7,7 +7,11 @@ export function useApi<T>(path: string, enabled = true, poll?: number, staleTime
     queryKey: ['api', session?.user.id ?? 'public', path],
     queryFn: ({ signal }) => api<T>(path, { signal }),
     enabled,
-    refetchInterval: poll,
+    refetchInterval: (query) =>
+      query.state.error instanceof RequestError &&
+      query.state.error.reason === 'network_unavailable'
+        ? false
+        : poll,
     staleTime,
     retry: false,
   });

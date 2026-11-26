@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import type { Service, Booking } from '@frameroom/shared';
-import type { Studio, Invitation, Member, Resource } from '../lib/types';
+import type { Service, Booking, OwnPhotographer } from '@frameroom/shared';
+import type { Studio, Member, Resource } from '../lib/types';
 import { api, post, patch, currency, dateTime, RequestError } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useApi, useTask } from '../lib/hooks';
@@ -13,7 +13,6 @@ import {
   Feedback,
   Field,
   Form,
-  GenreSelect,
   Modal,
   NumberField,
   PageHeading,
@@ -21,12 +20,13 @@ import {
   Select,
 } from '../components/ui';
 import { PhotographerForm, ServiceForm } from '../features/catalog/ProviderForms';
+import { GenreChoices } from '../features/catalog/GenreChoices';
+import { ProvinceSelect } from '../features/catalog/ProvinceSelect';
+import { AvailabilitySetting } from '../features/booking/Availability';
 
 export function StudioPage() {
   const t = useStrings();
-  const { profile } = useAuth();
   const studios = useApi<Studio[]>('/v1/me/studios');
-  const invites = useApi<Invitation[]>('/v1/me/invitations');
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -34,7 +34,7 @@ export function StudioPage() {
   const [address, setAddress] = useState('');
   const [contactEmail, setContactEmail] = useState('');
   const [discard, setDiscard] = useState(false);
-  const [genre, setGenre] = useState('portrait');
+  const [selectedGenres, setSelectedGenres] = useState<OwnPhotographer['genres']>(['portrait']);
   const nav = useNavigate();
   const client = useQueryClient();
   const create = useTask(async () => {
@@ -44,25 +44,12 @@ export function StudioPage() {
       city,
       address,
       contactEmail,
-      genres: [genre],
+      genres: selectedGenres,
     });
     await client.invalidateQueries({ queryKey: ['api'] });
     await client.invalidateQueries({ queryKey: ['profile'] });
     nav(`/studio/${studio.id}`);
   });
-  const respond = useTask(async (v: { id: string; status: string }) =>
-    patch(`/v1/invitations/${v.id}`, { status: v.status }),
-  );
-  const pendingInvites = invites.data?.filter((invitation) => invitation.status === 'pending');
-  if (!profile?.roles.includes('photographer'))
-    return (
-      <>
-        <PageHeading title={t.studio.title} subtitle={t.studio.needPhotographer} />
-        <div className="narrow-page">
-          <PhotographerForm />
-        </div>
-      </>
-    );
   return (
     <>
       <PageHeading
@@ -83,33 +70,20 @@ export function StudioPage() {
           </Link>
         ))}
       </div>
-      <h2>{t.studio.invitations}</h2>
-      <QueryState query={invites} empty={pendingInvites?.length === 0} />
-      {pendingInvites?.map((i) => (
-        <div className="list-row" key={i.id}>
-          <strong>{i.studioName}</strong>
-          <Action
-            pending={respond.isPending}
-            onClick={() => respond.mutate({ id: i.id, status: 'accepted' })}
-          >
-            {t.studio.accept}
-          </Action>
-          <Action
-            secondary
-            disabled={respond.isPending}
-            onClick={() => respond.mutate({ id: i.id, status: 'declined' })}
-          >
-            {t.studio.decline}
-          </Action>
-        </div>
-      ))}
-      <Feedback error={respond.error} />
       {open ? (
         <Modal
           title={t.studio.new}
           onClose={() => {
             if (create.isPending) return;
-            if (name || description || city || address || contactEmail || genre !== 'portrait')
+            if (
+              name ||
+              description ||
+              city ||
+              address ||
+              contactEmail ||
+              selectedGenres.length !== 1 ||
+              selectedGenres[0] !== 'portrait'
+            )
               setDiscard(true);
             else setOpen(false);
           }}
@@ -124,7 +98,7 @@ export function StudioPage() {
                   setCity('');
                   setAddress('');
                   setContactEmail('');
-                  setGenre('portrait');
+                  setSelectedGenres(['portrait']);
                   setDiscard(false);
                   setOpen(false);
                 }}
@@ -139,7 +113,7 @@ export function StudioPage() {
             <Form onSubmit={() => create.mutate()}>
               <Field label={t.studio.name} value={name} onChange={setName} required />
               <Area label={t.studio.description} value={description} onChange={setDescription} />
-              <Field label={t.city} value={city} onChange={setCity} required />
+              <ProvinceSelect value={city} onChange={setCity} required />
               <Field label={t.workspaceUi.address} value={address} onChange={setAddress} required />
               <Field
                 label={t.workspaceUi.contactInfo}
@@ -148,9 +122,9 @@ export function StudioPage() {
                 onChange={setContactEmail}
                 required
               />
-              <GenreSelect value={genre} onChange={setGenre} />
+              <GenreChoices value={selectedGenres} onChange={setSelectedGenres} />
               <Feedback error={create.error} />
-              <Action type="submit" pending={create.isPending}>
+              <Action type="submit" pending={create.isPending} disabled={!selectedGenres.length}>
                 {t.studio.new}
               </Action>
             </Form>
@@ -185,6 +159,7 @@ function StudioManager({ studio }: { studio: Studio }) {
   const { session } = useAuth();
   const nav = useNavigate();
   const [tab, setTab] = useState('dashboard');
+  const [creatingPhotographer, setCreatingPhotographer] = useState(false);
   const [modal, setModal] = useState<'service' | 'resource' | null>(null);
   const [editing, setEditing] = useState<Service | undefined>();
   const [inviteId, setInviteId] = useState('');
@@ -194,6 +169,9 @@ function StudioManager({ studio }: { studio: Studio }) {
   const [resourceName, setResourceName] = useState('');
   const [resourceType, setResourceType] = useState('room');
   const team = useApi<Member[]>(`/v1/studios/${studio.id}/team`);
+  const managerCount = team.data?.filter((member) => member.role === 'manager').length ?? 0;
+  const selfMember = team.data?.find((member) => member.userId === session?.user.id);
+  const isLastManager = (member: Member) => member.role === 'manager' && managerCount <= 1;
   const resources = useApi<Resource[]>(`/v1/studios/${studio.id}/resources`);
   const services = useApi<Service[]>('/v1/me/services');
   const photographers = useApi<{ id: string; displayName: string; userName: string }[]>(
@@ -244,6 +222,15 @@ function StudioManager({ studio }: { studio: Studio }) {
       <Feedback error={change.error ?? leave.error} />
       {tab === 'dashboard' ? (
         <>
+          <AvailabilitySetting type="studio" id={studio.id} />
+          <div className="row wrap">
+            <Link className="button-link" to={`/portfolio/new?studio=${studio.id}`}>
+              {t.portfolio.new}
+            </Link>
+            <Link className="button-link" to={`/providers/studio/${studio.id}`}>
+              {t.discovery.viewProfile}
+            </Link>
+          </div>
           <QueryState query={dashboard} />
           <div className="stats-grid">
             <article>
@@ -274,17 +261,39 @@ function StudioManager({ studio }: { studio: Studio }) {
         <div className="two-col">
           <section className="panel">
             <h2>{t.studio.team}</h2>
+            <p className="muted">{t.workspaceUi.managerShootHint}</p>
+            <QueryState query={team} />
+            {selfMember && !selfMember.photographerId && (
+              <Action
+                secondary
+                onClick={() => {
+                  change.reset();
+                  leave.reset();
+                  setCreatingPhotographer(true);
+                }}
+              >
+                {t.workspaceUi.createPhotographerProfile}
+              </Action>
+            )}
             {team.data?.map((m) => (
               <div className="member-row" key={m.userId}>
                 <div>
                   <strong>{m.displayName}</strong>
                   <small>
                     @{m.userName} · {t.studio[m.role === 'manager' ? 'manager' : 'member']}
+                    {m.role === 'manager' && m.photographerId ? ` · ${t.studio.member}` : ''}
                   </small>
                 </div>
                 <div className="row wrap">
                   <button
                     className="text-button"
+                    disabled={
+                      change.isPending ||
+                      leave.isPending ||
+                      isLastManager(m) ||
+                      (m.role === 'manager' && !m.photographerId)
+                    }
+                    title={isLastManager(m) ? t.errors.last_manager_protected : undefined}
                     onClick={() =>
                       change.mutate({
                         id: m.userId,
@@ -296,6 +305,8 @@ function StudioManager({ studio }: { studio: Studio }) {
                   </button>
                   <button
                     className="text-button"
+                    disabled={change.isPending || leave.isPending || isLastManager(m)}
+                    title={isLastManager(m) ? t.errors.last_manager_protected : undefined}
                     onClick={() => {
                       change.reset();
                       setMemberToRemove(m);
@@ -306,7 +317,19 @@ function StudioManager({ studio }: { studio: Studio }) {
                 </div>
               </div>
             ))}
-            <Action secondary pending={leave.isPending} onClick={() => leave.mutate()}>
+            {selfMember && isLastManager(selfMember) && (
+              <p className="muted">{t.errors.last_manager_protected}</p>
+            )}
+            <Action
+              secondary
+              pending={leave.isPending}
+              disabled={
+                !team.isSuccess ||
+                change.isPending ||
+                Boolean(selfMember && isLastManager(selfMember))
+              }
+              onClick={() => leave.mutate()}
+            >
               {t.studio.leave}
             </Action>
           </section>
@@ -372,6 +395,14 @@ function StudioManager({ studio }: { studio: Studio }) {
           </Action>
         </Modal>
       ) : null}
+      {creatingPhotographer && !selfMember?.photographerId && (
+        <Modal
+          title={t.workspaceUi.createPhotographerProfile}
+          onClose={() => setCreatingPhotographer(false)}
+        >
+          <PhotographerForm />
+        </Modal>
+      )}
       {tab === 'services' ? (
         <>
           <Action

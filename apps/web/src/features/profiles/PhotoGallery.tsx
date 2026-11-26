@@ -30,7 +30,8 @@ export function PhotoGallery({
             portfolio={portfolio}
             image={photo.url}
             description={photo.caption}
-            onOpen={() => setSelected(index)}
+            onOpen={editTags ? () => setSelected(index) : undefined}
+            photoId={editTags ? undefined : photo.id}
             edit={Boolean(editTags)}
           />
         ))}

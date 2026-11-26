@@ -25,6 +25,9 @@ vi.mock('../services/media.js', async (importOriginal) => {
     MediaService: vi.fn(function () {
       return {
         url: vi.fn().mockResolvedValue('https://signed.example.com/file'),
+        galleryUrls: vi.fn((paths: string[]) =>
+          Promise.resolve(paths.map(() => 'https://signed.example.com/file')),
+        ),
         verify: vi.fn(),
       };
     }),
@@ -157,6 +160,8 @@ describe('booking routes (105a)', () => {
         studioId: null,
         name: 'Editorial Portrait',
         price: 1000,
+        photoCount: 15,
+        retouchedCount: 3,
       })
       .mockResolvedValueOnce({ own: false })
       .mockResolvedValueOnce(SAMPLE_BOOKING);
@@ -172,12 +177,19 @@ describe('booking routes (105a)', () => {
         scheduledStart: '2030-05-10T08:00:00.000Z',
         scheduledEnd: '2030-05-10T10:00:00.000Z',
         addOnIds: [ADDON_ID],
+        quantity: 3,
         note: 'Morning light preferred',
       },
     });
 
     expect(res.statusCode).toBe(201);
     expect(res.json().data).toEqual(SAMPLE_BOOKING);
+    expect(tx.one.mock.calls[2]?.[1]?.[8]).toBe(3200);
+    expect(JSON.parse(String(tx.one.mock.calls[2]?.[1]?.[10]))).toMatchObject({
+      photoCount: 45,
+      retouchedCount: 9,
+      selectionQuota: 9,
+    });
     expect(tx.execute).toHaveBeenCalledWith(
       'update creative_projects set version=version+1 where id=$1',
       [PROJECT_ID],
@@ -214,6 +226,71 @@ describe('booking routes (105a)', () => {
       },
     });
     expect(missingProject.statusCode).toBe(404);
+    await app.close();
+  });
+
+  it('accepts a private quote as the price source without consulting the service catalog', async () => {
+    const { app, tx } = createTestApp();
+    const quoteId = '99999999-9999-4999-8999-999999999999';
+    const terms = {
+      name: 'Product catalog',
+      genre: 'product',
+      durationMinutes: 120,
+      price: 100,
+      photoCount: 3,
+      retouchedCount: 1,
+      quantity: 12,
+    };
+    tx.one
+      .mockResolvedValueOnce({ id: quoteId })
+      .mockResolvedValueOnce({ photographerId: PHOTOGRAPHER_ID, studioId: null, terms })
+      .mockResolvedValueOnce({ own: false })
+      .mockResolvedValueOnce({
+        ...SAMPLE_BOOKING,
+        serviceId: null,
+        quoteId,
+        quantity: 12,
+        totalPrice: 1200,
+      })
+      .mockResolvedValueOnce({ id: 'brief-id', version: 1 });
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/booking-requests',
+      headers: { authorization: 'Bearer client-token' },
+      payload: {
+        projectId: PROJECT_ID,
+        quoteId,
+        quantity: 1,
+        scheduledStart: SAMPLE_BOOKING.scheduledStart,
+        scheduledEnd: SAMPLE_BOOKING.scheduledEnd,
+        brief: {
+          title: 'Catalog',
+          concept: 'Pack shots',
+          shotList: [],
+          lighting: [],
+          checklist: [],
+          milestones: [],
+          requirements: {
+            genre: 'product',
+            people: 1,
+            photoCount: 36,
+            retouchedCount: 12,
+            revisionLimit: 2,
+            budget: 1200,
+          },
+        },
+      },
+    });
+    expect(response.statusCode).toBe(201);
+    expect(response.json().data).toMatchObject({
+      serviceId: null,
+      quoteId,
+      quantity: 12,
+      totalPrice: 1200,
+    });
+    expect(tx.one.mock.calls[0]?.[1]).toEqual([quoteId, CLIENT_ID]);
+    expect(tx.one.mock.calls.some(([sql]) => sql.includes('from services'))).toBe(false);
+    expect(tx.one.mock.calls[3]?.[1]?.[2]).toBeNull();
     await app.close();
   });
 

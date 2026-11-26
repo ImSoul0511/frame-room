@@ -112,10 +112,23 @@ export const serviceInputSchema = z.object({
   price: nonnegative.max(1000000000),
   photoCount: nonnegative.default(10),
   retouchedCount: nonnegative.default(5),
-  selectionQuota: z.number().int().min(1).max(200).nullish(),
+  selectionQuota: nonnegative.max(200).nullish(),
   revisionLimit: nonnegative.max(100).nullish(),
   isActive: z.boolean().default(true),
+  billingUnit: z.enum(['package', 'hour', 'sku', 'dish', 'day']).optional(),
+  proofingMode: z.enum(['select', 'album', 'print']).nullish(),
 });
+export const quantitySchema = z.number().int().min(1).max(1000);
+export const quoteInputSchema = serviceInputSchema.omit({ isActive: true }).extend({
+  quantity: quantitySchema,
+});
+export const quoteSchema = z.object({
+  id: idSchema,
+  bookingId: idSchema.nullable(),
+  version: z.number().int(),
+  terms: quoteInputSchema,
+});
+export type PrivateQuote = z.infer<typeof quoteSchema>;
 export const serviceSchema = serviceInputSchema.extend({
   id: idSchema,
   ownerType: providerTypeSchema,
@@ -168,18 +181,21 @@ export const briefContentSchema = z.object({
   requirements: z
     .object({
       genre: genreSchema,
-      locationType: z.enum(['outdoor', 'indoor', 'studio']),
+      locationType: z.enum(['outdoor', 'indoor', 'studio']).optional(),
       location: z.string().trim().max(500).default(''),
       people: z.number().int().min(1).max(10000),
+      quantity: quantitySchema.optional(),
       photoCount: nonnegative.max(10000),
       retouchedCount: nonnegative.max(10000),
       revisionLimit: nonnegative.max(100),
-      budget: nonnegative.max(1_000_000_000),
+      budget: nonnegative.max(2_147_483_647),
       crew: z.string().trim().max(1000).default(''),
       notes: description,
       referencePaths: z.array(z.string().max(500)).max(12).default([]),
       scheduledStart: z.string().datetime().optional(),
       scheduledEnd: z.string().datetime().optional(),
+      deliveryDueAt: z.string().datetime().optional(),
+      highlightsDueAt: z.string().datetime().optional(),
     })
     .refine((value) => value.retouchedCount <= value.photoCount, { path: ['retouchedCount'] })
     .optional(),
@@ -203,14 +219,17 @@ export const projectSchema = projectInputSchema.extend({
   updatedAt: z.string(),
 });
 const bookingRequestFields = z.object({
-  serviceId: idSchema,
+  serviceId: idSchema.optional(),
+  quoteId: idSchema.optional(),
+  quantity: quantitySchema.optional(),
   scheduledStart: z.string().datetime(),
   scheduledEnd: z.string().datetime(),
   addOnIds: z.array(idSchema).max(20).default([]),
   note: z.string().max(2000).default(''),
 });
 export const bookingInputSchema = bookingRequestFields
-  .extend({ projectId: idSchema })
+  .extend({ projectId: idSchema, serviceId: idSchema })
+  .refine((value) => !value.quoteId, { path: ['quoteId'] })
   .refine(
     (v) => Date.parse(v.scheduledEnd) > Date.parse(v.scheduledStart),
     'End must follow start',
@@ -223,6 +242,7 @@ export const initialBookingInputSchema = bookingRequestFields
       requirements: briefContentSchema.shape.requirements.unwrap(),
     }),
   })
+  .refine((value) => Boolean(value.serviceId) !== Boolean(value.quoteId), { path: ['serviceId'] })
   .refine((value) => Date.parse(value.scheduledEnd) > Date.parse(value.scheduledStart), {
     path: ['scheduledEnd'],
   });
@@ -265,7 +285,9 @@ export const bookingSchema = z.object({
   id: idSchema,
   clientId: idSchema,
   projectId: idSchema,
-  serviceId: idSchema,
+  serviceId: idSchema.nullable(),
+  quoteId: idSchema.nullable().optional(),
+  quantity: quantitySchema.optional(),
   ownerType: providerTypeSchema,
   photographerId: idSchema.nullable(),
   studioId: idSchema.nullable(),
@@ -301,8 +323,25 @@ export const milestoneInputSchema = z.object({
   title: shortText,
   dueAt: z.string().datetime().nullable().default(null),
 });
-export const decisionInputSchema = z.object({ title: shortText, description });
-export const selectionInputSchema = z.object({ imageIds: z.array(idSchema).min(1).max(200) });
+export const decisionInputSchema = z.object({
+  title: shortText,
+  description,
+  changes: z
+    .object({
+      scheduledStart: z.string().datetime().optional(),
+      scheduledEnd: z.string().datetime().optional(),
+      quantity: quantitySchema.optional(),
+      notes: z.string().trim().max(2000).optional(),
+    })
+    .refine((value) => Boolean(value.scheduledStart) === Boolean(value.scheduledEnd), {
+      path: ['scheduledEnd'],
+    })
+    .optional(),
+});
+export const selectionInputSchema = z.object({
+  imageIds: z.array(idSchema).max(10000),
+  albumNote: z.string().trim().max(2000).optional(),
+});
 export const photoFeedbackInputSchema = z
   .object({
     imageId: idSchema,

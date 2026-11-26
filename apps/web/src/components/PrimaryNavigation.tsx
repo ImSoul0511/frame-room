@@ -40,6 +40,7 @@ export function PrimaryNavigation() {
       </NavLink>
       {isPhotographer ? (
         <>
+          <NavLink to={destination('/inspiration')}>{t.curation.explore}</NavLink>
           <NavLink to="/projects">{t.nav.projects}</NavLink>
           <NavLink to="/bookings">{t.workspaceUi.bookings}</NavLink>
           <NavLink to="/portfolio">{t.workspaceUi.portfolioNav}</NavLink>

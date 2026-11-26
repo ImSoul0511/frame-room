@@ -11,6 +11,7 @@ import type {
   PortfolioImageInput,
   PortfolioInput,
   PortfolioListQuery,
+  PhotoListQuery,
   Provider,
   ProviderListQuery,
   PublicPortfolio,
@@ -106,8 +107,8 @@ export async function discoverProviders(
     conditions.push(`$${params.length}::text = any(p.genres)`);
   }
   if (query.city) {
-    params.push(query.city);
-    conditions.push(`lower(p.city) = lower($${params.length})`);
+    params.push(provinceNames(query.city).map((name) => name.toLocaleLowerCase('vi')));
+    conditions.push(`lower(p.city) = any($${params.length}::text[])`);
   }
   if (query.district) {
     params.push(query.district);
@@ -175,6 +176,10 @@ export async function listProvidersByType(
       `(strpos(lower(p.display_name), lower($${params.length})) > 0 or (p.type = 'photographer' and exists (select 1 from photographers ph join profiles pr on pr.id = ph.user_id where ph.id = p.id and (strpos(lower(pr.user_name), lower($${params.length})) > 0 or strpos(lower(pr.display_name), lower($${params.length})) > 0))))`,
     );
   }
+  if (query.priceMax !== undefined)
+    conditions.push(`p.price_from <= $${params.push(query.priceMax)}`);
+  if (query.ratingMin !== undefined)
+    conditions.push(`p.rating_avg >= $${params.push(query.ratingMin)}`);
 
   const limitParam = params.push(query.pageSize);
   const offsetParam = params.push((query.page - 1) * query.pageSize);
@@ -187,7 +192,7 @@ export async function listProvidersByType(
      left join photographers ph on p.type = 'photographer' and ph.id = p.id
      left join profiles pr on pr.id = ph.user_id
      where ${conditions.join(' and ')}
-     order by p.rating_avg desc nulls last, p.review_count desc, p.display_name, p.id
+     order by ${query.sort === 'price' ? 'p.price_from asc nulls last,' : ''} p.rating_avg desc nulls last, p.review_count desc, p.display_name, p.id
      limit $${limitParam} offset $${offsetParam}`,
     params,
   );
@@ -210,6 +215,18 @@ export async function findProviderById(
   return row ? coerceProvider(row) : undefined;
 }
 
+/** Resolves a unique public username through its photographer profile. */
+export async function findPhotographerByUserName(tx: Transaction, userName: string) {
+  const row = await tx.optional<Provider>(
+    `select p.* from providers p
+     join photographers ph on ph.id = p.id
+     join profiles pr on pr.id = ph.user_id
+     where p.type = 'photographer' and pr.user_name = $1 and ${VISIBLE_PROVIDER_SQL}`,
+    [userName],
+  );
+  return row ? coerceProvider(row) : undefined;
+}
+
 /** Up to two matches distinguish an exact public name match from an ambiguous name. */
 export async function findPhotographersByDisplayName(
   tx: Transaction,
@@ -228,8 +245,12 @@ export async function findPhotographersByDisplayName(
 
 /** Lists active, non-deleted services offered by a provider. */
 export function findPhotographerProfileImages(tx: Transaction, id: string) {
-  return tx.optional<{ coverPath: string | null; avatarPath: string | null }>(
-    "select to_jsonb(p)->>'cover_path' as cover_path, pr.avatar_path from photographers p join profiles pr on pr.id=p.user_id where p.id = $1 and not p.is_hidden",
+  return tx.optional<{
+    coverPath: string | null;
+    avatarPath: string | null;
+    userName?: string | null;
+  }>(
+    "select to_jsonb(p)->>'cover_path' as cover_path, pr.avatar_path, pr.user_name from photographers p join profiles pr on pr.id=p.user_id where p.id = $1 and not p.is_hidden",
     [id],
   );
 }
@@ -242,7 +263,7 @@ export async function listActiveServicesByProvider(
   const column = type === 'photographer' ? 'photographer_id' : 'studio_id';
   const rows = await tx.rows<Service>(
     `select id, name, description, genre, duration_minutes, price,
-            photo_count, retouched_count, is_active, selection_quota, revision_limit,
+            photo_count, retouched_count, is_active, selection_quota, revision_limit, billing_unit, proofing_mode,
             owner_type, photographer_id, studio_id
      from services
      where ${column} = $1 and is_active = true and deleted_at is null
@@ -292,7 +313,7 @@ export async function listVisibleReviewsByProvider(
             r.created_at, r.updated_at
      from reviews r
      left join profiles pr on pr.id = r.author_id
-     where r.${column} = $1 and r.is_hidden = false and r.deleted_at is null
+     where ${type === 'photographer' ? 'r.id in (select public.review_credits($1))' : `r.${column} = $1`} and r.is_hidden = false and r.deleted_at is null
      order by r.created_at desc
      limit 20`,
     [providerId],
@@ -451,7 +472,7 @@ export async function findPhotographerIdByUser(
 export async function listOwnedServices(tx: Transaction, userId: string): Promise<OwnedService[]> {
   const rows = await tx.rows<OwnedService>(
     `select s.id, s.name, s.description, s.genre, s.duration_minutes, s.price,
-            s.photo_count, s.retouched_count, s.is_active, s.selection_quota, s.revision_limit,
+            s.photo_count, s.retouched_count, s.is_active, s.selection_quota, s.revision_limit, s.billing_unit, s.proofing_mode,
             s.owner_type, s.photographer_id, s.studio_id,
             s.created_at, s.updated_at
      from services s
@@ -480,11 +501,11 @@ export async function insertPersonalService(
   const row = await tx.one<OwnedService>(
     `insert into services (
        owner_type, photographer_id, studio_id, name, description, genre,
-       duration_minutes, price, photo_count, retouched_count, is_active, selection_quota, revision_limit
+       duration_minutes, price, photo_count, retouched_count, is_active, selection_quota, revision_limit, billing_unit, proofing_mode
      )
-     values ('photographer', $1, null, $2, $3, $4::genre, $5, $6, $7, $8, $9, $10, $11)
+     values ('photographer', $1, null, $2, $3, $4::genre, $5, $6, $7, $8, $9, $10, $11, coalesce($12,'package'), $13)
      returning id, name, description, genre, duration_minutes, price,
-               photo_count, retouched_count, is_active, selection_quota, revision_limit,
+               photo_count, retouched_count, is_active, selection_quota, revision_limit, billing_unit, proofing_mode,
                owner_type, photographer_id, studio_id,
                created_at, updated_at`,
     [
@@ -499,6 +520,8 @@ export async function insertPersonalService(
       input.isActive,
       input.selectionQuota ?? null,
       input.revisionLimit ?? null,
+      input.billingUnit ?? null,
+      input.proofingMode ?? null,
     ],
   );
   return coerceOwnedService(row);
@@ -513,11 +536,11 @@ export async function insertStudioService(
   const row = await tx.one<OwnedService>(
     `insert into services (
        owner_type, photographer_id, studio_id, name, description, genre,
-       duration_minutes, price, photo_count, retouched_count, is_active, selection_quota, revision_limit
+       duration_minutes, price, photo_count, retouched_count, is_active, selection_quota, revision_limit, billing_unit, proofing_mode
      )
-     values ('studio', null, $1, $2, $3, $4::genre, $5, $6, $7, $8, $9, $10, $11)
+     values ('studio', null, $1, $2, $3, $4::genre, $5, $6, $7, $8, $9, $10, $11, coalesce($12,'package'), $13)
      returning id, name, description, genre, duration_minutes, price,
-               photo_count, retouched_count, is_active, selection_quota, revision_limit,
+               photo_count, retouched_count, is_active, selection_quota, revision_limit, billing_unit, proofing_mode,
                owner_type, photographer_id, studio_id,
                created_at, updated_at`,
     [
@@ -532,6 +555,8 @@ export async function insertStudioService(
       input.isActive,
       input.selectionQuota ?? null,
       input.revisionLimit ?? null,
+      input.billingUnit ?? null,
+      input.proofingMode ?? null,
     ],
   );
   return coerceOwnedService(row);
@@ -558,12 +583,13 @@ export async function updateService(
     `update services
      set name = $2, description = $3, genre = $4::genre, duration_minutes = $5,
          price = $6, photo_count = $7, retouched_count = $8, is_active = $9,
-         selection_quota = case when $12 then $10 else selection_quota end,
-         revision_limit = case when $13 then $11 else revision_limit end,
+         selection_quota = case when $14 then $10 else selection_quota end,
+         revision_limit = case when $15 then $11 else revision_limit end,
+         billing_unit = coalesce($12,billing_unit), proofing_mode = coalesce($13,proofing_mode),
          updated_at = now()
      where id = $1 and deleted_at is null
      returning id, name, description, genre, duration_minutes, price,
-               photo_count, retouched_count, is_active, selection_quota, revision_limit,
+               photo_count, retouched_count, is_active, selection_quota, revision_limit, billing_unit, proofing_mode,
                owner_type, photographer_id, studio_id,
                created_at, updated_at`,
     [
@@ -578,6 +604,8 @@ export async function updateService(
       input.isActive,
       input.selectionQuota ?? null,
       input.revisionLimit ?? null,
+      input.billingUnit ?? null,
+      input.proofingMode ?? null,
       input.selectionQuota !== undefined,
       input.revisionLimit !== undefined,
     ],
@@ -667,8 +695,9 @@ export async function listPublicPortfolios(
     params.push(`%${query.q.replace(/[\\%_]/g, '\\$&')}%`);
     conditions.push(`(pf.title ilike $${params.length} or pf.description ilike $${params.length})`);
   }
-  if (query.tag) {
-    params.push(query.tag);
+  const tags = [...(query.tags ?? []), ...(query.tag ? [query.tag] : [])];
+  if (tags.length) {
+    params.push(tags.map((tag) => tag.toLowerCase()));
     conditions.push(
       `exists (
         select 1
@@ -677,7 +706,8 @@ export async function listPublicPortfolios(
         join tags t on t.id = pit.tag_id
         where pi.portfolio_id = pf.id
           and pi.is_hidden = false
-          and lower(t.slug) = lower($${params.length})
+          and t.is_active
+          and lower(t.slug) = any($${params.length}::text[])
       )`,
     );
   }
@@ -701,6 +731,54 @@ export async function listPublicPortfolios(
      where ${conditions.join(' and ')}
      order by ${query.sort === 'name' ? 'pf.title asc' : query.sort === 'oldest' ? 'pf.published_at asc nulls last, pf.created_at asc' : 'pf.published_at desc nulls last, pf.created_at desc'}, pf.id
      limit $${limitParam} offset $${offsetParam}`,
+    params,
+  );
+}
+
+export async function listDiscoveryPhotos(tx: Transaction, query: PhotoListQuery) {
+  const conditions = [
+    "pf.status = 'published'",
+    'pf.deleted_at is null',
+    'not pi.is_hidden',
+    `((ph.id is not null and not ph.is_hidden) or (st.id is not null and not st.is_hidden and st.deleted_at is null))`,
+  ];
+  const params: unknown[] = [];
+  if (query.photographerId)
+    conditions.push(`pf.photographer_id = $${params.push(query.photographerId)}::uuid`);
+  if (query.studioId) conditions.push(`pf.studio_id = $${params.push(query.studioId)}::uuid`);
+  if (query.genre) conditions.push(`pf.genre = $${params.push(query.genre)}::genre`);
+  if (query.city)
+    conditions.push(
+      `lower(coalesce(ph.city, st.city)) = any($${params.push(provinceNames(query.city).map((name) => name.toLocaleLowerCase('vi')))}::text[])`,
+    );
+  if (query.q) {
+    const p = params.push(`%${query.q.replace(/[\\%_]/g, '\\$&')}%`);
+    conditions.push(`pi.caption ilike $${p}`);
+  }
+  const tags = [...(query.tags ?? []), ...(query.tag ? [query.tag] : [])];
+  if (tags.length)
+    conditions.push(
+      `exists (select 1 from image_tags it join tags t on t.id=it.tag_id where it.portfolio_image_id=pi.id and t.is_active and t.slug=any($${params.push(tags)}::text[]))`,
+    );
+  const limit = params.push(query.pageSize);
+  const offset = params.push((query.page - 1) * query.pageSize);
+  return tx.rows<{
+    id: string;
+    portfolioId: string;
+    caption: string;
+    url: string;
+    ownerName: string | null;
+    width?: number | null;
+    height?: number | null;
+  }>(
+    `select pi.id, pi.portfolio_id, pi.width, pi.height, coalesce(pi.caption,'') as caption, pi.storage_path as url,
+       coalesce(ph.display_name,st.name) as owner_name
+     from portfolio_images pi join portfolios pf on pf.id=pi.portfolio_id
+     left join photographers ph on ph.id=pf.photographer_id
+     left join studios st on st.id=pf.studio_id
+     where ${conditions.join(' and ')}
+     order by ${query.sort === 'name' ? "coalesce(pi.caption,'') asc" : `pi.created_at ${query.sort === 'oldest' ? 'asc' : 'desc'}`}, pi.id
+     limit $${limit} offset $${offset}`,
     params,
   );
 }
@@ -1147,7 +1225,8 @@ export async function hasActiveStudioBookingAssignments(
   const row = await tx.optional<{ id: string }>(
     `select b.id
      from bookings b
-     join photographers p on p.id = b.assigned_photographer_id
+     join booking_team t on t.booking_id = b.id
+     join photographers p on p.id = t.photographer_id
      where b.studio_id = $1
        and p.user_id = $2
        and b.status not in ('completed', 'cancelled', 'rejected')

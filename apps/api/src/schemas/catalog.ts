@@ -48,7 +48,7 @@ export const photographerDisplayNameQuerySchema = z.object({
   displayName: photographerInputSchema.shape.displayName,
 });
 
-export type ProviderLookup = { id: string } | { displayName: string };
+export type ProviderLookup = { id: string } | { displayName: string } | { userName: string };
 
 /** Query parameters for GET /v1/explore. */
 export const exploreQuerySchema = paginationSchema.extend({
@@ -64,6 +64,9 @@ export const providerListQuerySchema = paginationSchema.extend({
   city: optionalFilterText,
   district: optionalFilterText,
   q: optionalFilterText,
+  priceMax: z.coerce.number().int().min(0).optional(),
+  ratingMin: z.coerce.number().min(1).max(5).optional(),
+  sort: z.enum(['price', 'rating']).optional(),
 });
 
 /** Provider card on the Explore page, with the cover URL of its first published portfolio image. */
@@ -106,6 +109,17 @@ export const publicPortfolioSchema = z.object({
   tags: z.array(tagSchema).optional(),
 });
 
+export const discoveryPhotoSchema = z.object({
+  id: idSchema,
+  portfolioId: idSchema,
+  caption: z.string(),
+  url: z.string(),
+  width: z.number().int().nullish(),
+  height: z.number().int().nullish(),
+  ownerName: z.string().nullish(),
+  tags: z.array(tagSchema),
+});
+
 /** Publicly visible review shown on a provider detail page. */
 export const publicReviewSchema = z.object({
   id: idSchema,
@@ -123,6 +137,7 @@ export const publicReviewSchema = z.object({
 /** Response payload for GET /v1/photographers/:id and GET /v1/studios/:id. */
 export const providerDetailSchema = z.object({
   provider: providerSchema,
+  userName: z.string().nullable().optional(),
   coverPath: z.string().nullable().optional(),
   avatarPath: z.string().nullable().optional(),
   services: z.array(serviceSchema),
@@ -187,6 +202,20 @@ export const portfolioListQuerySchema = paginationSchema.extend({
   genre: genreSchema.optional(),
   city: optionalFilterText,
   tag: z.string().trim().min(1).max(60).optional(),
+  tags: z
+    .string()
+    .max(610)
+    .transform((value) =>
+      [
+        ...new Set(
+          value
+            .split(',')
+            .map((item) => item.trim())
+            .filter(Boolean),
+        ),
+      ].slice(0, 10),
+    )
+    .optional(),
   q: z.string().trim().min(1).max(120).optional(),
   sort: z.enum(['newest', 'oldest', 'name']).optional(),
 });
@@ -227,6 +256,11 @@ export const portfolioImageTagsInputSchema = z.object({
 });
 
 export type PortfolioListQuery = z.infer<typeof portfolioListQuerySchema>;
+export const photoListQuerySchema = portfolioListQuerySchema.extend({
+  photographerId: idSchema.optional(),
+  studioId: idSchema.optional(),
+});
+export type PhotoListQuery = z.infer<typeof photoListQuerySchema>;
 export type PortfolioInput = z.infer<typeof portfolioInputSchema>;
 export type OwnedPortfolio = z.infer<typeof ownedPortfolioSchema>;
 export type PortfolioImageInput = z.infer<typeof portfolioImageInputSchema>;

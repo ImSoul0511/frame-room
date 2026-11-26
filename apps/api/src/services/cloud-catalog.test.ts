@@ -17,6 +17,56 @@ const settings = envSchema.parse({
 afterEach(() => vi.unstubAllGlobals());
 
 describe('Cloud catalog without a direct Postgres connection', () => {
+  it('paginates individual photos and filters tags on the matching photo', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init: RequestInit) => {
+        const query = new URL(url);
+        expect(new Headers(init.headers).get('apikey')).toBe('public-test-key');
+        expect(query.pathname).toContain('/portfolio_images');
+        expect(query.searchParams.get('is_hidden')).toBe('eq.false');
+        expect(query.searchParams.get('portfolios.status')).toBe('eq.published');
+        expect(query.searchParams.get('portfolios.deleted_at')).toBe('is.null');
+        expect(query.searchParams.get('matches.tags.slug')).toBe('in.(soft)');
+        expect(query.searchParams.get('portfolios.photographer_id')).toBe(`eq.${USER}`);
+        expect(query.searchParams.get('matches.tags.is_active')).toBe('eq.true');
+        expect(query.searchParams.get('offset')).toBe('12');
+        expect(query.searchParams.get('limit')).toBe('12');
+        return Response.json(
+          [0, 1].map((index) => ({
+            id: `${USER.slice(0, -1)}${index}`,
+            portfolio_id: USER,
+            caption: `Photo ${index}`,
+            storage_path: `photos/${index}.webp`,
+            portfolios: { photographers: { display_name: 'Mai' }, studios: null },
+            image_tags: [
+              { tags: { id: USER, name: 'Soft', slug: 'soft', kind: 'mood', is_active: true } },
+              {
+                tags: {
+                  id: USER,
+                  name: 'Inactive',
+                  slug: 'inactive',
+                  kind: 'mood',
+                  is_active: false,
+                },
+              },
+            ],
+          })),
+        );
+      }),
+    );
+    const photos = await createCloudCatalog(settings)!.photos({
+      photographerId: USER,
+      page: 2,
+      pageSize: 12,
+      tag: 'soft',
+    });
+    expect(photos).toHaveLength(2);
+    expect(photos[0].portfolioId).toBe(photos[1].portfolioId);
+    expect(photos[0].id).not.toBe(photos[1].id);
+    expect(photos[0].url).toContain('/photos/0.webp');
+    expect(photos[0].tags).toHaveLength(1);
+  });
   it('paginates filtered collections and excludes hidden-image and inactive tags', async () => {
     const fetch = vi.fn(async (url: string, init: RequestInit) => {
       const query = new URL(url);
@@ -129,6 +179,46 @@ describe('Cloud catalog without a direct Postgres connection', () => {
       avatarPath: `${USER}/avatar.webp`,
     });
     expect(fetch).toHaveBeenCalledTimes(5);
+  });
+
+  it('resolves a username with public credentials and keeps UUIDs for related data', async () => {
+    const fetch = vi.fn(async (url: string, init: RequestInit) => {
+      const request = new URL(url);
+      expect(new Headers(init.headers).get('apikey')).toBe('public-test-key');
+      if (request.pathname.endsWith('/photographers')) {
+        if (request.searchParams.has('profiles.user_name')) {
+          expect(request.searchParams.get('profiles.user_name')).toBe('eq.demo_client');
+          return Response.json([{ id: USER, profiles: { user_name: 'demo_client' } }]);
+        }
+        return Response.json([
+          { cover_path: null, profiles: { user_name: 'demo_client', avatar_path: null } },
+        ]);
+      }
+      if (request.pathname.endsWith('/providers')) {
+        expect(request.searchParams.get('id')).toBe(`eq.${USER}`);
+        return Response.json([
+          {
+            id: USER,
+            type: 'photographer',
+            display_name: 'Demo',
+            bio: '',
+            city: '',
+            district: '',
+            genres: [],
+            styles: [],
+            price_from: null,
+            rating_avg: null,
+            review_count: 0,
+          },
+        ]);
+      }
+      expect(request.searchParams.get('photographer_id')).toBe(`eq.${USER}`);
+      return Response.json([]);
+    });
+    vi.stubGlobal('fetch', fetch);
+    await expect(
+      createCloudCatalog(settings)!.detail('photographer', { userName: 'demo_client' }),
+    ).resolves.toMatchObject({ provider: { id: USER }, userName: 'demo_client' });
   });
 
   it('never reads gallery images for an unpublished or deleted portfolio', async () => {

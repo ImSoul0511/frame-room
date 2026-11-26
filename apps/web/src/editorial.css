@@ -9,6 +9,10 @@
   --fr-line: #d9d7e0;
   --fr-accent: #54658c;
   --fr-surface: #f0edf5;
+  --fr-soft: color-mix(in srgb, var(--fr-paper) 72%, var(--fr-surface));
+  --fr-radius-card: 20px;
+  --fr-radius-panel: 28px;
+  --fr-radius-control: 12px;
   --font-family-body: 'Be Vietnam Pro', Arial, sans-serif;
   --font-family-heading: 'Lora', Georgia, serif;
   --color-text-primary: #354568;

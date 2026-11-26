@@ -9,6 +9,7 @@ import { QueryState } from '../components/ui';
 import { AvatarEditor, PhotoEditButton } from '../features/catalog/AvatarEditor';
 import { ProviderProfile } from '../features/profiles/ProviderProfile';
 import { BotanicalSpray } from '../components/BotanicalSpray';
+import { AvailabilitySetting } from '../features/booking/Availability';
 
 function PhotographerProfile({ id }: { id: string }) {
   const { profile } = useAuth();
@@ -36,6 +37,7 @@ function PhotographerProfile({ id }: { id: string }) {
           />
         }
       />
+      <AvailabilitySetting type="photographer" id={id} />
     </>
   );
 }

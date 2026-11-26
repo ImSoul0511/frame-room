@@ -8,8 +8,8 @@ import { useMessageReadState } from './readState';
 
 export function ChatLauncher() {
   const t = useStrings();
-  const { session, onboardingRequired } = useAuth();
-  const ready = Boolean(session && !onboardingRequired);
+  const { session, profile, profileError, onboardingRequired } = useAuth();
+  const ready = Boolean(session && profile && !profileError && !onboardingRequired);
   const threads = useInbox(ready);
   const seen = useMessageReadState(session?.user.id);
   const [open, setOpen] = useState(false);

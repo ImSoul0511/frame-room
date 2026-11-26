@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { z } from 'zod';
 import {
-  genres,
   initialBookingInputSchema,
+  type PrivateQuote,
   type CreativeProject,
   type Service,
 } from '@frameroom/shared';
@@ -22,25 +22,49 @@ import {
 } from '../../components/ui';
 import { useStrings } from '../../lib/i18n';
 
-export function BookingForm({ service, project }: { service: Service; project?: CreativeProject }) {
+function shootTime(value: string) {
+  return Date.parse(value ? `${value}+07:00` : '');
+}
+
+export function BookingForm({
+  service,
+  project,
+  quote,
+  slot,
+}: {
+  service: Pick<
+    Service,
+    | 'name'
+    | 'description'
+    | 'genre'
+    | 'photoCount'
+    | 'retouchedCount'
+    | 'revisionLimit'
+    | 'price'
+    | 'billingUnit'
+  > & { id?: string };
+  project?: CreativeProject;
+  quote?: PrivateQuote;
+  slot?: { start: string; end: string };
+}) {
   const t = useStrings();
 
   const [projectId, setProject] = useState(project?.id ?? '');
-  const [start, setStart] = useState('');
-  const [end, setEnd] = useState('');
+  const [start, setStart] = useState(slot?.start ?? '');
+  const [end, setEnd] = useState(slot?.end ?? '');
+  const [quantity, setQuantity] = useState(quote?.terms.quantity ?? 1);
+  const [deliveryDue, setDeliveryDue] = useState('');
+  const [highlightsDue, setHighlightsDue] = useState('');
   const [note, setNote] = useState('');
   const [name, setName] = useState(project?.title ?? '');
   const [idea, setIdea] = useState(project?.brief?.concept ?? project?.idea ?? '');
   const [scope, setScope] = useState({
     genre: service.genre,
-    locationType: '' as '' | 'outdoor' | 'indoor' | 'studio',
-    location: '',
     people: 1,
     photoCount: service.photoCount,
     retouchedCount: service.retouchedCount,
     revisionLimit: service.revisionLimit ?? 2,
     budget: service.price,
-    crew: '',
     referencePaths: project?.referencePaths ?? [],
   });
   const [addOns, setAddOns] = useState<string[]>([]);
@@ -52,7 +76,15 @@ export function BookingForm({ service, project }: { service: Service; project?: 
   const projects = useApi<CreativeProject[]>('/v1/creative-projects');
   const extras = useApi<{ id: string; name: string; price: number }[]>(
     `/v1/services/${service.id}/add-ons`,
+    Boolean(service.id && !quote),
   );
+  const total =
+    service.price * quantity +
+    (extras.data ?? [])
+      .filter((extra) => addOns.includes(extra.id))
+      .reduce((sum, extra) => sum + extra.price, 0);
+  const hasAttendance = ['event', 'yearbook', 'wedding', 'family'].includes(service.genre);
+  const hasHighlights = ['event', 'yearbook'].includes(service.genre);
   const reference = useTask(async (file: File) => {
     const result = await upload(file, 'brief-references');
     setScope((current) => ({
@@ -74,20 +106,20 @@ export function BookingForm({ service, project }: { service: Service; project?: 
     const b = await post<{ id: string }>('/v1/booking-requests', input, lastSubmission.current.key);
     nav(`/bookings/${b.id}`);
   });
-  const startInvalid =
-    !start || !Number.isFinite(Date.parse(start)) || Date.parse(start) <= submittedAt;
-  const endInvalid =
-    !end || !Number.isFinite(Date.parse(end)) || Date.parse(end) <= Date.parse(start);
+  const startInvalid = !Number.isFinite(shootTime(start)) || shootTime(start) <= submittedAt;
+  const endInvalid = !Number.isFinite(shootTime(end)) || shootTime(end) <= shootTime(start);
   const submit = () => {
     if (task.isPending || reference.isPending) return;
     const time = Date.now();
     setSubmittedAt(time);
     const toIso = (value: string) => {
-      const date = new Date(value);
+      const date = new Date(shootTime(value));
       return Number.isFinite(date.getTime()) ? date.toISOString() : '';
     };
     const parsed = initialBookingInputSchema.safeParse({
-      serviceId: service.id,
+      serviceId: quote ? undefined : service.id,
+      quoteId: quote?.id,
+      quantity,
       projectId: projectId || undefined,
       scheduledStart: toIso(start),
       scheduledEnd: toIso(end),
@@ -100,24 +132,30 @@ export function BookingForm({ service, project }: { service: Service; project?: 
         lighting: [],
         checklist: [],
         milestones: [],
-        requirements: { ...scope, notes: note },
+        requirements: {
+          ...scope,
+          notes: note,
+          budget: total,
+          photoCount: scope.photoCount * quantity,
+          retouchedCount: scope.retouchedCount * quantity,
+          deliveryDueAt: toIso(deliveryDue) || undefined,
+          highlightsDueAt: toIso(highlightsDue) || undefined,
+        },
       },
     });
     const labels: Record<string, string> = {
       scheduledStart: t.booking.start,
+      quantity: t.workspaceUi.quantity,
       scheduledEnd: t.booking.end,
       note: t.booking.note,
       'brief.title': t.project.name,
       'brief.concept': t.workspaceUi.concept,
       'brief.requirements.genre': t.workspaceUi.genre,
-      'brief.requirements.locationType': t.workspaceUi.locationType,
-      'brief.requirements.location': t.workspaceUi.location,
       'brief.requirements.people': t.workspaceUi.people,
       'brief.requirements.photoCount': t.workspaceUi.photos,
       'brief.requirements.retouchedCount': t.workspaceUi.retouched,
       'brief.requirements.revisionLimit': t.workspaceUi.revisions,
       'brief.requirements.budget': t.workspaceUi.budget,
-      'brief.requirements.crew': t.workspaceUi.crew,
       'brief.requirements.notes': t.booking.note,
       'brief.requirements.referencePaths': t.project.reference,
     };
@@ -131,12 +169,19 @@ export function BookingForm({ service, project }: { service: Service; project?: 
             labels[path] ?? labels[issue.path.slice(0, -1).join('.')] ?? t.errors.invalid_input
           );
         });
-    if (!start || !Number.isFinite(Date.parse(start)) || Date.parse(start) <= time)
+    if (!Number.isFinite(shootTime(start)) || shootTime(start) <= time)
       errors.push(t.booking.start);
-    if (!end || !Number.isFinite(Date.parse(end)) || Date.parse(end) <= Date.parse(start))
+    if (!Number.isFinite(shootTime(end)) || shootTime(end) <= shootTime(start))
       errors.push(t.booking.end);
-    if (start && end && Date.parse(end) - Date.parse(start) > 86400000)
-      errors.push(t.errors.invalid_interval);
+    if (shootTime(end) - shootTime(start) > 86400000) errors.push(t.errors.invalid_interval);
+    if (deliveryDue && shootTime(deliveryDue) < shootTime(end))
+      errors.push(t.workspaceUi.deliveryDue);
+    if (
+      highlightsDue &&
+      (shootTime(highlightsDue) < shootTime(end) ||
+        shootTime(highlightsDue) > shootTime(deliveryDue))
+    )
+      errors.push(t.workspaceUi.highlightsDue);
     if (errors.length || !parsed.success) {
       setInvalidFields([...new Set(errors)]);
       return;
@@ -152,7 +197,30 @@ export function BookingForm({ service, project }: { service: Service; project?: 
         </div>
       ) : null}
       <p>
-        {service.description} · {currency(service.price)}
+        {service.description} · {currency(service.price)} /{' '}
+        {t.workspaceUi[`unit_${service.billingUnit ?? 'package'}`]}
+      </p>
+      {quote ? (
+        <p>
+          {t.workspaceUi.quantity} · {quantity}
+        </p>
+      ) : (
+        <NumberField
+          label={t.workspaceUi.quantity}
+          value={quantity}
+          min={1}
+          max={1000}
+          onChange={setQuantity}
+        />
+      )}
+      <p>
+        <strong>
+          {t.workspaceUi.estimate} · {currency(total)}
+        </strong>
+      </p>
+      <p>
+        {t.studio.photos} · {scope.photoCount * quantity} · {t.studio.retouched} ·{' '}
+        {scope.retouchedCount * quantity}
       </p>
       <Select
         label={t.booking.project}
@@ -191,39 +259,14 @@ export function BookingForm({ service, project }: { service: Service; project?: 
         error={submittedAt && !idea.trim() ? t.booking.conceptRequired : undefined}
       />
       <div className="two-col">
-        <Select
-          label={t.workspaceUi.genre}
-          value={scope.genre}
-          onChange={(value) => set('genre', value as Service['genre'])}
-        >
-          {genres.map((genre) => (
-            <option key={genre} value={genre}>
-              {t.genreLabels[genre]}
-            </option>
-          ))}
-        </Select>
-        <Select
-          label={t.workspaceUi.locationType}
-          value={scope.locationType}
-          onChange={(value) => set('locationType', value as typeof scope.locationType)}
-          error={submittedAt && !scope.locationType ? t.booking.locationRequired : undefined}
-        >
-          <option value="">—</option>
-          <option value="outdoor">{t.workspaceUi.outdoor}</option>
-          <option value="indoor">{t.workspaceUi.indoor}</option>
-          <option value="studio">{t.workspaceUi.studioLocation}</option>
-        </Select>
-        <Field
-          label={t.workspaceUi.location}
-          value={scope.location}
-          onChange={(value) => set('location', value)}
-        />
-        <NumberField
-          label={t.workspaceUi.people}
-          value={scope.people}
-          min={1}
-          onChange={(value) => set('people', value)}
-        />
+        {hasAttendance && (
+          <NumberField
+            label={t.workspaceUi.shootSize}
+            value={scope.people}
+            min={1}
+            onChange={(value) => set('people', value)}
+          />
+        )}
         <DateField
           label={t.booking.start}
           value={start}
@@ -238,32 +281,24 @@ export function BookingForm({ service, project }: { service: Service; project?: 
           required={false}
           error={submittedAt && endInvalid ? t.errors.invalid_interval : undefined}
         />
-        <NumberField
-          label={t.workspaceUi.photos}
-          value={scope.photoCount}
-          onChange={(value) => set('photoCount', value)}
-        />
-        <NumberField
-          label={t.workspaceUi.retouched}
-          value={scope.retouchedCount}
-          onChange={(value) => set('retouchedCount', value)}
-        />
-        <NumberField
-          label={t.workspaceUi.revisions}
-          value={scope.revisionLimit}
-          onChange={(value) => set('revisionLimit', value)}
-        />
-        <NumberField
-          label={t.workspaceUi.budget}
-          value={scope.budget}
-          onChange={(value) => set('budget', value)}
-        />
       </div>
-      <Area
-        label={t.workspaceUi.crew}
-        value={scope.crew}
-        onChange={(value) => set('crew', value)}
-      />
+      <div className="two-col">
+        <DateField
+          label={t.workspaceUi.deliveryDue}
+          value={deliveryDue}
+          onChange={setDeliveryDue}
+          required={false}
+        />
+        {hasHighlights && (
+          <DateField
+            label={t.workspaceUi.highlightsDue}
+            value={highlightsDue}
+            onChange={setHighlightsDue}
+            required={false}
+          />
+        )}
+      </div>
+      <p className="muted">UTC+7</p>
       <FilePicker
         label={t.project.addReference}
         onFile={(file) => reference.mutate(file)}
@@ -301,7 +336,7 @@ export function BookingForm({ service, project }: { service: Service; project?: 
           {extra.name} (+{currency(extra.price)})
         </label>
       ))}
-      <Area label={t.booking.note} value={note} onChange={setNote} />
+      <Area label={t.workspaceUi.deliveryNote} value={note} onChange={setNote} />
       <Feedback error={task.error ?? reference.error ?? projects.error ?? extras.error} />
       <Action type="submit" pending={task.isPending} disabled={reference.isPending}>
         {t.booking.request}

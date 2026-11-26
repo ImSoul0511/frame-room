@@ -22,6 +22,24 @@
   height: 100%;
   object-fit: cover;
 }
+.profile-cover.profile-cover-custom,
+.account-portrait .profile-cover.profile-cover-custom {
+  height: auto;
+  aspect-ratio: 3;
+}
+.availability-slots {
+  display: grid;
+  gap: 0.45rem;
+  max-height: 23rem;
+  overflow: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.availability-slots li {
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--fr-line);
+}
 .editable-avatar {
   position: relative;
   display: inline-flex;
@@ -171,6 +189,11 @@
 .avatar-crop-stage:active {
   cursor: grabbing;
 }
+.cover-crop-stage {
+  width: 100%;
+  aspect-ratio: 3;
+  border-radius: 0.5rem;
+}
 .avatar-crop-stage img {
   position: absolute;
   max-width: none;
@@ -224,9 +247,13 @@
 .settings-preferences {
   max-width: 760px;
 }
-.settings-preferences .settings-password-toggle {
-  font: inherit;
-  min-height: 44px;
+.settings-password-toggle {
+  font-family: var(--font-family-body);
+  font-size: 0.875rem;
+  font-weight: 400;
+  text-transform: none;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 .settings-language-panel .language-switcher select {
   min-width: 170px;

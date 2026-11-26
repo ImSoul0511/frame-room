@@ -12,7 +12,7 @@ export function PhotographerSearchCard({ person }: { person: SearchPhotographer 
   const t = useStrings();
   const [params] = useSearchParams();
   const project = params.get('project');
-  const destination = `/providers/photographer/${person.id}${project ? `?project=${encodeURIComponent(project)}` : ''}`;
+  const destination = `/providers/photographer/${encodeURIComponent(person.userName ?? person.id)}${project ? `?project=${encodeURIComponent(project)}` : ''}`;
   return (
     <article className="photographer-search-card">
       <Link className="photographer-search-link" to={destination}>

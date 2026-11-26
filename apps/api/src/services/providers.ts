@@ -51,11 +51,6 @@ export async function createStudio(
   userId: string,
   input: z.infer<typeof studioInputSchema>,
 ) {
-  requireCondition(
-    await tx.optional('select id from photographers where user_id=$1', [userId]),
-    422,
-    'photographer_required',
-  );
   const studio = await tx.one<{ id: string }>(
     'insert into studios(name,description,city,district,address,genres,created_by) values($1,$2,$3,$4,$5,$6,$7) returning *',
     [

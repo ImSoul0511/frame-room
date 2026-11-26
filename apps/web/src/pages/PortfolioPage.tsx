@@ -29,7 +29,8 @@ export function PortfolioPage() {
   const list = useApi<Portfolio[]>('/v1/me/portfolios');
   const services = useApi<Service[]>('/v1/me/services');
   const [open, setOpen] = useState(false);
-  if (!profile?.roles.includes('photographer'))
+  const personal = Boolean(profile?.roles.includes('photographer'));
+  if (!personal && !profile?.roles.includes('studio_manager'))
     return (
       <>
         <PageHeading title={t.portfolio.profile} />
@@ -55,45 +56,49 @@ export function PortfolioPage() {
           <PortfolioCard key={portfolio.id} portfolio={portfolio} edit />
         ))}
       </div>
-      <div className="section-header">
-        <h2>{t.portfolio.services}</h2>
-        <Action secondary onClick={() => setOpen(true)}>
-          {t.studio.newService}
-        </Action>
-      </div>
-      <QueryState
-        query={services}
-        empty={services.data?.every((s) => s.ownerType !== 'photographer')}
-      />
-      <div className="owned-service-grid">
-        {services.data
-          ?.filter((s) => s.ownerType === 'photographer')
-          .map((s) => (
-            <article className="owned-service-card" key={s.id}>
-              <div className="owned-service-card-heading">
-                <h3>{s.name}</h3>
-                <span className="owned-service-status">
-                  {s.isActive ? t.studio.active : t.studio.inactive}
-                </span>
-              </div>
-              {s.description ? <p>{s.description}</p> : null}
-              <div className="owned-service-details">
-                <strong>{currency(s.price)}</strong>
-                <span>
-                  {t.studio.duration}: {s.durationMinutes}
-                </span>
-              </div>
-              <Link className="button-link" to={`/portfolio/services/${s.id}/edit`}>
-                {t.workspaceUi.edit}
-              </Link>
-            </article>
-          ))}
-      </div>
-      {open ? (
-        <Modal title={t.studio.newService} onClose={() => setOpen(false)}>
-          <ServiceForm onDone={() => setOpen(false)} />
-        </Modal>
-      ) : null}
+      {personal && (
+        <>
+          <div className="section-header">
+            <h2>{t.portfolio.services}</h2>
+            <Action secondary onClick={() => setOpen(true)}>
+              {t.studio.newService}
+            </Action>
+          </div>
+          <QueryState
+            query={services}
+            empty={services.data?.every((s) => s.ownerType !== 'photographer')}
+          />
+          <div className="owned-service-grid">
+            {services.data
+              ?.filter((s) => s.ownerType === 'photographer')
+              .map((s) => (
+                <article className="owned-service-card" key={s.id}>
+                  <div className="owned-service-card-heading">
+                    <h3>{s.name}</h3>
+                    <span className="owned-service-status">
+                      {s.isActive ? t.studio.active : t.studio.inactive}
+                    </span>
+                  </div>
+                  {s.description ? <p>{s.description}</p> : null}
+                  <div className="owned-service-details">
+                    <strong>{currency(s.price)}</strong>
+                    <span>
+                      {t.studio.duration}: {s.durationMinutes}
+                    </span>
+                  </div>
+                  <Link className="button-link" to={`/portfolio/services/${s.id}/edit`}>
+                    {t.workspaceUi.edit}
+                  </Link>
+                </article>
+              ))}
+          </div>
+          {open ? (
+            <Modal title={t.studio.newService} onClose={() => setOpen(false)}>
+              <ServiceForm onDone={() => setOpen(false)} />
+            </Modal>
+          ) : null}
+        </>
+      )}
     </>
   );
 }
@@ -171,8 +176,8 @@ export function PortfolioDetailPage() {
   return (
     <>
       <PageHeading
-        title={p.title}
-        subtitle={p.description}
+        title={canEdit ? p.title : p.description || t.profileUi.gallery}
+        subtitle={canEdit ? p.description : undefined}
         action={canEdit ? null : <ReportButton targetType="portfolio" targetId={id} />}
       />
       {canEdit ? (

@@ -26,6 +26,9 @@ const DiscoverySearchPage = lazy(() =>
   import('./pages/DiscoverySearchPage').then((m) => ({ default: m.DiscoverySearchPage })),
 );
 const AboutPage = lazy(() => import('./pages/AboutPage').then((m) => ({ default: m.AboutPage })));
+const PhotoDetailPage = lazy(() =>
+  import('./pages/PhotoDetailPage').then((m) => ({ default: m.PhotoDetailPage })),
+);
 const GuidePage = lazy(() => import('./pages/GuidePage').then((m) => ({ default: m.GuidePage })));
 function GenreIndexRedirect() {
   const { search } = useLocation();
@@ -119,6 +122,7 @@ export function App() {
                   <Route path="/" element={<RedirectWithQuery to="/home" />} />
                   <Route path="/home" element={<ExplorePage />} />
                   <Route path="/explore" element={<ExploreRoute />} />
+                  <Route path="/inspiration" element={<GenrePage />} />
                   <Route path="/photographers" element={<PhotographerDirectoryRoute />} />
                   <Route
                     path="/studios"
@@ -137,6 +141,7 @@ export function App() {
                   <Route path="/onboarding" element={<OnboardingPage />} />
                   <Route path="/providers/:type/:id" element={<ProviderPage />} />
                   <Route path="/portfolios/:id" element={<PortfolioDetailPage />} />
+                  <Route path="/portfolios/:id/photos/:photoId" element={<PhotoDetailPage />} />
                   <Route
                     path="/messages"
                     element={
@@ -210,22 +215,8 @@ export function App() {
                         </RequireAuth>
                       }
                     />
-                    <Route
-                      path="/studio"
-                      element={
-                        <RequireAuth roles={['photographer', 'studio_manager']}>
-                          <StudioPage />
-                        </RequireAuth>
-                      }
-                    />
-                    <Route
-                      path="/studio/:id"
-                      element={
-                        <RequireAuth roles={['photographer', 'studio_manager']}>
-                          <StudioDetailPage />
-                        </RequireAuth>
-                      }
-                    />
+                    <Route path="/studio" element={<StudioPage />} />
+                    <Route path="/studio/:id" element={<StudioDetailPage />} />
                     <Route
                       path="/portfolio"
                       element={
@@ -245,7 +236,7 @@ export function App() {
                     <Route
                       path="/portfolio/new"
                       element={
-                        <RequireAuth roles={['photographer']}>
+                        <RequireAuth roles={['photographer', 'studio_manager']}>
                           <PortfolioCreatePage />
                         </RequireAuth>
                       }

@@ -14,21 +14,19 @@ export function ChangePassword() {
     trigger.current?.focus();
   };
   return (
-    <section className="panel">
-      <h2>
-        <button
-          ref={trigger}
-          className="text-button settings-password-toggle"
-          type="button"
-          aria-expanded={open}
-          onClick={() => {
-            setSaved(false);
-            setOpen(true);
-          }}
-        >
-          {t.profileUi.changePassword}
-        </button>
-      </h2>
+    <div className="settings-password">
+      <button
+        ref={trigger}
+        className="text-button settings-password-toggle"
+        type="button"
+        aria-expanded={open}
+        onClick={() => {
+          setSaved(false);
+          setOpen(true);
+        }}
+      >
+        {t.profileUi.changePassword}
+      </button>
       <Feedback success={saved ? t.profileUi.passwordChanged : null} />
       {open ? (
         <PasswordForm
@@ -39,7 +37,7 @@ export function ChangePassword() {
           }}
         />
       ) : null}
-    </section>
+    </div>
   );
 }
 

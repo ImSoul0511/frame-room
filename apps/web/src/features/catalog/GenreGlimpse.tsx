@@ -1,3 +1,4 @@
+import { genres } from '@frameroom/shared';
 import { useStrings } from '../../lib/i18n';
 import { GenreSample } from './GenreSample';
 import { genreImages, type Genre } from './genre-art';
@@ -19,11 +20,15 @@ export function GenreGlimpse({
       aria-label={`${previous ? t.curation.previous : t.curation.next}: ${t.genreLabels[genre]}`}
     >
       <span className="glimpse-copy">
-        <span>{t.genreLabels[genre]}</span>
-        <strong>{t.curation.genreStories[genre].title}</strong>
+        {genres.map((option) => (
+          <span className="glimpse-caption" key={option} aria-hidden={option !== genre}>
+            <span>{t.genreLabels[option]}</span>
+            <strong>{t.curation.genreStories[option].title}</strong>
+          </span>
+        ))}
       </span>
       <span className="glimpse-thumbnail" aria-hidden="true">
-        <GenreSample src={genreImages(genre)[0]!} alt="" />
+        <GenreSample key={genre} src={genreImages(genre)[0]!} alt="" />
       </span>
     </button>
   );

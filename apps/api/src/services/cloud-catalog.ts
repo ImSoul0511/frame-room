@@ -12,6 +12,7 @@ import type {
   ProviderListQuery,
   ProviderLookup,
   PortfolioListQuery,
+  PhotoListQuery,
 } from '../schemas/catalog.js';
 import {
   providerDetailSchema,
@@ -125,6 +126,10 @@ export function createCloudCatalog(env: ApiEnv) {
     }
     if ('priceMax' in query && query.priceMax !== undefined)
       request = request.lte('price_from', query.priceMax);
+    if ('ratingMin' in query && query.ratingMin !== undefined)
+      request = request.gte('rating_avg', query.ratingMin);
+    if ('sort' in query && query.sort === 'price')
+      request = request.order('price_from', { ascending: true, nullsFirst: false });
     const start = (query.page - 1) * query.pageSize;
     const { data, error } = await request
       .order('rating_avg', { ascending: false, nullsFirst: false })
@@ -216,6 +221,85 @@ export function createCloudCatalog(env: ApiEnv) {
   return {
     list,
     profile,
+    async photos(query: PhotoListQuery) {
+      const tags = [...(query.tags ?? []), ...(query.tag ? [query.tag] : [])];
+      const matching = tags.length ? ',matches:image_tags!inner(tags!inner(slug,is_active))' : '';
+      let request = publicClient
+        .from('portfolio_images')
+        .select(
+          `id,portfolio_id,width,height,caption,storage_path,created_at,portfolios!inner(title,description,genre,status,deleted_at,photographers(display_name,city),studios(name,city)),image_tags(tags(*))${matching}`,
+        )
+        .eq('is_hidden', false)
+        .eq('portfolios.status', 'published')
+        .is('portfolios.deleted_at', null);
+      if (query.photographerId)
+        request = request.eq('portfolios.photographer_id', query.photographerId);
+      if (query.studioId) request = request.eq('portfolios.studio_id', query.studioId);
+      if (query.genre) request = request.eq('portfolios.genre', query.genre);
+      if (tags.length)
+        request = request.in('matches.tags.slug', tags).eq('matches.tags.is_active', true);
+      if (query.q) request = request.ilike('caption', `%${query.q.replace(/[\\%_]/g, '\\$&')}%`);
+      if (query.city) {
+        // Filter the related provider before pagination, preserving a photo-sized page.
+        const names = provinceNames(query.city);
+        const { data, error } = await publicClient
+          .from('providers')
+          .select('id,type')
+          .or(names.map((name) => `city.ilike.${name}`).join(','));
+        check(error);
+        const clauses = (data ?? []).map(
+          (provider) =>
+            `${provider.type === 'studio' ? 'studio_id' : 'photographer_id'}.eq.${provider.id}`,
+        );
+        if (!clauses.length) return [];
+        request = request.or(clauses.join(','), { referencedTable: 'portfolios' });
+      }
+      request = request
+        .order(query.sort === 'name' ? 'caption' : 'created_at', {
+          ascending: query.sort === 'oldest' || query.sort === 'name',
+        })
+        .order('id');
+      const start = (query.page - 1) * query.pageSize;
+      const { data, error } = await request
+        .range(start, start + query.pageSize - 1)
+        .returns<unknown[]>();
+      check(error);
+      return (data ?? []).map((input) => {
+        const row = z
+          .object({
+            id: z.string(),
+            portfolioId: z.string(),
+            width: z.number().nullish(),
+            height: z.number().nullish(),
+            caption: z.string().nullish(),
+            storagePath: z.string(),
+            portfolios: z.object({
+              photographers: z.object({ displayName: z.string() }).nullish(),
+              studios: z.object({ name: z.string() }).nullish(),
+            }),
+            imageTags: z.array(
+              z.object({ tags: tagSchema.extend({ isActive: z.boolean().optional() }).nullable() }),
+            ),
+          })
+          .parse(normalizeRow(input));
+        return {
+          id: row.id,
+          portfolioId: row.portfolioId,
+          width: row.width,
+          height: row.height,
+          caption: row.caption ?? '',
+          url: buildPublicPortfolioImageUrl(
+            env.SUPABASE_URL,
+            row.storagePath,
+            env.API_PUBLIC_ORIGIN,
+          )!,
+          ownerName: row.portfolios.photographers?.displayName ?? row.portfolios.studios?.name,
+          tags: row.imageTags.flatMap((item) =>
+            item.tags && item.tags.isActive !== false ? [item.tags] : [],
+          ),
+        };
+      });
+    },
     async portfolios(query: PortfolioListQuery) {
       let cityProviderFilter: string | undefined;
       if (query.city) {
@@ -241,7 +325,8 @@ export function createCloudCatalog(env: ApiEnv) {
           .filter(Boolean)
           .join(',');
       }
-      const matching = query.tag
+      const tags = [...(query.tags ?? []), ...(query.tag ? [query.tag] : [])];
+      const matching = tags.length
         ? ',matches:portfolio_images!inner(is_hidden,image_tags!inner(tags!inner(slug)))'
         : '';
       let request = publicClient
@@ -253,10 +338,15 @@ export function createCloudCatalog(env: ApiEnv) {
         .is('deleted_at', null);
       if (query.genre) request = request.eq('genre', query.genre);
       if (cityProviderFilter) request = request.or(cityProviderFilter);
-      if (query.tag)
+      if (tags.length) {
         request = request
           .eq('matches.is_hidden', false)
-          .eq('matches.image_tags.tags.slug', query.tag);
+          .eq('matches.image_tags.tags.is_active', true);
+        request =
+          tags.length === 1
+            ? request.eq('matches.image_tags.tags.slug', tags[0])
+            : request.in('matches.image_tags.tags.slug', tags);
+      }
       if (query.q) {
         const pattern = `%${query.q.replace(/[\\%_]/g, '\\$&')}%`
           .replace(/\\/g, '\\\\')
@@ -378,6 +468,16 @@ export function createCloudCatalog(env: ApiEnv) {
       return ownPhotographerSchema.parse(normalizeRow(result.data));
     },
     async detail(type: 'photographer' | 'studio', lookup: ProviderLookup) {
+      if ('userName' in lookup) {
+        const identity = await publicClient
+          .from('photographers')
+          .select('id,profiles!inner(user_name)')
+          .eq('profiles.user_name', lookup.userName)
+          .maybeSingle();
+        check(identity.error);
+        if (!identity.data) throw new ApiError(404, 'NOT_FOUND', 'photographer_not_found');
+        lookup = { id: identity.data.id };
+      }
       const query = publicClient.from('providers').select('*').eq('type', type);
       const { data: matches, error } = await ('id' in lookup
         ? query.eq('id', lookup.id).limit(1)
@@ -409,7 +509,7 @@ export function createCloudCatalog(env: ApiEnv) {
         type === 'photographer'
           ? publicClient
               .from('photographers')
-              .select('*,profiles(avatar_path)')
+              .select('*,profiles(avatar_path,user_name)')
               .eq('id', id)
               .maybeSingle()
           : Promise.resolve({ data: null, error: null }),
@@ -417,6 +517,11 @@ export function createCloudCatalog(env: ApiEnv) {
       for (const result of [services, portfolios, reviews, cover]) check(result.error);
       return providerDetailSchema.parse({
         provider: normalizeRow(data),
+        userName:
+          z
+            .object({ profiles: z.object({ user_name: z.string().nullish() }).nullish() })
+            .nullable()
+            .parse(cover.data)?.profiles?.user_name ?? null,
         coverPath:
           z.object({ cover_path: z.string().nullable().optional() }).nullable().parse(cover.data)
             ?.cover_path ?? null,

@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { InfoNavigation } from '../components/InfoNavigation';
 import portrait from '../assets/genres/portrait.webp';
 import wedding from '../assets/genres/wedding.webp';
 import { useStrings } from '../lib/i18n';
@@ -7,6 +8,7 @@ export function AboutPage() {
   const t = useStrings();
   return (
     <section className="about-story">
+      <InfoNavigation />
       <header className="about-spread">
         <div className="about-intro">
           <p className="eyebrow">{t.curation.aboutKicker}</p>
@@ -25,21 +27,21 @@ export function AboutPage() {
         <article>
           <h2>{t.curation.aboutStepOne}</h2>
           <p>{t.curation.aboutStepOneDescription}</p>
-          <Link className="text-button" to="/home#genres">
+          <Link className="button-link" to="/home#genres">
             {t.curation.genres}
           </Link>
         </article>
         <article>
           <h2>{t.curation.aboutStepTwo}</h2>
           <p>{t.curation.aboutStepTwoDescription}</p>
-          <Link className="text-button" to="/photographers">
+          <Link className="button-link" to="/photographers">
             {t.curation.photographers}
           </Link>
         </article>
         <article>
           <h2>{t.curation.aboutStepThree}</h2>
           <p>{t.curation.aboutStepThreeDescription}</p>
-          <Link className="text-button" to="/projects">
+          <Link className="button-link" to="/projects">
             {t.nav.projects}
           </Link>
         </article>

@@ -430,7 +430,7 @@ export const english = {
     leave: 'Leave studio',
     remove: 'Remove member',
     promote: 'Make manager',
-    demote: 'Make photographer',
+    demote: 'Remove manager permissions',
     invitations: 'Your invitations',
     accept: 'Accept invitation',
     decline: 'Decline',
@@ -521,6 +521,8 @@ export const english = {
     tet_holiday: 'Tet holiday',
   },
   errors: {
+    invalid_locality: 'Choose a province or city in Vietnam.',
+    upload_failed: 'The upload did not finish. Select the file to try again.',
     rate_limited: 'Too many requests. Please wait and try again.',
     network_unavailable: 'Could not connect. Check your connection and try again.',
     invalid_response: 'The service returned an unexpected response. Please try again.',
@@ -557,6 +559,9 @@ export const english = {
     selection_delivery_required:
       'A submitted selection and at least one delivery file are required.',
     last_manager: 'A studio must have at least one manager.',
+    last_manager_protected:
+      'Appoint another manager before removing your manager role or leaving the studio.',
+    photographer_profile_required: 'A photographer profile is required to participate in shoots.',
     active_assignment: 'Reassign your active bookings before leaving the studio.',
     invalid_assignment: 'The photographer must be a current studio member.',
     invalid_transition: 'This action is not available in the current state.',

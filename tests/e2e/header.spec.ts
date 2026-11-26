@@ -146,7 +146,7 @@ test('avatar opens profile, keeps settings inside it and signs out', async ({ pa
     } else if (path.endsWith('/user')) await route.fulfill({ json: user });
     else await route.abort();
   });
-  await page.route('http://localhost:4000/v1/**', async (route) => {
+  await page.route('**/v1/**', async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
     if (path === '/v1/me/notifications/pages') {
@@ -314,32 +314,30 @@ test('avatar opens profile, keeps settings inside it and signs out', async ({ pa
     }
     const picker = page.waitForEvent('filechooser');
     await dropdown.getByRole('button', { name: 'Chọn ảnh bìa' }).click();
-    await (
-      await picker
-    ).setFiles({
-      name: 'cover.png',
-      mimeType: 'image/png',
-      buffer: Buffer.from(
-        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC0lEQVR42mP8/x8AAwMCAO+/a1sAAAAASUVORK5CYII=',
-        'base64',
-      ),
-    });
+    await (await picker).setFiles('apps/web/src/assets/genres/portrait.webp');
     await expect(dropdown).toBeHidden();
     const editor = page.getByRole('dialog', { name: 'Đổi ảnh bìa', exact: true });
     await expect(editor).toBeVisible();
-    await expect(editor.locator('.cover-edit-preview')).toHaveAttribute('src', /^blob:/);
-    await expect(editor.getByRole('button', { name: 'Lưu thay đổi' })).toBeEnabled();
+    const stage = editor.locator('.cover-crop-stage');
+    await expect(stage.locator('img')).toHaveAttribute('src', /^blob:/);
+    await expect(editor.getByRole('button', { name: 'Dùng ảnh này' })).toBeEnabled();
+    const bounds = (await stage.boundingBox())!;
+    await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height * 0.7);
+    await page.mouse.up();
+    await expect(editor.locator('input[type="range"]').last()).not.toHaveValue('0');
     const replacement = page.waitForEvent('filechooser');
     await editor.getByRole('button', { name: 'Chọn ảnh bìa', exact: true }).click();
     await (await replacement).setFiles([]);
-    await expect(editor.locator('.cover-edit-preview')).toHaveAttribute('src', /^blob:/);
+    await expect(stage.locator('img')).toHaveAttribute('src', /^blob:/);
     await editor.getByRole('button', { name: 'Hủy', exact: true }).click();
     await expect(editor).toHaveCount(0);
     await page.setViewportSize({ width: 1280, height: 900 });
   };
   await checkCoverDropdown(false);
   const profileTabs = page.getByRole('navigation', { name: 'Hồ sơ', exact: true });
-  await expect(profileTabs.getByRole('link', { name: 'Hồ sơ' })).toHaveAttribute(
+  await expect(profileTabs.getByRole('link', { name: 'Hồ sơ', exact: true })).toHaveAttribute(
     'aria-current',
     'page',
   );
@@ -517,6 +515,9 @@ test('avatar opens profile, keeps settings inside it and signs out', async ({ pa
   await expect(profileTabs.getByRole('link')).toHaveText([
     'Hồ sơ',
     'Studio',
+    'Lịch chụp',
+    'Dự án của bạn',
+    'Hồ sơ và tác phẩm',
     'Thông báo',
     'Cài đặt',
   ]);
@@ -542,7 +543,7 @@ test('avatar opens profile, keeps settings inside it and signs out', async ({ pa
   await page.setViewportSize({ width: 375, height: 900 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
   await page.setViewportSize({ width: 1280, height: 900 });
-  await expect(profileTabs.getByRole('link', { name: 'Hồ sơ' })).toHaveAttribute(
+  await expect(profileTabs.getByRole('link', { name: 'Hồ sơ', exact: true })).toHaveAttribute(
     'aria-current',
     'page',
   );

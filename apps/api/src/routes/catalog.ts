@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { createPortfolioUploadVerifier } from '../lib/portfolio-upload.js';
+import { availability, availabilitySetting } from '../services/availability.js';
 import { defineRoute, validateResponse, type ApiModule } from '../plugins/route.js';
 import {
   exploreProviderSchema,
@@ -20,9 +21,11 @@ import {
   portfolioImageTagsInputSchema,
   portfolioInputSchema,
   portfolioListQuerySchema,
+  photoListQuerySchema,
   providerDetailSchema,
   providerListQuerySchema,
   publicPortfolioSchema,
+  discoveryPhotoSchema,
   respondInvitationInputSchema,
   serviceAddOnInputSchema,
   serviceAddOnSchema,
@@ -106,6 +109,43 @@ export const catalogModule: ApiModule = {
       ['photographers', 'photographer'],
       ['studios', 'studio'],
     ] as const) {
+      const setting = z.object({ availabilityPublic: z.boolean() });
+      defineRoute(app, deps, {
+        method: 'GET',
+        url: `/v1/${plural}/:id/availability`,
+        summary: 'Show the public booking slots of a provider.',
+        access: 'public',
+        params: idParamsSchema,
+        query: z.object({ crew: z.coerce.number().int().min(1).max(20).default(1) }),
+        response: setting.extend({
+          slots: z.array(z.object({ start: z.string(), end: z.string(), available: z.boolean() })),
+        }),
+        handler: ({ params, query, transaction }) =>
+          transaction((tx) =>
+            availability(tx, type, params.id, type === 'photographer' ? 1 : query.crew),
+          ),
+      });
+      defineRoute(app, deps, {
+        method: 'GET',
+        url: `/v1/${plural}/:id/availability-setting`,
+        summary: 'Read the provider calendar visibility setting.',
+        access: 'verified',
+        params: idParamsSchema,
+        response: setting,
+        handler: ({ params, transaction }) =>
+          transaction((tx) => availabilitySetting(tx, type, params.id)),
+      });
+      defineRoute(app, deps, {
+        method: 'PATCH',
+        url: `/v1/${plural}/:id/availability-setting`,
+        summary: 'Change the provider calendar visibility setting.',
+        access: 'verified',
+        params: idParamsSchema,
+        body: setting,
+        response: setting,
+        handler: ({ params, body, transaction }) =>
+          transaction((tx) => availabilitySetting(tx, type, params.id, body.availabilityPublic)),
+      });
       defineRoute(app, deps, {
         method: 'GET',
         url: `/v1/${plural}`,
@@ -139,6 +179,23 @@ export const catalogModule: ApiModule = {
           ),
       });
     }
+
+    defineRoute(app, deps, {
+      method: 'GET',
+      url: '/v1/photographers/by-username',
+      summary: 'Public photographer detail by unique username.',
+      access: 'public',
+      query: z.object({
+        userName: z
+          .string()
+          .trim()
+          .toLowerCase()
+          .regex(/^[a-z0-9][a-z0-9_]{2,29}$/),
+      }),
+      response: providerDetailSchema,
+      errors: [404],
+      handler: ({ query }) => providerDetail('photographer', { userName: query.userName }),
+    });
 
     defineRoute(app, deps, {
       method: 'GET',
@@ -325,6 +382,21 @@ export const catalogModule: ApiModule = {
         await transaction((tx) => catalog.deleteService(tx, actor.id, params.id));
         return undefined;
       },
+    });
+
+    defineRoute(app, deps, {
+      method: 'GET',
+      url: '/v1/photos',
+      summary: 'Browse individual public photographs with image tag filters.',
+      access: 'public',
+      query: photoListQuerySchema,
+      response: z.array(discoveryPhotoSchema),
+      handler: ({ query, transaction }) =>
+        cloud
+          ? cloud.photos(query)
+          : transaction((tx) =>
+              catalog.listDiscoveryPhotos(tx, query, SUPABASE_URL, API_PUBLIC_ORIGIN),
+            ),
     });
 
     // ---------- 102d: Portfolios & Images ----------

@@ -1,4 +1,6 @@
 import { Link } from 'react-router-dom';
+import { LeafBranch } from '../components/Botanical';
+import { InfoNavigation } from '../components/InfoNavigation';
 import { useStrings } from '../lib/i18n';
 
 export function GuidePage({ topic }: { topic: 'support' | 'community' | 'privacy' }) {
@@ -32,15 +34,38 @@ export function GuidePage({ topic }: { topic: 'support' | 'community' | 'privacy
   };
   return (
     <article className="site-guide">
-      <h1>{s[topic]}</h1>
-      <p>{s[`${topic}Intro`]}</p>
-      {topics[topic].map((item) => (
-        <section key={item.heading}>
-          <h2>{item.heading}</h2>
-          <p>{item.text}</p>
-          {'to' in item && <Link to={item.to}>{item.link}</Link>}
-        </section>
-      ))}
+      <InfoNavigation />
+      <header className="info-hero">
+        <div>
+          <p className="eyebrow">FrameRoom / {s.resources}</p>
+          <h1>{s[topic]}</h1>
+          <p>{s[`${topic}Intro`]}</p>
+        </div>
+        <LeafBranch className="info-hero-branch" />
+      </header>
+      <div className="guide-layout">
+        <nav className="guide-contents" aria-label={s.onThisPage}>
+          <p className="eyebrow">{s.onThisPage}</p>
+          {topics[topic].map((item, index) => (
+            <a key={item.heading} href={`#${topic}-${index}`}>
+              {item.heading}
+            </a>
+          ))}
+        </nav>
+        <div className="guide-sections">
+          {topics[topic].map((item, index) => (
+            <section id={`${topic}-${index}`} key={item.heading} className="guide-card">
+              <h2>{item.heading}</h2>
+              <p>{item.text}</p>
+              {'to' in item && (
+                <Link className="button-link" to={item.to}>
+                  {item.link}
+                </Link>
+              )}
+            </section>
+          ))}
+        </div>
+      </div>
     </article>
   );
 }

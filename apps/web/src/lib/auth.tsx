@@ -14,6 +14,7 @@ type AuthState = {
   profileLoading: boolean;
   profileError: Error | null;
   onboardingRequired: boolean;
+  retryProfile: () => void;
 };
 const AuthContext = hotSingleton(import.meta.hot?.data, 'auth-context', () =>
   createContext<AuthState>({
@@ -23,6 +24,7 @@ const AuthContext = hotSingleton(import.meta.hot?.data, 'auth-context', () =>
     profileLoading: false,
     profileError: null,
     onboardingRequired: false,
+    retryProfile: () => {},
   }),
 );
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -54,6 +56,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
         profileLoading: profile.isPending && Boolean(session),
         profileError: profile.error,
+        retryProfile: () => {
+          void profile.refetch();
+        },
         onboardingRequired:
           (profile.error instanceof RequestError && profile.error.reason === 'profile_required') ||
           Boolean(
@@ -94,7 +99,15 @@ export function RequireAuth({
         replace
       />
     );
-  if (auth.profileError) return <div role="alert">{auth.profileError.message}</div>;
+  if (auth.profileError)
+    return (
+      <div role="alert">
+        <p>{auth.profileError.message}</p>
+        <button type="button" className="button-link" onClick={auth.retryProfile}>
+          {strings.retry}
+        </button>
+      </div>
+    );
   if (roles && !roles.some((role) => auth.profile?.roles.includes(role)))
     return <p role="alert">{strings.errors.forbidden}</p>;
   return children;

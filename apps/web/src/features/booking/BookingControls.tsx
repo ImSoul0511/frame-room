@@ -5,7 +5,7 @@ import type { Resource, Workspace } from '../../lib/types';
 import { patch, post } from '../../lib/api';
 import { useApi, useTask } from '../../lib/hooks';
 import { useStrings } from '../../lib/i18n';
-import { Action, Area, Feedback, Form, Modal, Select } from '../../components/ui';
+import { Action, Area, Feedback, Form, Modal } from '../../components/ui';
 export function BookingControls({ workspace: w }: { workspace: Workspace }) {
   const t = useStrings();
   const refreshing = useIsFetching({ queryKey: ['api'] }) > 0;
@@ -34,7 +34,15 @@ export function BookingControls({ workspace: w }: { workspace: Workspace }) {
       label: t.booking.proofing,
       allowed: b.status === 'in_progress' && w.isProvider,
     },
-    { to: 'delivered', label: t.booking.deliver, allowed: b.status === 'proofing' && w.isProvider },
+    {
+      to: 'delivered',
+      label: t.booking.deliver,
+      allowed:
+        b.status === 'proofing' &&
+        w.isProvider &&
+        (!w.proofing.mode || w.gallery?.approvedRound === w.gallery?.round) &&
+        w.deliveries.length > 0,
+    },
     { to: 'completed', label: t.booking.complete, allowed: b.status === 'delivered' && w.isClient },
   ];
   const latest = w.briefs[0];
@@ -89,6 +97,9 @@ export function BookingControls({ workspace: w }: { workspace: Workspace }) {
             </Action>
           </Form>
         </Modal>
+      ) : null}
+      {b.studioId && w.canManage && ['in_progress', 'proofing'].includes(b.status) ? (
+        <AssignmentForm workspace={w} attendance />
       ) : null}
       <Feedback error={change.error} />
       {b.studioId &&
@@ -180,54 +191,81 @@ function ScheduleForm({
   );
 }
 
-function AssignmentForm({ workspace: { booking: b } }: { workspace: Workspace }) {
+function AssignmentForm({
+  workspace: { booking: b },
+  attendance = false,
+}: {
+  workspace: Workspace;
+  attendance?: boolean;
+}) {
   const t = useStrings();
-  const [id, setId] = useState('');
+  const [selected, setSelected] = useState<string[] | null>(null);
   const [reason, setReason] = useState('');
   const [open, setOpen] = useState(false);
   const reassign = b.status !== 'pending';
-  const candidates = useApi<{ id: string; displayName: string; isAvailable: boolean }[]>(
-    `/v1/bookings/${b.id}/available-photographers`,
-    open,
-  );
+  const candidates = useApi<
+    { id: string; displayName: string; isAvailable: boolean; isAssigned: boolean }[]
+  >(`/v1/bookings/${b.id}/available-photographers${attendance ? '?attendance=true' : ''}`, open);
+  const ids =
+    selected ??
+    (candidates.data ?? []).filter((person) => person.isAssigned).map((person) => person.id);
   const task = useTask(async () => {
-    await post(`/v1/bookings/${b.id}/${reassign ? 'reassignment' : 'assignment'}`, {
+    await post(`/v1/bookings/${b.id}/${attendance ? 'attendance' : 'team'}`, {
       version: b.version,
-      photographerId: id,
-      ...(reassign ? { reason } : {}),
+      photographerIds: ids,
+      reason,
     });
     setOpen(false);
   });
-  const label = reassign ? t.workspaceUi.reassign : t.booking.assign;
+  const label = attendance
+    ? t.workspaceUi.finishAttendance
+    : reassign
+      ? t.workspaceUi.reassign
+      : t.booking.assign;
   return (
     <>
-      <Action secondary onClick={() => setOpen(true)}>
+      <Action
+        secondary
+        onClick={() => {
+          setSelected(null);
+          setReason('');
+          setOpen(true);
+        }}
+      >
         {label}
       </Action>
       {open ? (
         <Modal title={label} onClose={() => setOpen(false)}>
           <Form onSubmit={() => task.mutate()}>
-            <Select label={t.photographer} value={id} onChange={setId} required>
-              <option value="">—</option>
+            <fieldset>
+              <legend>{t.photographer}</legend>
               {candidates.data?.map((candidate) => (
-                <option
-                  key={candidate.id}
-                  value={candidate.id}
-                  disabled={!candidate.isAvailable || candidate.id === b.assignedPhotographerId}
-                >
+                <label className="checkbox-row" key={candidate.id}>
+                  <input
+                    type="checkbox"
+                    checked={ids.includes(candidate.id)}
+                    disabled={!attendance && !candidate.isAvailable && !ids.includes(candidate.id)}
+                    onChange={(event) =>
+                      setSelected(
+                        event.target.checked
+                          ? [...ids, candidate.id]
+                          : ids.filter((id) => id !== candidate.id),
+                      )
+                    }
+                  />
                   {candidate.displayName}
-                  {candidate.isAvailable ? '' : ` · ${t.errors.slot_overlap}`}
-                </option>
+                  {attendance || candidate.isAvailable ? '' : ` · ${t.errors.slot_overlap}`}
+                </label>
               ))}
-            </Select>
-            {reassign ? (
+            </fieldset>
+            {reassign && !attendance ? (
               <Area label={t.booking.reason} value={reason} onChange={setReason} />
             ) : null}
             <Feedback error={task.error ?? candidates.error} />
             <Action
               type="submit"
               pending={task.isPending}
-              disabled={!id || (reassign && !reason.trim())}
+              disabled={!ids.length || (reassign && !attendance && !reason.trim())}
             >
               {label}
             </Action>

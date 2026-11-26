@@ -1,1 +1,0 @@
--- Seed data will be added with the first schema migration.

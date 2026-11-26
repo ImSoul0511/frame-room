@@ -43,6 +43,7 @@ export function SettingsPage() {
           <h2>{t.profileUi.signInEmail}</h2>
           <p className="settings-signin-email">{session.user.email}</p>
           <p className="muted">{t.profileUi.signInEmailHint}</p>
+          <ChangePassword key={session.user.id} />
         </section>
       ) : null}
       {profile?.roles.includes('photographer') ? (
@@ -52,7 +53,6 @@ export function SettingsPage() {
         </section>
       ) : null}
       <div className="settings-preferences">
-        {session ? <ChangePassword key={session.user.id} /> : null}
         <section className="panel settings-language-panel">
           <h2>{t.language.label}</h2>
           <LanguageSwitcher />

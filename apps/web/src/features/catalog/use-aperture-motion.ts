@@ -9,7 +9,6 @@ import {
 } from './aperture-geometry';
 
 const CRUISE_SPEED = 0.0035; // degrees per millisecond
-const SETTLE_HOLD_MS = 420;
 const DRAG_THRESHOLD = 1;
 const DRAG_PREVIEW_LIMIT = GENRE_STEP * 0.75;
 
@@ -19,11 +18,12 @@ export function useApertureMotion() {
   const blade = useRef<SVGPathElement>(null);
   const target = useRef(0);
   const rotation = useRef(0);
-  const speed = useRef(CRUISE_SPEED);
+  const direction = useRef(1);
   const activeStep = useRef(0);
   const manualSelection = useRef(false);
-  const holdUntil = useRef(0);
   const interacting = useRef(false);
+  const pauseRequested = useRef(false);
+  const wake = useRef<() => void>(() => {});
   const pointer = useRef<{ id: number; angle: number; start: number; travel: number } | null>(null);
   const [active, setActive] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -32,78 +32,82 @@ export function useApertureMotion() {
   useEffect(() => {
     const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
     let frame = 0;
-    let lastTime = 0;
-    let lastScroll = window.scrollY;
+    let lastTime: number | undefined;
     let visible = false;
-    const observer = new IntersectionObserver(([entry]) => {
-      visible = entry.isIntersecting;
-    });
-    if (stage.current) observer.observe(stage.current);
-    const onScroll = () => {
-      const delta = window.scrollY - lastScroll;
-      lastScroll = window.scrollY;
-      if (visible && !paused && !pointer.current && !manualSelection.current && !motion.matches)
-        target.current += delta * 0.035;
+    const cruising = () =>
+      visible && !pauseRequested.current && !interacting.current && !motion.matches;
+    const schedule = () => {
+      if (frame) return;
+      if (!document.hidden && (manualSelection.current || pointer.current || cruising())) {
+        frame = requestAnimationFrame(animate);
+      } else {
+        lastTime = undefined;
+      }
     };
     const animate = (time: number) => {
-      const delta = Math.min(time - (lastTime || time), 64);
+      frame = 0;
+      // Limit the advance after a dropped frame so the lens never jumps to catch up.
+      const delta = Math.min(time - (lastTime ?? time), 32);
       lastTime = time;
-      if (visible && !document.hidden && (time >= holdUntil.current || motion.matches)) {
-        const automatic = !paused && !interacting.current && !pointer.current && !motion.matches;
-        const boundary = activeStep.current * GENRE_STEP;
-        const selecting = manualSelection.current;
-        if (!selecting && !pointer.current) {
-          if (automatic) target.current += speed.current * delta;
-          target.current = Math.max(
-            boundary - GENRE_STEP,
-            Math.min(boundary + GENRE_STEP, target.current),
-          );
-        }
-        const distance = target.current - rotation.current;
+      let angle = rotation.current;
+      let step = activeStep.current;
+      const selecting = manualSelection.current;
+      if (!document.hidden && (selecting || pointer.current)) {
+        const distance = target.current - angle;
         const movement = distance * -Math.expm1(-delta / (selecting ? 120 : 24));
-        const angle =
+        angle =
           motion.matches || Math.abs(distance) < 0.2
             ? target.current
-            : rotation.current +
+            : angle +
               (selecting
                 ? Math.sign(movement) * Math.min(Math.abs(movement), delta * 0.15)
                 : movement);
-        if (angle !== rotation.current) {
-          rotation.current = angle;
-          if (ring.current) ring.current.style.transform = `rotate(${-angle}deg)`;
-          blade.current?.setAttribute('transform', bladePivot(angle));
-        }
-        if (
-          !pointer.current &&
-          angle === target.current &&
-          (selecting || Math.abs(angle - boundary) >= GENRE_STEP)
-        ) {
-          // Commit at a blade endpoint and hold it while React renders the next genre.
+        if (selecting && angle === target.current) {
           manualSelection.current = false;
-          const step = Math.round(angle / GENRE_STEP);
-          if (step !== activeStep.current) {
-            holdUntil.current = time + SETTLE_HOLD_MS;
-            activeStep.current = step;
-            setActive(wrapGenre(step));
-          }
+          step = Math.round(angle / GENRE_STEP);
         }
+      } else if (!document.hidden && cruising()) {
+        angle += direction.current * CRUISE_SPEED * delta;
+        target.current = angle;
+        const nextStep = step + direction.current;
+        if ((angle - nextStep * GENRE_STEP) * direction.current >= 0) step = nextStep;
       }
-      frame = requestAnimationFrame(animate);
+      if (angle !== rotation.current) {
+        rotation.current = angle;
+        if (ring.current) ring.current.style.transform = `rotate(${-angle}deg)`;
+        blade.current?.setAttribute('transform', bladePivot(angle));
+      }
+      if (step !== activeStep.current) {
+        activeStep.current = step;
+        setActive(wrapGenre(step));
+      }
+      schedule();
     };
-    window.addEventListener('scroll', onScroll, { passive: true });
-    frame = requestAnimationFrame(animate);
+    const observer = new IntersectionObserver(([entry]) => {
+      visible = entry.isIntersecting;
+      schedule();
+    });
+    if (stage.current) observer.observe(stage.current);
+    const onVisibilityChange = () => {
+      lastTime = undefined;
+      schedule();
+    };
+    wake.current = schedule;
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    motion.addEventListener('change', schedule);
     return () => {
       cancelAnimationFrame(frame);
       observer.disconnect();
-      window.removeEventListener('scroll', onScroll);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      motion.removeEventListener('change', schedule);
     };
-  }, [paused]);
+  }, []);
 
   const select = (index: number) => {
     target.current = nearestGenreAngle(target.current, index);
     manualSelection.current = true;
-    speed.current =
-      (Math.sign(target.current - rotation.current) || Math.sign(speed.current)) * CRUISE_SPEED;
+    direction.current = Math.sign(target.current - rotation.current) || direction.current;
+    wake.current();
   };
   const stepBy = (offset: number) => {
     const from = manualSelection.current
@@ -133,6 +137,7 @@ export function useApertureMotion() {
     manualSelection.current = false;
     interacting.current = false;
     setDragging(true);
+    wake.current();
   };
   const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
     const drag = pointer.current;
@@ -158,6 +163,12 @@ export function useApertureMotion() {
   };
   const setInteracting = (value: boolean) => {
     interacting.current = value;
+    wake.current();
+  };
+  const updatePaused = (value: boolean) => {
+    pauseRequested.current = value;
+    setPaused(value);
+    wake.current();
   };
   return {
     stage,
@@ -166,7 +177,7 @@ export function useApertureMotion() {
     active,
     paused,
     dragging,
-    setPaused,
+    setPaused: updatePaused,
     setInteracting,
     select,
     stepBy,

@@ -27,7 +27,6 @@ export function ApertureGenres() {
     stepBy,
   } = useApertureMotion();
   const current = genres[active];
-  const story = t.curation.genreStories[current];
   const [params] = useSearchParams();
   const project = params.get('project');
   const destination = `/genres/${current}${project ? `?project=${encodeURIComponent(project)}` : ''}`;
@@ -103,11 +102,15 @@ export function ApertureGenres() {
             genre={genres[wrapGenre(active - 1)]}
             onSelect={() => select(active - 1)}
           />
-          <article className="genre-feature" key={current}>
-            <div className="genre-feature-copy">
-              <span className="genre-label">{t.genreLabels[current]}</span>
-              <h3>{story.title}</h3>
-              <p>{story.description}</p>
+          <article className="genre-feature">
+            <div className="genre-feature-text">
+              {genres.map((genre) => (
+                <div className="genre-feature-copy" key={genre} aria-hidden={genre !== current}>
+                  <span className="genre-label">{t.genreLabels[genre]}</span>
+                  <h3>{t.curation.genreStories[genre].title}</h3>
+                  <p>{t.curation.genreStories[genre].description}</p>
+                </div>
+              ))}
             </div>
             <GenreMoodboard genre={current} destination={destination} />
           </article>

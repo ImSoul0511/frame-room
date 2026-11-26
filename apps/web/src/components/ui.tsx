@@ -340,11 +340,13 @@ export function FilePicker({
   onFile,
   disabled = false,
   multiple = false,
+  accept = 'image/jpeg,image/png,image/webp',
 }: {
   label: string;
   onFile: (file: File) => void;
   disabled?: boolean;
   multiple?: boolean;
+  accept?: string;
 }) {
   const id = useId();
   return (
@@ -354,7 +356,7 @@ export function FilePicker({
         id={id}
         type="file"
         className="sr-only"
-        accept="image/jpeg,image/png,image/webp"
+        accept={accept}
         disabled={disabled}
         multiple={multiple}
         onChange={(e) => {

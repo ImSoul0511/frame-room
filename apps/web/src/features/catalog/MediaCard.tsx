@@ -10,6 +10,7 @@ export function MediaCard({
   title,
   description,
   onOpen,
+  photoId,
   edit = false,
 }: {
   portfolio: Portfolio;
@@ -17,6 +18,7 @@ export function MediaCard({
   title?: string;
   description?: string;
   onOpen?: () => void;
+  photoId?: string;
   edit?: boolean;
 }) {
   const t = useStrings();
@@ -25,7 +27,7 @@ export function MediaCard({
   const [failedSrc, setFailedSrc] = useState<string>();
   const project = params.get('project');
   const context = project ? `?project=${encodeURIComponent(project)}` : '';
-  const albumUrl = `/portfolios/${portfolio.id}${edit ? '?edit=1' : context}`;
+  const albumUrl = `/portfolios/${portfolio.id}${photoId ? `/photos/${photoId}` : ''}${edit ? '?edit=1' : context}`;
   const imageLabel = title || description || portfolio.title;
   const visual = (
     <>

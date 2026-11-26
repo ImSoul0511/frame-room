@@ -238,6 +238,41 @@ describe('GET /v1/photographers and GET /v1/photographers/:id', () => {
     expect(res.body).toContain('photographer_not_found');
   });
 
+  it('resolves a normalized username to the photographer UUID', async () => {
+    vi.mocked(repo.findPhotographerByUserName).mockResolvedValue(PHOTOGRAPHER_PROVIDER);
+    vi.mocked(repo.findPhotographerProfileImages).mockResolvedValue({
+      userName: 'admin',
+      coverPath: null,
+      avatarPath: null,
+    });
+    vi.mocked(repo.listActiveServicesByProvider).mockResolvedValue([]);
+    vi.mocked(repo.listPublishedPortfoliosByProvider).mockResolvedValue([]);
+    vi.mocked(repo.listVisibleReviewsByProvider).mockResolvedValue([]);
+    const app = await buildTestApp();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/photographers/by-username?userName=ADMIN',
+    });
+    expect(res.statusCode).toBe(200);
+    expect(bodyData(res)).toMatchObject({ provider: { id: PHOTOGRAPHER_ID }, userName: 'admin' });
+    expect(repo.findPhotographerByUserName).toHaveBeenCalledWith(expect.anything(), 'admin');
+    expect(repo.listActiveServicesByProvider).toHaveBeenCalledWith(
+      expect.anything(),
+      'photographer',
+      PHOTOGRAPHER_ID,
+    );
+  });
+
+  it('returns 404 for an unknown username', async () => {
+    vi.mocked(repo.findPhotographerByUserName).mockResolvedValue(undefined);
+    const app = await buildTestApp();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/photographers/by-username?userName=unknown',
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
   it('returns 404 when there is no exact display name match', async () => {
     vi.mocked(repo.findPhotographersByDisplayName).mockResolvedValue([]);
     const app = await buildTestApp();
@@ -413,7 +448,8 @@ describe('POST /v1/studios', () => {
     );
   });
 
-  it('rejects a client without a photographer profile before inserting a studio', async () => {
+  it('lets a verified client without a photographer profile create a studio', async () => {
+    vi.mocked(repo.insertStudio).mockResolvedValue(STUDIO);
     const app = await buildTestApp();
     const res = await app.inject({
       method: 'POST',
@@ -421,10 +457,14 @@ describe('POST /v1/studios', () => {
       payload: STUDIO_INPUT,
       headers: AUTH,
     });
-    expect(res.statusCode).toBe(403);
-    expect(res.body).toContain('photographer_profile_required');
-    expect(repo.insertStudio).not.toHaveBeenCalled();
-    expect(repo.insertStudioMember).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(201);
+    expect(repo.findPhotographerIdByUser).not.toHaveBeenCalled();
+    expect(repo.insertStudioMember).toHaveBeenCalledWith(
+      expect.anything(),
+      STUDIO_ID,
+      'user-1',
+      'manager',
+    );
   });
 });
 
@@ -783,6 +823,41 @@ describe('GET /v1/me/portfolios and GET /v1/portfolios', () => {
     const res = await app.inject({ method: 'GET', url: '/v1/portfolios?sort=unexpected' });
     expect(res.statusCode).toBe(400);
     expect(repo.listPublicPortfolios).not.toHaveBeenCalled();
+  });
+});
+
+describe('GET /v1/photos', () => {
+  it('returns individual photo IDs and their tags with filter and pagination parameters', async () => {
+    vi.mocked(repo.listDiscoveryPhotos).mockResolvedValue([
+      {
+        id: REVIEW_ID,
+        portfolioId: PORTFOLIO_ID,
+        caption: 'Window light',
+        url: 'photo.webp',
+        ownerName: 'Mai',
+      },
+    ]);
+    vi.mocked(repo.listTagsForImages).mockResolvedValue(new Map([[REVIEW_ID, [TAG]]]));
+    const app = await buildTestApp();
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/photos?photographerId=${PHOTOGRAPHER_ID}&genre=portrait&tags=soft,warm&sort=oldest&page=2&pageSize=12`,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(bodyData(res)).toEqual([
+      expect.objectContaining({ id: REVIEW_ID, portfolioId: PORTFOLIO_ID, tags: [TAG] }),
+    ]);
+    expect(repo.listDiscoveryPhotos).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        genre: 'portrait',
+        tags: ['soft', 'warm'],
+        photographerId: PHOTOGRAPHER_ID,
+        page: 2,
+        pageSize: 12,
+        sort: 'oldest',
+      }),
+    );
   });
 });
 

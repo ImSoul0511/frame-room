@@ -77,14 +77,35 @@ export async function encodeWebp(
   }
 }
 
-export function requireStoragePath(path: string, prefix?: string) {
+export function requireStoragePath(path: string, prefix?: string, delivery = false) {
   requireCondition(
-    /^[a-zA-Z0-9_-]+(?:\/[a-zA-Z0-9_-]+)*\.(webp|jpg|jpeg|png)$/.test(path),
+    (delivery
+      ? /^[a-z0-9_-]+(?:\/[a-z0-9_-]+)*\.(webp|jpg|jpeg|png|zip|dng|cr2|cr3|nef|arw|raf|orf|rw2|raw)$/i
+      : /^[a-zA-Z0-9_-]+(?:\/[a-zA-Z0-9_-]+)*\.(webp|jpg|jpeg|png)$/
+    ).test(path),
     400,
     'invalid_storage_path',
   );
   if (prefix) requireCondition(path.startsWith(`${prefix}/`), 403, 'invalid_storage_owner');
 }
+
+export const deliveryLimit = 50 * 1024 * 1024;
+const deliveryTypes: Record<string, string> = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+  zip: 'application/zip',
+  dng: 'application/octet-stream',
+  cr2: 'application/octet-stream',
+  cr3: 'application/octet-stream',
+  nef: 'application/octet-stream',
+  arw: 'application/octet-stream',
+  raf: 'application/octet-stream',
+  orf: 'application/octet-stream',
+  rw2: 'application/octet-stream',
+  raw: 'application/octet-stream',
+};
 
 export class MediaService {
   readonly storage?: SupabaseClient;
@@ -106,12 +127,58 @@ export class MediaService {
     return Buffer.from(await data.arrayBuffer());
   }
   async url(bucket: string, path: string, downloadName?: string) {
-    requireStoragePath(path);
+    requireStoragePath(path, undefined, bucket === 'deliveries');
     const storage = this.client().storage.from(bucket);
     if (publicBuckets.has(bucket)) return storage.getPublicUrl(path).data.publicUrl;
     const { data, error } = await storage.createSignedUrl(path, 300, { download: downloadName });
     if (error || !data) throw new ApiError(503, 'SERVICE_UNAVAILABLE', 'signed_url_unavailable');
     return data.signedUrl;
+  }
+  async galleryUrls(paths: string[]) {
+    if (paths.length <= 48)
+      return Promise.all(paths.map((path) => this.url('gallery-previews', path)));
+    paths.forEach((path) => requireStoragePath(path));
+    const storage = this.client().storage.from('gallery-previews');
+    const results = await Promise.all(
+      Array.from({ length: Math.ceil(paths.length / 200) }, (_, index) =>
+        storage.createSignedUrls(paths.slice(index * 200, (index + 1) * 200), 300),
+      ),
+    );
+    const urls = new Map<string, string>();
+    for (const { data, error } of results) {
+      if (error || !data) throw new ApiError(503, 'SERVICE_UNAVAILABLE', 'signed_url_unavailable');
+      for (const file of data) if (file.path && file.signedUrl) urls.set(file.path, file.signedUrl);
+    }
+    return paths.map((path) => {
+      const url = urls.get(path);
+      requireCondition(url, 503, 'signed_url_unavailable');
+      return url;
+    });
+  }
+  async prepareDelivery(bookingId: string, fileName: string, size: number) {
+    const ext = fileName.match(/\.([a-z0-9]+)$/i)?.[1]?.toLowerCase();
+    const mimeType = ext && deliveryTypes[ext];
+    requireCondition(mimeType, 400, 'invalid_storage_path');
+    requireCondition(size > 0 && size <= deliveryLimit, 413, 'request_too_large');
+    const storagePath = `${bookingId}/${uuidv7()}.${ext}`;
+    const { data, error } = await this.client()
+      .storage.from('deliveries')
+      .createSignedUploadUrl(storagePath);
+    if (error || !data) throw new ApiError(503, 'SERVICE_UNAVAILABLE', 'signed_url_unavailable');
+    return { storagePath, mimeType, token: data.token };
+  }
+  async verifyOriginalDelivery(path: string, bookingId: string, fileName: string, size: number) {
+    requireStoragePath(path, bookingId, true);
+    const suffix = path.slice(path.lastIndexOf('.') + 1);
+    requireCondition(fileName.toLowerCase().endsWith(`.${suffix}`), 400, 'invalid_storage_path');
+    const { data, error } = await this.client().storage.from('deliveries').info(path);
+    requireCondition(
+      !error && data && data.size === size && size <= deliveryLimit,
+      400,
+      'invalid_storage_path',
+    );
+    requireCondition(data.contentType === deliveryTypes[suffix], 400, 'invalid_storage_path');
+    return data;
   }
   async put(bucket: string, path: string, input: Buffer, mime: string) {
     const { error } = await this.client()
@@ -138,7 +205,9 @@ export class MediaService {
       );
       requireCondition(booking, 404, 'booking_not_found');
       requireCondition(
-        bucket === 'deliveries' ? booking.status === 'proofing' : booking.status === 'in_progress',
+        bucket === 'deliveries'
+          ? booking.status === 'proofing'
+          : ['in_progress', 'proofing'].includes(booking.status),
         422,
         'upload_locked',
       );

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   messageInputSchema,
+  briefContentSchema,
   milestoneInputSchema,
   decisionInputSchema,
   reviewInputSchema,
@@ -9,8 +10,9 @@ import {
   type Booking,
 } from '@frameroom/shared';
 import type { Transaction } from '../repositories/database.js';
-import { access, booking, providerSide } from './access.js';
+import { access, booking, manageProvider, providerSide } from './access.js';
 import { requireCondition } from '../lib/errors.js';
+import { approveBrief, createBrief } from './bookings.js';
 import {
   findOrCreateConversation,
   persistMessage,
@@ -37,15 +39,17 @@ export async function openRoom(tx: Transaction, id: string) {
 export function proofingTerms(b: Booking & { serviceSnapshot?: unknown }) {
   const parsed = z
     .object({
-      selectionQuota: z.number().int().min(1).max(200).nullish(),
+      selectionQuota: z.number().int().min(0).max(200000).nullish(),
       revisionLimit: z.number().int().min(0).max(100).nullish(),
       retouchedCount: z.number().int().nonnegative().optional(),
+      proofingMode: z.enum(['select', 'album', 'print']).optional(),
     })
     .safeParse(b.serviceSnapshot);
   const terms = parsed.data;
   return {
     quota: terms?.selectionQuota ?? Math.min(200, Math.max(1, terms?.retouchedCount ?? 5)),
     revisions: terms?.revisionLimit ?? 2,
+    mode: terms?.proofingMode,
   };
 }
 export async function sendMessage(
@@ -82,7 +86,38 @@ export async function decision(
   roomId: string,
   input: z.infer<typeof decisionInputSchema>,
 ) {
-  await openRoom(tx, roomId);
+  const room = await openRoom(tx, roomId);
+  if (input.changes) {
+    const b = await booking(tx, room.bookingId);
+    if (b.clientId !== userId) await manageProvider(tx, b.photographerId, b.studioId);
+    const { scheduledStart, scheduledEnd, quantity } = input.changes;
+    if (scheduledStart && scheduledEnd) {
+      const duration = Date.parse(scheduledEnd) - Date.parse(scheduledStart);
+      requireCondition(
+        Date.parse(scheduledStart) > Date.now() && duration > 0 && duration <= 86400000,
+        422,
+        'invalid_interval',
+      );
+    }
+    return tx.one(
+      'insert into room_decisions(room_id,title,description,proposed_by,changes,booking_version) values($1,$2,$3,$4,$5,$6) returning *',
+      [
+        roomId,
+        input.title,
+        input.description,
+        userId,
+        JSON.stringify({
+          before: {
+            scheduledStart: b.scheduledStart,
+            scheduledEnd: b.scheduledEnd,
+            quantity: b.quantity,
+          },
+          proposed: { scheduledStart, scheduledEnd, quantity, notes: input.changes.notes },
+        }),
+        b.version,
+      ],
+    );
+  }
   return tx.one(
     'insert into room_decisions(room_id,title,description,proposed_by) values($1,$2,$3,$4) returning *',
     [roomId, input.title, input.description, userId],
@@ -97,17 +132,47 @@ export async function updateDecision(
 ) {
   const room = await openRoom(tx, roomId);
   const b = await booking(tx, room.bookingId);
-  const d = await tx.one<{ proposedBy: string; status: string }>(
-    'select * from room_decisions where id=$1 and room_id=$2 for update',
-    [id, roomId],
-  );
+  const d = await tx.one<{
+    proposedBy: string;
+    status: string;
+    bookingVersion?: number;
+    changes?: { proposed: NonNullable<z.output<typeof decisionInputSchema>['changes']> };
+  }>('select * from room_decisions where id=$1 and room_id=$2 for update', [id, roomId]);
   requireCondition(d.status === 'proposed', 409, 'decision_resolved');
   requireCondition(
     (d.proposedBy === b.clientId) !== (userId === b.clientId),
     403,
     'counterparty_required',
   );
-  return tx.one('update room_decisions set status=$2 where id=$1 returning *', [id, status]);
+  if (d.changes && status === 'agreed') {
+    requireCondition(b.version === d.bookingVersion, 409, 'stale_version');
+    if (b.clientId !== userId) await manageProvider(tx, b.photographerId, b.studioId);
+    if (b.clientId !== d.proposedBy) {
+      const owns = await tx.one<{ allowed: boolean }>(
+        `select exists(
+        select 1 from photographers where id=$1 and user_id=$3
+        union all select 1 from studio_members where studio_id=$2 and user_id=$3 and role='manager'
+      ) as allowed`,
+        [b.photographerId, b.studioId, d.proposedBy],
+      );
+      requireCondition(owns.allowed);
+    }
+    const agreed = await tx.one<{ content: unknown }>(
+      'select content from brief_versions where booking_id=$1 and version=$2',
+      [b.id, b.agreedBriefVersion],
+    );
+    const content = briefContentSchema.parse(agreed.content);
+    requireCondition(content.requirements, 422, 'brief_required');
+    const version = await createBrief(tx, b.id, d.proposedBy, {
+      ...content,
+      requirements: { ...content.requirements, ...d.changes.proposed },
+    });
+    await approveBrief(tx, b.id, version.id, userId);
+  }
+  return tx.one(
+    'update room_decisions set status=$2,resolved_by=$3,resolved_at=now() where id=$1 returning *',
+    [id, status, userId],
+  );
 }
 export async function submitSelection(
   tx: Transaction,
@@ -126,12 +191,33 @@ export async function submitSelection(
     422,
     'selection_locked',
   );
-  requireCondition(input.imageIds.length <= proofingTerms(b).quota, 422, 'selection_quota');
+  const terms = proofingTerms(b);
+  const count = input.imageIds.length;
+  requireCondition(
+    terms.mode === 'album' ||
+      (terms.mode
+        ? count === (g.round === 1 ? terms.quota : 0)
+        : count > 0 && count <= terms.quota),
+    422,
+    'selection_quota',
+  );
   const images = await tx.rows<{ id: string }>(
     'select id from gallery_images where gallery_id=$1 and id=any($2::uuid[])',
     [g.id, input.imageIds],
   );
   requireCondition(images.length === input.imageIds.length, 422, 'invalid_selection');
+  if (terms.mode && g.round > 1) {
+    const revisions = await tx.optional(
+      'select id from gallery_images where gallery_id=$1 and proof_round=$2 limit 1',
+      [g.id, g.round],
+    );
+    requireCondition(revisions, 422, 'gallery_required');
+  }
+  if (input.albumNote)
+    await tx.execute(
+      'insert into gallery_round_notes values($1,$2,$3) on conflict(gallery_id,round) do update set note=excluded.note',
+      [g.id, g.round, input.albumNote],
+    );
   if (g.round > 1)
     await tx.execute('delete from gallery_selections where gallery_id=$1 and round=$2', [
       g.id,
@@ -146,6 +232,17 @@ export async function submitSelection(
     g.id,
   ]);
 }
+
+export async function approveProof(tx: Transaction, bookingId: string, actorId: string) {
+  const b = await booking(tx, bookingId, true);
+  requireCondition(b.clientId === actorId);
+  requireCondition(b.status === 'proofing', 422, 'selection_locked');
+  return tx.one(
+    `update galleries set approved_round=round where booking_id=$1 and status='selection_submitted'
+      and revision_requested_at is null and ($2::boolean=false or round>=2) returning *`,
+    [bookingId, proofingTerms(b).mode === 'print'],
+  );
+}
 export async function reopenSelection(tx: Transaction, bookingId: string) {
   const b = await booking(tx, bookingId, true);
   await providerSide(tx, bookingId);
@@ -154,10 +251,15 @@ export async function reopenSelection(tx: Transaction, bookingId: string) {
     "select * from galleries where booking_id=$1 and status='selection_submitted' for update",
     [bookingId],
   );
-  requireCondition(gallery.round <= proofingTerms(b).revisions, 422, 'revision_limit');
+  requireCondition(
+    gallery.round <=
+      Math.max(proofingTerms(b).mode === 'print' ? 1 : 0, proofingTerms(b).revisions),
+    422,
+    'revision_limit',
+  );
   requireCondition(gallery.revisionRequestedAt, 422, 'revision_request_required');
   const updated = await tx.one(
-    "update galleries set status='open_for_selection',round=round+1,revision_requested_at=null where booking_id=$1 returning *",
+    "update galleries set status='open_for_selection',round=round+1,revision_requested_at=null,approved_round=null where booking_id=$1 returning *",
     [bookingId],
   );
   await tx.execute(
@@ -181,9 +283,14 @@ export async function requestSelectionRevision(
     "select round from galleries where booking_id=$1 and status='selection_submitted' for update",
     [bookingId],
   );
-  requireCondition(gallery.round <= proofingTerms(b).revisions, 422, 'revision_limit');
+  requireCondition(
+    gallery.round <=
+      Math.max(proofingTerms(b).mode === 'print' ? 1 : 0, proofingTerms(b).revisions),
+    422,
+    'revision_limit',
+  );
   return tx.one(
-    'update galleries set revision_requested_at=coalesce(revision_requested_at,now()) where booking_id=$1 returning *',
+    'update galleries set approved_round=null,revision_requested_at=coalesce(revision_requested_at,now()) where booking_id=$1 returning *',
     [bookingId],
   );
 }
@@ -213,12 +320,20 @@ export async function addPhotoFeedback(
 }
 
 export async function requireSubmittedSelection(tx: Transaction, bookingId: string) {
-  const gallery = await tx.optional<{ round: number }>(
+  const gallery = await tx.optional<{ round: number; approvedRound?: number | null }>(
     "select round from galleries where booking_id=$1 and status='selection_submitted' and revision_requested_at is null",
     [bookingId],
   );
   requireCondition(gallery, 422, 'selection_delivery_required');
   return gallery.round;
+}
+export async function requireApprovedProof(tx: Transaction, b: Booking) {
+  const approved = await tx.optional(
+    `select id from galleries where booking_id=$1
+    and approved_round=round and revision_requested_at is null`,
+    [b.id],
+  );
+  requireCondition(approved, 422, 'selection_delivery_required');
 }
 export async function review(
   tx: Transaction,
@@ -234,7 +349,12 @@ export async function review(
     [
       bookingId,
       userId,
-      b.assignedPhotographerId ?? b.photographerId,
+      b.studioId &&
+      (await tx.optional('select booking_id from booking_attendance where booking_id=$1 limit 1', [
+        bookingId,
+      ]))
+        ? null
+        : (b.assignedPhotographerId ?? b.photographerId),
       b.studioId,
       input.rating,
       input.comment,

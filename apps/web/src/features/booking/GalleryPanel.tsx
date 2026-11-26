@@ -10,6 +10,8 @@ export function GalleryPanel({ workspace: w }: { workspace: Workspace }) {
   const t = useStrings();
   const [selection, setSelection] = useState<string[]>(w.selections.map((s) => s.imageId));
   const [prompt, setPrompt] = useState('');
+  const [albumNote, setAlbumNote] = useState('');
+  const [page, setPage] = useState(1);
   const [preview, setPreview] = useState<{ file: File; url: string } | null>(null);
   const uploaded = useRef<{ file: File; storagePath: string } | null>(null);
   useEffect(
@@ -37,8 +39,9 @@ export function GalleryPanel({ workspace: w }: { workspace: Workspace }) {
     });
   });
   const choose = useTask(async () =>
-    post(`/v1/bookings/${b.id}/selections`, { imageIds: selection }),
+    post(`/v1/bookings/${b.id}/selections`, { imageIds: reviewing ? [] : selection, albumNote }),
   );
+  const approve = useTask(async () => post(`/v1/bookings/${b.id}/selections/approve`));
   const reopen = useTask(async () => post(`/v1/bookings/${b.id}/selections/reopen`));
   const requestRevision = useTask(async () =>
     post(`/v1/bookings/${b.id}/selections/revision-request`),
@@ -56,7 +59,19 @@ export function GalleryPanel({ workspace: w }: { workspace: Workspace }) {
     }),
   );
   const canSelect = w.isClient && w.gallery?.status === 'open_for_selection';
-  const allowPick = canSelect || (w.isProvider && ['in_progress', 'proofing'].includes(b.status));
+  const albumMode = w.proofing.mode === 'album';
+  const round = w.gallery?.round ?? 1;
+  const reviewing = Boolean(!albumMode && w.proofing.mode && round > 1);
+  const allowPick =
+    (canSelect && !reviewing) || (w.isProvider && ['in_progress', 'proofing'].includes(b.status));
+  const visibleImages = w.images.filter((image) => !image.proofRound || image.proofRound <= round);
+  const canSubmit = albumMode
+    ? round === 1 || visibleImages.some((image) => image.proofRound === round)
+    : reviewing
+      ? visibleImages.some((image) => image.proofRound === round)
+      : w.proofing.mode
+        ? selection.length === w.proofing.quota
+        : selection.length > 0 && selection.length <= w.proofing.quota;
   return (
     <>
       <div className="section-header">
@@ -64,7 +79,9 @@ export function GalleryPanel({ workspace: w }: { workspace: Workspace }) {
           {t.booking.gallery}
           {w.gallery ? ` · ${t.booking.round} ${w.gallery.round}` : ''}
         </h2>
-        {w.isProvider && b.status === 'in_progress' ? (
+        {w.isProvider &&
+        (b.status === 'in_progress' ||
+          (b.status === 'proofing' && round > 1 && w.gallery?.status === 'open_for_selection')) ? (
           <FilePicker
             label={t.booking.addImages}
             onFile={(file) => {
@@ -82,7 +99,14 @@ export function GalleryPanel({ workspace: w }: { workspace: Workspace }) {
         ) : null}
       </div>
       <Feedback
-        error={add.error ?? choose.error ?? reopen.error ?? requestRevision.error ?? ai.error}
+        error={
+          add.error ??
+          choose.error ??
+          reopen.error ??
+          requestRevision.error ??
+          approve.error ??
+          ai.error
+        }
       />
       {preview ? (
         <figure>
@@ -111,18 +135,20 @@ export function GalleryPanel({ workspace: w }: { workspace: Workspace }) {
           ) : null}
         </figure>
       ) : null}
-      {canSelect ? (
+      {canSelect && !albumMode && !reviewing ? (
         <p>
-          {t.workspaceUi.selectionHint} {w.proofing.quota}
+          {t.workspaceUi.selectionHint} {selection.length}/{w.proofing.quota}
         </p>
       ) : null}
       <div className="moodboard gallery-grid">
-        {w.images.map((i) => (
+        {visibleImages.slice(0, page * 48).map((i) => (
           <figure key={i.id} className={selection.includes(i.id) ? 'image-selected' : ''}>
             <ProofingPhoto
               image={i}
               notes={w.photoFeedback.filter((item) => item.imageId === i.id)}
-              editable={canSelect && selection.includes(i.id)}
+              editable={
+                canSelect && (selection.includes(i.id) || (reviewing && i.proofRound === round))
+              }
               bookingId={b.id}
               round={w.gallery?.round ?? 1}
             />
@@ -133,7 +159,10 @@ export function GalleryPanel({ workspace: w }: { workspace: Workspace }) {
                   aria-label={`${t.booking.selected}: ${i.caption || i.id}`}
                   checked={selection.includes(i.id)}
                   disabled={
-                    canSelect && selection.length >= w.proofing.quota && !selection.includes(i.id)
+                    canSelect &&
+                    !albumMode &&
+                    selection.length >= w.proofing.quota &&
+                    !selection.includes(i.id)
                   }
                   onChange={(e) =>
                     setSelection(
@@ -153,18 +182,41 @@ export function GalleryPanel({ workspace: w }: { workspace: Workspace }) {
           </figure>
         ))}
       </div>
+      {visibleImages.length > page * 48 && (
+        <Action secondary onClick={() => setPage(page + 1)}>
+          {t.design.loadMore}
+        </Action>
+      )}
+      {w.roundNotes?.map((note) => (
+        <p key={note.round}>
+          {t.booking.round} {note.round} · {note.note}
+        </p>
+      ))}
+      {canSelect && albumMode && (
+        <>
+          <Action secondary onClick={() => setSelection(visibleImages.map((photo) => photo.id))}>
+            {t.all}
+          </Action>
+          <Area label={t.workspaceUi.albumFeedback} value={albumNote} onChange={setAlbumNote} />
+        </>
+      )}
       {canSelect ? (
-        <Action
-          pending={choose.isPending}
-          disabled={!selection.length || selection.length > w.proofing.quota}
-          onClick={() => choose.mutate()}
-        >
+        <Action pending={choose.isPending} disabled={!canSubmit} onClick={() => choose.mutate()}>
           {t.booking.selection}
         </Action>
       ) : null}
       {w.isClient &&
       w.gallery?.status === 'selection_submitted' &&
-      w.gallery.round <= w.proofing.revisions &&
+      !w.gallery.revisionRequestedAt &&
+      w.gallery.approvedRound !== round &&
+      (w.proofing.mode !== 'print' || round >= 2) ? (
+        <Action pending={approve.isPending} onClick={() => approve.mutate()}>
+          {t.workspaceUi.approveProof}
+        </Action>
+      ) : null}
+      {w.isClient &&
+      w.gallery?.status === 'selection_submitted' &&
+      w.gallery.round <= Math.max(w.proofing.mode === 'print' ? 1 : 0, w.proofing.revisions) &&
       !w.gallery.revisionRequestedAt ? (
         <Action
           secondary

@@ -14,6 +14,7 @@ import type {
   PortfolioImageInput,
   PortfolioInput,
   PortfolioListQuery,
+  PhotoListQuery,
   Provider,
   ProviderDetail,
   ProviderListQuery,
@@ -82,7 +83,9 @@ export async function getProviderDetail(
   const provider =
     'id' in lookup
       ? await repo.findProviderById(tx, type, lookup.id)
-      : singleDisplayNameMatch(await repo.findPhotographersByDisplayName(tx, lookup.displayName));
+      : 'userName' in lookup
+        ? await repo.findPhotographerByUserName(tx, lookup.userName)
+        : singleDisplayNameMatch(await repo.findPhotographersByDisplayName(tx, lookup.displayName));
   if (!provider) {
     throw new ApiError(404, 'NOT_FOUND', `${type}_not_found`);
   }
@@ -103,6 +106,7 @@ export async function getProviderDetail(
   );
   return {
     provider,
+    userName: cover?.userName ?? null,
     coverPath: cover?.coverPath ?? null,
     avatarPath: cover?.avatarPath ?? null,
     services,
@@ -152,7 +156,6 @@ export async function createStudio(
   userId: string,
   input: StudioInput,
 ): Promise<Studio> {
-  await requirePhotographerId(tx, userId);
   const studio = await repo.insertStudio(tx, userId, input);
   await repo.insertStudioMember(tx, studio.id, userId, 'manager');
   return studio;
@@ -296,7 +299,25 @@ export async function listMyPortfolios(
   );
 }
 
-/** Lists published portfolios from visible providers with optional genre and tag filters. */
+/** Lists individual visible photos; tag filters apply to the photo itself. */
+export async function listDiscoveryPhotos(
+  tx: Transaction,
+  query: PhotoListQuery,
+  supabaseUrl?: string,
+  apiOrigin?: string,
+) {
+  const rows = await repo.listDiscoveryPhotos(tx, query);
+  const tags = await repo.listTagsForImages(
+    tx,
+    rows.map((row) => row.id),
+  );
+  return rows.map((row) => ({
+    ...row,
+    url: buildPublicPortfolioImageUrl(supabaseUrl, row.url, apiOrigin)!,
+    tags: tags.get(row.id) ?? [],
+  }));
+}
+
 export async function listPublicPortfolios(
   tx: Transaction,
   query: PortfolioListQuery,

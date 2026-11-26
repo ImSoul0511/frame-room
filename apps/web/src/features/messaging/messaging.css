@@ -13,6 +13,18 @@
 .messenger-layout .messenger-sidebar-header h2 {
   color: #242c3b;
 }
+.messenger-quote-panel {
+  padding: 0.65rem 1rem;
+  max-height: 12rem;
+  overflow: auto;
+  background: var(--fr-surface);
+  color: var(--fr-ink);
+  border-block: 1px solid var(--fr-line);
+}
+.messenger-quote-panel summary {
+  cursor: pointer;
+  font-weight: 600;
+}
 .messenger-layout .messenger-conversation-name small {
   display: block;
   overflow: hidden;

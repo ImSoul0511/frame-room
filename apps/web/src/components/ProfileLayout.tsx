@@ -15,20 +15,29 @@ export function ProfileLayout() {
     if (result?.error) throw result.error;
     navigate('/home');
   });
-  const professional = profile?.roles.some((role) =>
-    ['photographer', 'studio_manager'].includes(role),
-  );
   {
-    const isAccountPage = ['/profile', '/settings', '/notifications', '/studio', '/admin'].some(
-      (path) => pathname === path || pathname.startsWith(`${path}/`),
-    );
+    const isAccountPage = [
+      '/profile',
+      '/settings',
+      '/notifications',
+      '/studio',
+      '/admin',
+      '/bookings',
+      '/projects',
+      '/portfolio',
+    ].some((path) => pathname === path || pathname.startsWith(`${path}/`));
     if (!isAccountPage) return <Outlet />;
     return (
       <section className="profile-workspace photographer-workspace" aria-label={t.design.profile}>
         <aside className="photographer-account-sidebar">
           <nav className="photographer-account-nav" aria-label={t.design.profile}>
             <NavLink to="/profile">{t.design.profile}</NavLink>
-            {professional ? <NavLink to="/studio">{t.nav.studio}</NavLink> : null}
+            <NavLink to="/studio">{t.nav.studio}</NavLink>
+            <NavLink to="/bookings">{t.workspaceUi.bookings}</NavLink>
+            <NavLink to="/projects">{t.project.title}</NavLink>
+            {profile?.roles.some((role) => ['photographer', 'studio_manager'].includes(role)) && (
+              <NavLink to="/portfolio">{t.workspaceUi.portfolioNav}</NavLink>
+            )}
             <NavLink to="/notifications">{t.workspaceUi.notifications}</NavLink>
             <NavLink to="/settings">{t.workspaceUi.settings}</NavLink>
             {profile?.roles.includes('system_admin') ? (

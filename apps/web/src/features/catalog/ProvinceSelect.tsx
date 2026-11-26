@@ -1,61 +1,37 @@
 import { Selector } from '@astryxdesign/core/Selector';
-import { useStrings } from '../../lib/i18n';
+import { findVietnamLocality, vietnamLocalities } from '@frameroom/shared';
+import { useLanguage, useStrings } from '../../lib/i18n';
 
-// Decision 19/2025/QD-TTg: the 34 provincial-level administrative units.
-const provinces = [
-  'An Giang',
-  'Bắc Ninh',
-  'Cà Mau',
-  'Cao Bằng',
-  'Cần Thơ',
-  'Đà Nẵng',
-  'Đắk Lắk',
-  'Điện Biên',
-  'Đồng Nai',
-  'Đồng Tháp',
-  'Gia Lai',
-  'Hà Nội',
-  'Hà Tĩnh',
-  'Hải Phòng',
-  'Hồ Chí Minh',
-  'Huế',
-  'Hưng Yên',
-  'Khánh Hòa',
-  'Lai Châu',
-  'Lâm Đồng',
-  'Lạng Sơn',
-  'Lào Cai',
-  'Nghệ An',
-  'Ninh Bình',
-  'Phú Thọ',
-  'Quảng Ngãi',
-  'Quảng Ninh',
-  'Quảng Trị',
-  'Sơn La',
-  'Tây Ninh',
-  'Thái Nguyên',
-  'Thanh Hóa',
-  'Tuyên Quang',
-  'Vĩnh Long',
-];
 export function ProvinceSelect({
   value,
   onChange,
+  required = false,
 }: {
   value: string;
   onChange: (value: string) => void;
+  required?: boolean;
 }) {
   const t = useStrings();
+  const { language } = useLanguage();
+  const canonical = findVietnamLocality(value)?.name;
   return (
     <div className="fr-selector-field province-field">
       <Selector
         label={t.curation.city}
         placement="below"
         options={[
-          { value: '', label: t.all },
-          ...provinces.map((name) => ({ value: name, label: name })),
+          { value: '', label: required ? t.curation.cityPlaceholder : t.all },
+          ...vietnamLocalities.map(({ name, english }) => ({
+            value: name,
+            label:
+              language === 'vi'
+                ? english !== name
+                  ? `${name} · ${english}`
+                  : name
+                : `${english} · ${name}`,
+          })),
         ]}
-        value={value}
+        value={canonical ?? ''}
         onChange={onChange}
         hasSearch
         searchPlaceholder={t.curation.cityPlaceholder}

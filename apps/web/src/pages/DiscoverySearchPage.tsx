@@ -3,8 +3,9 @@ import { useState } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { genres } from '@frameroom/shared';
-import { Action, QueryState, Select } from '../components/ui';
-import { PortfolioCard } from '../features/catalog/PortfolioCard';
+import { Action, Field, QueryState, Select } from '../components/ui';
+import { PhotoDiscoveryGrid, type DiscoveryPhoto } from '../features/catalog/PhotoDiscoveryGrid';
+import { TagFilterDialog } from '../features/catalog/TagFilterDialog';
 import {
   PhotographerSearchCard,
   type SearchPhotographer,
@@ -12,8 +13,8 @@ import {
 import { ProvinceSelect } from '../features/catalog/ProvinceSelect';
 import { api } from '../lib/api';
 import { useApi } from '../lib/hooks';
-import { useLanguage, useStrings } from '../lib/i18n';
-import type { Portfolio, Tag } from '../lib/types';
+import { useStrings } from '../lib/i18n';
+import type { Tag } from '../lib/types';
 import '../discovery.css';
 
 const PAGE_SIZE = 12;
@@ -32,17 +33,23 @@ export function DiscoverySearchPage() {
 
 function DiscoverySearch() {
   const t = useStrings();
-  const { language } = useLanguage();
   const [params, setParams] = useSearchParams();
   const mode = params.get('mode') === 'style' ? 'style' : 'photographers';
   const query = (params.get('q') ?? '').trim();
   const city = params.get('city') ?? '';
   const genre = params.get('genre') ?? '';
-  const tag = params.get('tag') ?? '';
+  const priceMax = params.get('priceMax') ?? '';
+  const ratingMin = params.get('ratingMin') ?? '';
+  const sort = params.get('sort') ?? (mode === 'style' ? 'newest' : 'rating');
+  const selectedTags = [
+    ...new Set([...params.getAll('tag'), ...(params.get('tags') ?? '').split(',')].filter(Boolean)),
+  ];
   const [draftQuery, setDraftQuery] = useState(query);
   const [draftCity, setDraftCity] = useState(city);
   const [draftGenre, setDraftGenre] = useState(genre);
-  const [draftTag, setDraftTag] = useState(tag);
+  const [draftPrice, setDraftPrice] = useState(priceMax);
+  const [draftRating, setDraftRating] = useState(ratingMin);
+  const [draftTags, setDraftTags] = useState(selectedTags);
   const tags = useApi<Tag[]>('/v1/tags', mode === 'style');
   const styleTags = (tags.data ?? []).filter((item) => item.category !== 'genre');
   const matchingStyle = query
@@ -52,22 +59,24 @@ function DiscoverySearch() {
         ),
       )
     : undefined;
-  const selectedTag = tag || matchingStyle?.slug;
+  const activeTags = selectedTags.length ? selectedTags : matchingStyle ? [matchingStyle.slug] : [];
   const results = useInfiniteQuery({
-    queryKey: ['api', 'discovery-search', mode, query, city, genre, selectedTag],
+    queryKey: ['api', 'discovery-search', mode, query, city, genre, activeTags, sort],
     enabled: mode === 'style' && tags.isSuccess,
     initialPageParam: 1,
     queryFn: ({ pageParam, signal }) => {
-      if (mode === 'style' && query && !tag && !matchingStyle)
-        return Promise.resolve([] as Portfolio[]);
+      if (mode === 'style' && query && !activeTags.length)
+        return Promise.resolve([] as DiscoveryPhoto[]);
       const queryParams = new URLSearchParams({
         page: String(pageParam),
         pageSize: String(PAGE_SIZE),
       });
       if (city) queryParams.set('city', city);
       if (genre) queryParams.set('genre', genre);
-      if (mode === 'style' && selectedTag) queryParams.set('tag', selectedTag);
-      return api<Portfolio[]>(`/v1/portfolios?${queryParams}`, { signal });
+      if (['newest', 'oldest', 'name'].includes(sort)) queryParams.set('sort', sort);
+      if (activeTags.length === 1) queryParams.set('tag', activeTags[0]);
+      else if (activeTags.length) queryParams.set('tags', activeTags.join(','));
+      return api<DiscoveryPhoto[]>(`/v1/photos?${queryParams}`, { signal });
     },
     getNextPageParam: (last, pages) => (last.length === PAGE_SIZE ? pages.length + 1 : undefined),
   });
@@ -75,7 +84,7 @@ function DiscoverySearch() {
     ...new Map((results.data?.pages.flat() ?? []).map((item) => [item.id, item])).values(),
   ];
   const photographers = useInfiniteQuery({
-    queryKey: ['api', 'discovery-photographers', query, city, genre],
+    queryKey: ['api', 'discovery-photographers', query, city, genre, priceMax, ratingMin, sort],
     enabled: mode === 'photographers',
     initialPageParam: 1,
     queryFn: ({ pageParam, signal }) => {
@@ -83,6 +92,9 @@ function DiscoverySearch() {
       if (query) search.set('q', query);
       if (city) search.set('city', city);
       if (genre) search.set('genre', genre);
+      if (priceMax) search.set('priceMax', priceMax);
+      if (ratingMin) search.set('ratingMin', ratingMin);
+      if (sort === 'price') search.set('sort', sort);
       return api<SearchPhotographer[]>(`/v1/photographers?${search}`, { signal });
     },
     getNextPageParam: (last, pages) => (last.length === PAGE_SIZE ? pages.length + 1 : undefined),
@@ -97,17 +109,14 @@ function DiscoverySearch() {
     if (nextMode === 'style') next.set('mode', 'style');
     else next.delete('mode');
     next.delete('tag');
+    next.delete('tags');
+    next.delete('sort');
     setParams(next);
   };
   const activeQuery = mode === 'style' ? results : photographers;
   const resultCount = mode === 'style' ? portfolios.length : people.length;
   return (
     <section className="discovery-dashboard">
-      <header className="discovery-heading">
-        <p className="eyebrow">{t.nav.explore} / FrameRoom</p>
-        <h1>{t.discovery.title}</h1>
-        <p>{t.discovery.description}</p>
-      </header>
       <div className="discovery-layout">
         <aside className="discovery-sidebar">
           <div className="discovery-sidebar-header">
@@ -194,11 +203,16 @@ function DiscoverySearch() {
               for (const [key, value] of [
                 ['city', draftCity],
                 ['genre', draftGenre],
-                ['tag', mode === 'style' ? draftTag : ''],
+                ['priceMax', draftPrice],
+                ['ratingMin', draftRating],
               ]) {
                 if (value) next.set(key, value);
                 else next.delete(key);
               }
+              next.delete('tag');
+              next.delete('tags');
+              if (mode === 'style' && draftTags.length === 1) next.set('tag', draftTags[0]);
+              else if (mode === 'style' && draftTags.length) next.set('tags', draftTags.join(','));
               setParams(next);
             }}
           >
@@ -213,15 +227,28 @@ function DiscoverySearch() {
               ))}
             </Select>
             {mode === 'style' ? (
-              <Select label={t.discovery.style} value={draftTag} onChange={setDraftTag}>
-                <option value="">{t.all}</option>
-                {styleTags.map((item) => (
-                  <option key={item.id} value={item.slug}>
-                    {language === 'vi' ? item.nameVi || item.name : item.name}
-                  </option>
-                ))}
-              </Select>
-            ) : null}
+              <TagFilterDialog selected={draftTags} onChange={setDraftTags} />
+            ) : (
+              <>
+                <Field
+                  label={t.workspaceUi.maxPrice}
+                  value={draftPrice}
+                  onChange={(value) => setDraftPrice(value.replace(/[^0-9]/g, ''))}
+                />
+                <Select
+                  label={t.workspaceUi.minRating}
+                  value={draftRating}
+                  onChange={setDraftRating}
+                >
+                  <option value="">{t.all}</option>
+                  {[1, 2, 3, 4, 5].map((value) => (
+                    <option key={value} value={value}>
+                      {value} ★
+                    </option>
+                  ))}
+                </Select>
+              </>
+            )}
             <Action type="submit">{t.discovery.apply}</Action>
             <button
               type="button"
@@ -229,11 +256,16 @@ function DiscoverySearch() {
               onClick={() => {
                 setDraftCity('');
                 setDraftGenre('');
-                setDraftTag('');
+                setDraftPrice('');
+                setDraftRating('');
+                setDraftTags([]);
                 const next = new URLSearchParams(params);
                 next.delete('city');
                 next.delete('genre');
+                next.delete('priceMax');
+                next.delete('ratingMin');
                 next.delete('tag');
+                next.delete('tags');
                 setParams(next);
               }}
             >
@@ -242,20 +274,31 @@ function DiscoverySearch() {
           </form>
         </aside>
         <div className="discovery-results" aria-busy={activeQuery.isFetching}>
-          <header className="discovery-results-heading">
-            <div>
-              <h2>
-                {mode === 'style' ? t.discovery.collectionsByStyle : t.discovery.photographers}
-              </h2>
-              <p>{mode === 'style' ? t.discovery.styleHint : t.discovery.photographerHint}</p>
+          {mode === 'style' && (
+            <div className="discovery-sort">
+              <Select
+                label={t.workspaceUi.sortBy}
+                value={sort}
+                onChange={(value) => {
+                  const next = new URLSearchParams(params);
+                  if (['price', 'newest', 'oldest', 'name'].includes(value))
+                    next.set('sort', value);
+                  else next.delete('sort');
+                  setParams(next);
+                }}
+              >
+                {[
+                  ['newest', t.design.newest],
+                  ['oldest', t.design.oldest],
+                  ['name', t.discovery.name],
+                ].map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </Select>
             </div>
-            {activeQuery.isSuccess ? (
-              <p className="discovery-result-count" role="status">
-                <strong>{resultCount}</strong>
-                {mode === 'style' ? t.discovery.loadedCollections : t.discovery.loadedPhotographers}
-              </p>
-            ) : null}
-          </header>
+          )}
           {query ? (
             <p className="discovery-query">
               {t.discovery.resultsFor} “{query}”
@@ -276,15 +319,11 @@ function DiscoverySearch() {
               ))}
             </div>
           ) : (
-            <div className="collection-grid media-grid">
-              {portfolios.map((portfolio) => (
-                <PortfolioCard key={portfolio.id} portfolio={portfolio} />
-              ))}
-            </div>
+            <PhotoDiscoveryGrid photos={portfolios} />
           )}
           <SearchPagination
             query={activeQuery}
-            label={mode === 'style' ? t.design.loadMore : t.discovery.loadMorePhotographers}
+            label={mode === 'style' ? t.site.loadMorePhotos : t.discovery.loadMorePhotographers}
           />
           {activeQuery.isSuccess && !activeQuery.hasNextPage && resultCount > 0 ? (
             <p className="discovery-end">{t.discovery.allLoaded}</p>

@@ -72,7 +72,7 @@ export function SearchPage() {
           <Link
             className="people-search-card"
             key={person.id}
-            to={`/providers/photographer/${person.photographerId}`}
+            to={`/providers/photographer/${encodeURIComponent(person.userName)}`}
           >
             <UserAvatar
               name={person.displayName}

@@ -1,17 +1,25 @@
 import { useRef, useState, type PointerEvent } from 'react';
-import { Action, Modal } from '../../components/ui';
+import { Action, Feedback, Modal } from '../../components/ui';
 import { useStrings } from '../../lib/i18n';
 
 const clamp = (value: number) => Math.max(-1, Math.min(1, value));
 
 export function AvatarCropDialog({
   source,
+  kind,
+  busy,
+  uploadError,
   onClose,
   onApply,
+  onReplace,
 }: {
   source: string;
+  kind: 'avatar' | 'cover';
+  busy: boolean;
+  uploadError: Error | null;
   onClose: () => void;
   onApply: (file: File) => void;
+  onReplace: () => void;
 }) {
   const t = useStrings();
   const imageRef = useRef<HTMLImageElement>(null);
@@ -23,12 +31,15 @@ export function AvatarCropDialog({
   const [y, setY] = useState(0);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
-  const shortest = size ? Math.min(size.width, size.height) : 1;
-  const scaledWidth = size ? (size.width / shortest) * zoom : 1;
-  const scaledHeight = size ? (size.height / shortest) * zoom : 1;
+  const cover = kind === 'cover';
+  const ratio = cover ? 3 : 1;
+  const cropHeight = size ? Math.min(size.width / ratio, size.height) / zoom : 1;
+  const cropWidth = cropHeight * ratio;
+  const scaledWidth = size ? size.width / cropWidth : 1;
+  const scaledHeight = size ? size.height / cropHeight : 1;
   const move = (event: PointerEvent<HTMLDivElement>) => {
     if (!drag.current || !stageRef.current) return;
-    const width = stageRef.current.getBoundingClientRect().width;
+    const { width, height } = stageRef.current.getBoundingClientRect();
     if (scaledWidth > 1)
       setX(
         clamp(
@@ -40,7 +51,7 @@ export function AvatarCropDialog({
       setY(
         clamp(
           drag.current.offsetY +
-            (event.clientY - drag.current.y) / ((width * (scaledHeight - 1)) / 2),
+            (event.clientY - drag.current.y) / ((height * (scaledHeight - 1)) / 2),
         ),
       );
   };
@@ -51,36 +62,41 @@ export function AvatarCropDialog({
     setError('');
     try {
       const canvas = document.createElement('canvas');
-      canvas.width = 512;
-      canvas.height = 512;
+      canvas.width = cover ? 1200 : 512;
+      canvas.height = cover ? 400 : 512;
       const context = canvas.getContext('2d');
       if (!context) throw new Error();
-      const crop = shortest / zoom;
       context.drawImage(
         image,
-        ((size.width - crop) * (1 - x)) / 2,
-        ((size.height - crop) * (1 - y)) / 2,
-        crop,
-        crop,
+        ((size.width - cropWidth) * (1 - x)) / 2,
+        ((size.height - cropHeight) * (1 - y)) / 2,
+        cropWidth,
+        cropHeight,
         0,
         0,
-        512,
-        512,
+        canvas.width,
+        canvas.height,
       );
       const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
       if (!blob) throw new Error();
-      onApply(new File([blob], 'avatar.png', { type: 'image/png' }));
+      onApply(new File([blob], `${kind}.png`, { type: 'image/png' }));
     } catch {
       setError(t.profileUi.avatarCropError);
+    } finally {
       setSaving(false);
     }
   };
   return (
-    <Modal title={t.profileUi.editAvatar} onClose={onClose}>
+    <Modal
+      title={cover ? t.profileUi.changeCover : t.profileUi.editAvatar}
+      onClose={() => {
+        if (!busy && !saving) onClose();
+      }}
+    >
       <div className="avatar-crop-dialog">
         <p className="muted">{t.profileUi.avatarCropHint}</p>
         <div
-          className="avatar-crop-stage"
+          className={cover ? 'avatar-crop-stage cover-crop-stage' : 'avatar-crop-stage'}
           ref={stageRef}
           onPointerDown={(event) => {
             event.currentTarget.setPointerCapture(event.pointerId);
@@ -97,7 +113,6 @@ export function AvatarCropDialog({
           <img
             ref={imageRef}
             src={source}
-            crossOrigin="anonymous"
             alt=""
             draggable={false}
             onLoad={(event) =>
@@ -155,11 +170,15 @@ export function AvatarCropDialog({
             {error}
           </p>
         ) : null}
+        <Feedback error={uploadError} />
         <div className="row wrap">
-          <Action onClick={() => void apply()} pending={saving} disabled={!size}>
+          <Action onClick={() => void apply()} pending={saving || busy} disabled={!size}>
             {t.profileUi.applyAvatar}
           </Action>
-          <Action secondary onClick={onClose} disabled={saving}>
+          <Action secondary onClick={onReplace} disabled={saving || busy}>
+            {cover ? t.profileUi.chooseCover : t.profileUi.chooseAvatar}
+          </Action>
+          <Action secondary onClick={onClose} disabled={saving || busy}>
             {t.cancel}
           </Action>
         </div>

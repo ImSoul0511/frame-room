@@ -345,7 +345,7 @@ describe('shoot room collaboration (106a)', () => {
 });
 
 describe('gallery proofing and selections (106b)', () => {
-  it('allows provider to upload gallery previews during in_progress and blocks during proofing', async () => {
+  it('allows initial uploads and blocks proofing uploads outside an open revision round', async () => {
     const app = createTestApp();
 
     verifyMock.mockResolvedValueOnce({
@@ -390,6 +390,7 @@ describe('gallery proofing and selections (106b)', () => {
       { kind: 'one', value: { allowed: true } },
       { kind: 'one', value: sampleBooking('proofing') },
       { kind: 'one', value: { allowed: true } },
+      { kind: 'optional', value: undefined },
     );
     const lockedRes = await app.inject({
       method: 'POST',
